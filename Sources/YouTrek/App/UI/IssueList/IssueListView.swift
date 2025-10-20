@@ -38,10 +38,10 @@ struct IssueListView: View {
             }
         }
         .onAppear(perform: syncSelectionState)
-        .onChange(of: selection?.id) { _ in
+        .onChange(of: selection?.id) { _, _ in
             syncSelectionState()
         }
-        .onChange(of: selectedIDs) { newIDs in
+        .onChange(of: selectedIDs) { _, newIDs in
             guard let firstID = newIDs.first, let issue = issues.first(where: { $0.id == firstID }) else {
                 selection = nil
                 return

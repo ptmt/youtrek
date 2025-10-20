@@ -53,7 +53,7 @@ private struct RootContentView: View {
                     }
                     .toggleStyle(.button)
                     .help("Show or hide the inspector column")
-                    .onChange(of: isInspectorVisible) { newValue in
+                    .onChange(of: isInspectorVisible) { _, newValue in
                         appState.setInspectorVisible(newValue)
                     }
                 }
@@ -77,7 +77,7 @@ private struct RootContentView: View {
         .onAppear {
             isInspectorVisible = appState.isInspectorVisible
         }
-        .onChange(of: searchQuery) { query in
+        .onChange(of: searchQuery) { _, query in
             appState.updateSearch(query: query)
         }
         .onChange(of: appState.isInspectorVisible) { _, newValue in
