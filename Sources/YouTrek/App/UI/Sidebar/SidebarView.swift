@@ -15,6 +15,6 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .frame(minWidth: 220)
-        .toolbar { EditButton() }
+        // .toolbar { EditButton() }
     }
 }

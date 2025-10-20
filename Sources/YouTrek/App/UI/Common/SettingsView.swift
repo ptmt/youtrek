@@ -9,7 +9,7 @@ struct SettingsView: View {
                 Button("Sign in to YouTrack") {
                     // Placeholder until auth module is wired.
                 }
-                .keyboardShortcut(.init(.letter("L")), modifiers: [.command])
+                .keyboardShortcut("l", modifiers: [.command])
             }
 
             Section("Appearance") {

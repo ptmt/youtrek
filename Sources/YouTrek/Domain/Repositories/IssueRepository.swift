@@ -1,6 +1,6 @@
 import Foundation
 
-protocol IssueRepository {
+protocol IssueRepository: Sendable {
     func fetchIssues(query: IssueQuery) async throws -> [IssueSummary]
     func createIssue(draft: IssueDraft) async throws -> IssueSummary
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary

@@ -24,7 +24,40 @@ private struct RootContentView: View {
                 issues: appState.filteredIssues(searchQuery: searchQuery),
                 selection: $appState.selectedIssue
             )
-            .toolbar(id: "YouTrekMainToolbar") { buildToolbar() }
+            .toolbar(content: {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        appState.toggleSidebarVisibility()
+                    } label: {
+                        Label("Toggle Sidebar", systemImage: "sidebar.leading")
+                    }
+                    .keyboardShortcut("s", modifiers: [.command, .option])
+                    .help("Show or hide the sidebar")
+                }
+
+                ToolbarItemGroup(placement: .automatic) {
+                    NewIssueToolbar(container: container)
+                        .frame(maxWidth: 280)
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(action: container.commandPalette.open) {
+                        Label("Command Palette", systemImage: "command.square")
+                    }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+                }
+
+                ToolbarItem(placement: .primaryAction) {
+                    Toggle(isOn: $isInspectorVisible) {
+                        Label("Toggle Inspector", systemImage: "sidebar.trailing")
+                    }
+                    .toggleStyle(.button)
+                    .help("Show or hide the inspector column")
+                    .onChange(of: isInspectorVisible) { newValue in
+                        appState.setInspectorVisible(newValue)
+                    }
+                }
+            })
         } detail: {
             Group {
                 if let issue = appState.selectedIssue {
@@ -57,39 +90,4 @@ private struct RootContentView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private func buildToolbar() -> some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            Button {
-                appState.toggleSidebarVisibility()
-            } label: {
-                Label("Toggle Sidebar", systemImage: "sidebar.leading")
-            }
-            .keyboardShortcut("s", modifiers: [.command, .option])
-            .help("Show or hide the sidebar")
-        }
-
-        ToolbarItemGroup(placement: .automatic) {
-            NewIssueToolbar(container: container)
-                .frame(maxWidth: 280)
-        }
-
-        ToolbarItem(placement: .confirmationAction) {
-            Button(action: container.commandPalette.open) {
-                Label("Command Palette", systemImage: "command.square")
-            }
-            .keyboardShortcut(.init(.letter("P")), modifiers: [.command, .shift])
-        }
-
-        ToolbarItem(placement: .primaryAction) {
-            Toggle(isOn: $isInspectorVisible) {
-                Label("Toggle Inspector", systemImage: "sidebar.trailing")
-            }
-            .toggleStyle(.button)
-            .help("Show or hide the inspector column")
-            .onChange(of: isInspectorVisible) { newValue in
-                appState.setInspectorVisible(newValue)
-            }
-        }
-    }
 }

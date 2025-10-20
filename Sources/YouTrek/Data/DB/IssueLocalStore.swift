@@ -1,6 +1,6 @@
 import Foundation
 
-final class IssueLocalStore {
+final class IssueLocalStore: Sendable {
     func loadCachedIssues() async throws -> [IssueSummary] {
         // TODO: Replace with SwiftData/SQLite-backed persistence.
         return AppStatePlaceholder.sampleIssues()

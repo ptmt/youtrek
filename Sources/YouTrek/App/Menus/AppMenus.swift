@@ -13,7 +13,7 @@ struct AppMenus: Commands {
             Button("Command Palette…") {
                 container.commandPalette.open()
             }
-            .keyboardShortcut(.init(.letter("P")), modifiers: [.command, .shift])
+            .keyboardShortcut("P", modifiers: [.command, .shift])
         }
 
         CommandGroup(after: .appVisibility) {

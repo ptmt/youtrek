@@ -1,6 +1,6 @@
 import Foundation
 
-final class YouTrackIssueRepository: IssueRepository {
+final class YouTrackIssueRepository: IssueRepository, Sendable {
     func fetchIssues(query: IssueQuery) async throws -> [IssueSummary] {
         // TODO: Integrate with YouTrack REST API using Swift OpenAPI Generator or Apollo.
         try await Task.sleep(nanoseconds: 50_000_000)

@@ -19,7 +19,7 @@ let package = Package(
         .package(url: "https://github.com/pointfreeco/swift-composable-architecture", from: "1.10.0"),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.4.0"),
         .package(url: "https://github.com/kean/Nuke", from: "12.0.0"),
-        .package(url: "https://github.com/getsentry/sentry-cocoa", from: "8.33.0"),
+.package(url: "https://github.com/getsentry/sentry-cocoa", from: "8.57.0"), 
         .package(url: "https://github.com/openid/AppAuth-iOS.git", from: "1.7.5"),
         .package(url: "https://github.com/stephencelis/SQLite.swift", from: "0.15.0")
     ],

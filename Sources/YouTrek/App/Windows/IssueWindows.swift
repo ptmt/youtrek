@@ -23,8 +23,8 @@ struct NewIssueWindow: View {
 
     var body: some View {
         Form {
-            TextField("Title", text: $container.issueComposer.draftTitle)
-            TextField("Description", text: $container.issueComposer.draftDescription, axis: .vertical)
+            TextField("Title", text: draftTitleBinding)
+            TextField("Description", text: draftDescriptionBinding, axis: .vertical)
                 .lineLimit(5...10)
             Button("Submit Issue") {
                 submit()
@@ -33,6 +33,20 @@ struct NewIssueWindow: View {
         }
         .padding(24)
         .frame(minWidth: 420, minHeight: 360)
+    }
+
+    private var draftTitleBinding: Binding<String> {
+        Binding(
+            get: { container.issueComposer.draftTitle },
+            set: { container.issueComposer.draftTitle = $0 }
+        )
+    }
+
+    private var draftDescriptionBinding: Binding<String> {
+        Binding(
+            get: { container.issueComposer.draftDescription },
+            set: { container.issueComposer.draftDescription = $0 }
+        )
     }
 
     private func submit() {
