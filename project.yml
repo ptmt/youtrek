@@ -1,0 +1,79 @@
+name: YouTrek
+options:
+  minimumXcodeGenVersion: 2.41.0
+  createIntermediateGroups: true
+configs:
+  Debug: debug
+  Release: release
+settings:
+  base:
+    DEVELOPMENT_TEAM: ""
+    ORGANIZATION_IDENTIFIER: com.youtrek
+    PRODUCT_BUNDLE_IDENTIFIER: com.youtrek.app
+    MACOSX_DEPLOYMENT_TARGET: 15.0
+    SWIFT_VERSION: 6.0
+    CODE_SIGN_STYLE: Automatic
+packages:
+  swift-composable-architecture:
+    url: https://github.com/pointfreeco/swift-composable-architecture
+    from: 1.10.0
+  swift-dependencies:
+    url: https://github.com/pointfreeco/swift-dependencies
+    from: 1.4.0
+  Nuke:
+    url: https://github.com/kean/Nuke
+    from: 12.0.0
+  sentry-cocoa:
+    url: https://github.com/getsentry/sentry-cocoa
+    from: 8.33.0
+  AppAuth:
+    url: https://github.com/openid/AppAuth-iOS.git
+    from: 1.7.5
+  SQLiteSwift:
+    url: https://github.com/stephencelis/SQLite.swift
+    from: 0.15.0
+
+targets:
+  YouTrek:
+    type: application
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: Sources/YouTrek
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - package: swift-composable-architecture
+        product: ComposableArchitecture
+      - package: swift-dependencies
+        product: Dependencies
+      - package: Nuke
+        product: Nuke
+      - package: sentry-cocoa
+        product: Sentry
+      - package: AppAuth
+        product: AppAuth
+      - package: SQLiteSwift
+        product: SQLite
+  YouTrekTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: Tests/YouTrekTests
+    dependencies:
+      - target: YouTrek
+schemes:
+  YouTrek:
+    build:
+      targets:
+        YouTrek: all
+    test:
+      gatherCoverageData: true
+      targets:
+        - name: YouTrekTests
+    run:
+      config: Debug
+    archive:
+      config: Release

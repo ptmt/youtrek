@@ -1,0 +1,95 @@
+import SwiftUI
+
+struct RootView: View {
+    @EnvironmentObject private var container: AppContainer
+
+    var body: some View {
+        RootContentView(appState: container.appState)
+            .environmentObject(container)
+    }
+}
+
+private struct RootContentView: View {
+    @EnvironmentObject private var container: AppContainer
+    @Environment(\.openWindow) private var openWindow
+    @ObservedObject var appState: AppState
+    @State private var searchQuery: String = ""
+    @State private var isInspectorVisible: Bool = true
+
+    var body: some View {
+        NavigationSplitView(columnVisibility: $appState.columnVisibility) {
+            SidebarView(selection: $appState.selectedSidebarItem)
+        } content: {
+            IssueListView(
+                issues: appState.filteredIssues(searchQuery: searchQuery),
+                selection: $appState.selectedIssue
+            )
+            .toolbar(id: "YouTrekMainToolbar") { buildToolbar() }
+        } detail: {
+            Group {
+                if let issue = appState.selectedIssue {
+                    IssueDetailView(issue: issue)
+                } else {
+                    ContentUnavailableView(
+                        "Select an issue",
+                        systemImage: "square.stack.3d.up",
+                        description: Text("Choose an issue from the middle column to inspect details.")
+                    )
+                }
+            }
+            .background(.thinMaterial)
+        }
+        .searchable(text: $searchQuery, placement: .toolbar, prompt: Text("Search issues"))
+        .navigationSplitViewStyle(.balanced)
+        .onAppear {
+            isInspectorVisible = appState.isInspectorVisible
+        }
+        .onChange(of: searchQuery) { query in
+            appState.updateSearch(query: query)
+        }
+        .onChange(of: appState.isInspectorVisible) { _, newValue in
+            isInspectorVisible = newValue
+        }
+        .onChange(of: container.router.shouldOpenNewIssueWindow) { _, shouldOpen in
+            guard shouldOpen else { return }
+            openWindow(id: SceneID.newIssue.rawValue)
+            container.router.consumeNewIssueWindowFlag()
+        }
+    }
+
+    @ToolbarContentBuilder
+    private func buildToolbar() -> some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Button {
+                appState.toggleSidebarVisibility()
+            } label: {
+                Label("Toggle Sidebar", systemImage: "sidebar.leading")
+            }
+            .keyboardShortcut("s", modifiers: [.command, .option])
+            .help("Show or hide the sidebar")
+        }
+
+        ToolbarItemGroup(placement: .automatic) {
+            NewIssueToolbar(container: container)
+                .frame(maxWidth: 280)
+        }
+
+        ToolbarItem(placement: .confirmationAction) {
+            Button(action: container.commandPalette.open) {
+                Label("Command Palette", systemImage: "command.square")
+            }
+            .keyboardShortcut(.init(.letter("P")), modifiers: [.command, .shift])
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+            Toggle(isOn: $isInspectorVisible) {
+                Label("Toggle Inspector", systemImage: "sidebar.trailing")
+            }
+            .toggleStyle(.button)
+            .help("Show or hide the inspector column")
+            .onChange(of: isInspectorVisible) { newValue in
+                appState.setInspectorVisible(newValue)
+            }
+        }
+    }
+}

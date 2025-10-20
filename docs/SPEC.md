@@ -8,6 +8,8 @@ It's three column layout app with rich toolbar.
 
 Toolbar should contain a separate place for a new issue creation (text input)
 
+Think of Apple Mail and Linear
+
 ## Screens
 
 - Main screen for issue list. 
