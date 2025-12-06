@@ -31,11 +31,21 @@ A concise, engineer-friendly guide to YouTrack’s REST API for building a light
   * Grant type: **Authorization Code + PKCE** (native-app standard).
   * Redirect URI: **loopback** (e.g., `http://127.0.0.1:48000/callback`) or a **custom URI scheme** (`yourapp://oauth2redirect`). Use system browser.
   * Scopes: request **YouTrack** (add others only if needed).
+  
+  > **macOS client setup:** before launching YouTrek, export the following so the AppAuth integration can negotiate with Hub:
+  > 
+  > * `YOUTRACK_BASE_URL` – REST base (for example `https://acme.youtrack.cloud/api`).
+  > * `YOUTRACK_HUB_AUTHORIZE_URL` – Hub authorize endpoint (`https://<hub>/api/rest/oauth2/auth`).
+  > * `YOUTRACK_HUB_TOKEN_URL` – Hub token endpoint (`https://<hub>/api/rest/oauth2/token`).
+  > * `YOUTRACK_CLIENT_ID` – the OAuth client identifier from Hub.
+  > * `YOUTRACK_REDIRECT_URI` – the redirect URI you registered (loopback or custom scheme).
+  > * (Optional) `YOUTRACK_SCOPES` – comma separated overrides; defaults to `YouTrack`.
 * Endpoints (your actual Hub base depends on your deployment):
 
   * **Authorize:** `<HUB_BASE>/api/rest/oauth2/auth`
   * **Token:** `<HUB_BASE>/api/rest/oauth2/token`
 * Store the resulting **access token** (short-lived) and, if issued, **refresh token**. Inject `Authorization: Bearer <access_token>` on each REST call.
+* The macOS client now negotiates tokens via AppAuth + ASWebAuthenticationSession and stores the refresh token securely in Keychain. No PAT or token environment variables are required at runtime.
 * UX tip: offer both **“Sign in with YouTrack (Browser)”** *and* **“Use Personal Token”** as fallback.
 
 > **Native-app hygiene:** use PKCE, open the system browser, and listen on a localhost/loopback port for the redirect. Avoid embedded webviews.

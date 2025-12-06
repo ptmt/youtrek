@@ -4,7 +4,7 @@ actor SyncCoordinator {
     let issueRepository: IssueRepository
     let localStore: IssueLocalStore
 
-    init(issueRepository: IssueRepository = YouTrackIssueRepository(), localStore: IssueLocalStore = IssueLocalStore()) {
+    init(issueRepository: IssueRepository, localStore: IssueLocalStore = IssueLocalStore()) {
         self.issueRepository = issueRepository
         self.localStore = localStore
     }

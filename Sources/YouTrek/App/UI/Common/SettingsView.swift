@@ -7,7 +7,7 @@ struct SettingsView: View {
         Form {
             Section("Account") {
                 Button("Sign in to YouTrack") {
-                    // Placeholder until auth module is wired.
+                    container.beginSignIn()
                 }
                 .keyboardShortcut("l", modifiers: [.command])
             }

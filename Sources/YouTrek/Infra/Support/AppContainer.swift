@@ -9,19 +9,22 @@ final class AppContainer: ObservableObject {
     let commandPalette: CommandPaletteCoordinator
     let router: WindowRouter
     let syncCoordinator: SyncCoordinator
+    let authRepository: AuthRepository
 
     private init(
         appState: AppState,
         issueComposer: IssueComposer,
         commandPalette: CommandPaletteCoordinator,
         router: WindowRouter,
-        syncCoordinator: SyncCoordinator
+        syncCoordinator: SyncCoordinator,
+        authRepository: AuthRepository
     ) {
         self.appState = appState
         self.issueComposer = issueComposer
         self.commandPalette = commandPalette
         self.router = router
         self.syncCoordinator = syncCoordinator
+        self.authRepository = authRepository
     }
 
     static let live: AppContainer = {
@@ -29,8 +32,25 @@ final class AppContainer: ObservableObject {
         let router = WindowRouter()
         let composer = IssueComposer(router: router)
         let palette = CommandPaletteCoordinator(router: router)
-        let sync = SyncCoordinator()
-        let container = AppContainer(appState: state, issueComposer: composer, commandPalette: palette, router: router, syncCoordinator: sync)
+        let authRepository: AuthRepository
+        let issueRepository: IssueRepository
+
+        do {
+            let configuration = try YouTrackOAuthConfiguration.loadFromEnvironment()
+            let appAuthRepository = AppAuthRepository(configuration: configuration, keychain: KeychainStorage(service: "com.youtrek.auth"))
+            authRepository = appAuthRepository
+            let tokenProvider = YouTrackAPITokenProvider { try await appAuthRepository.currentAccessToken() }
+            let apiConfiguration = YouTrackAPIConfiguration(baseURL: configuration.apiBaseURL, tokenProvider: tokenProvider)
+            issueRepository = YouTrackIssueRepository(configuration: apiConfiguration)
+        } catch {
+            print("⚠️ Missing YouTrack OAuth configuration: \(error.localizedDescription). Falling back to preview data.")
+            let previewAuth = PreviewAuthRepository()
+            authRepository = previewAuth
+            issueRepository = PreviewIssueRepository()
+        }
+
+        let sync = SyncCoordinator(issueRepository: issueRepository)
+        let container = AppContainer(appState: state, issueComposer: composer, commandPalette: palette, router: router, syncCoordinator: sync, authRepository: authRepository)
         Task { await container.bootstrap() }
         return container
     }()
@@ -40,8 +60,10 @@ final class AppContainer: ObservableObject {
         let router = WindowRouter()
         let composer = IssueComposer(router: router)
         let palette = CommandPaletteCoordinator(router: router)
-        let sync = SyncCoordinator()
-        return AppContainer(appState: state, issueComposer: composer, commandPalette: palette, router: router, syncCoordinator: sync)
+        let authRepository = PreviewAuthRepository()
+        let issueRepository = PreviewIssueRepository()
+        let sync = SyncCoordinator(issueRepository: issueRepository)
+        return AppContainer(appState: state, issueComposer: composer, commandPalette: palette, router: router, syncCoordinator: sync, authRepository: authRepository)
     }()
 
     func bootstrap() async {
@@ -54,6 +76,18 @@ final class AppContainer: ObservableObject {
 
         guard let issues = try? await syncCoordinator.refreshIssues(using: query) else { return }
         appState.replaceIssues(with: issues)
+    }
+
+    func beginSignIn() {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await authRepository.signIn()
+                await self.bootstrap()
+            } catch {
+                print("Sign-in failed: \(error.localizedDescription)")
+            }
+        }
     }
 }
 
@@ -110,5 +144,36 @@ final class CommandPaletteCoordinator {
 
     func open() {
         print("Command palette requested")
+    }
+}
+
+@MainActor
+private final class PreviewAuthRepository: AuthRepository {
+    private(set) var currentAccount: Account?
+
+    func signIn() async throws {
+        currentAccount = Account(id: UUID(), displayName: "Preview User", avatarURL: nil)
+    }
+
+    func signOut() async throws {
+        currentAccount = nil
+    }
+
+    func currentAccessToken() async throws -> String {
+        throw AuthError.notSignedIn
+    }
+}
+
+private struct PreviewIssueRepository: IssueRepository {
+    func fetchIssues(query: IssueQuery) async throws -> [IssueSummary] {
+        AppStatePlaceholder.sampleIssues()
+    }
+
+    func createIssue(draft: IssueDraft) async throws -> IssueSummary {
+        throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support mutations")
+    }
+
+    func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {
+        throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support mutations")
     }
 }

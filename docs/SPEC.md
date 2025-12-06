@@ -17,3 +17,6 @@ Think of Apple Mail and Linear
 - Separate detachable new issue screen
 - Separate detachable view/edit issue screen
 
+## Offline-first sync
+
+When app opens, the syncronization should kick on showing a progress bar right behind the toolbar. It should download as much as possible to show the issue list for all filters like "Created by Me" etc.
