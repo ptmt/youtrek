@@ -73,7 +73,7 @@ final class AppAuthRepository: NSObject, AuthRepository {
             }
 
             if let window = Self.activeWindow {
-                self.currentFlow = OIDAuthState.authState(byPresenting: request, presentingWindow: window, callback: callback)
+                self.currentFlow = OIDAuthState.authState(byPresenting: request, presenting: window, callback: callback)
             } else {
                 self.currentFlow = OIDAuthState.authState(byPresenting: request, callback: callback)
             }
@@ -131,14 +131,14 @@ final class AppAuthRepository: NSObject, AuthRepository {
         }
 
         let claims = idToken.claims
-        let displayName = claims?["name"] as? String ??
-            claims?["fullName"] as? String ??
-            claims?["preferred_username"] as? String ??
-            claims?["login"] as? String ??
+        let displayName = claims["name"] as? String ??
+            claims["fullName"] as? String ??
+            claims["preferred_username"] as? String ??
+            claims["login"] as? String ??
             "YouTrack User"
-        let subject = claims?["sub"] as? String ?? UUID().uuidString
+        let subject = claims["sub"] as? String ?? UUID().uuidString
         let identifier = UUID(uuidString: subject) ?? UUID()
-        let avatarURL = (claims?["picture"] as? String).flatMap(URL.init(string:))
+        let avatarURL = (claims["picture"] as? String).flatMap(URL.init(string:))
         currentAccount = Account(id: identifier, displayName: displayName, avatarURL: avatarURL)
     }
 
@@ -158,7 +158,7 @@ final class AppAuthRepository: NSObject, AuthRepository {
 }
 
 @MainActor
-extension AppAuthRepository: OIDAuthStateChangeDelegate, OIDAuthStateErrorDelegate {
+extension AppAuthRepository: @preconcurrency OIDAuthStateChangeDelegate, @preconcurrency OIDAuthStateErrorDelegate {
     func didChange(_ state: OIDAuthState) {
         authState = state
     }

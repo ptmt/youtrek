@@ -37,7 +37,7 @@ let package = Package(
             ],
             path: "Sources/YouTrek",
             resources: [
-                // Placeholder for future design assets (SFSymbol config, etc.)
+                .process("Assets.xcassets")
             ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
