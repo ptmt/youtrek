@@ -19,6 +19,7 @@ enum AuthError: Error, LocalizedError {
     case configurationMissing(String)
     case userCancelled
     case tokenUnavailable
+    case presentationUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -30,6 +31,8 @@ enum AuthError: Error, LocalizedError {
             return "Sign-in was cancelled."
         case .tokenUnavailable:
             return "Unable to obtain an access token from Hub."
+        case .presentationUnavailable:
+            return "No available window to present the sign-in flow."
         }
     }
 }

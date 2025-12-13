@@ -25,16 +25,6 @@ private struct RootContentView: View {
                 selection: $appState.selectedIssue
             )
             .toolbar(content: {
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        appState.toggleSidebarVisibility()
-                    } label: {
-                        Label("Toggle Sidebar", systemImage: "sidebar.leading")
-                    }
-                    .keyboardShortcut("s", modifiers: [.command, .option])
-                    .help("Show or hide the sidebar")
-                }
-
                 ToolbarItemGroup(placement: .automatic) {
                     NewIssueToolbar(container: container)
                         .frame(maxWidth: 280)
@@ -60,17 +50,23 @@ private struct RootContentView: View {
             })
         } detail: {
             Group {
-                if let issue = appState.selectedIssue {
-                    IssueDetailView(issue: issue)
-                } else {
-                    ContentUnavailableView(
-                        "Select an issue",
-                        systemImage: "square.stack.3d.up",
-                        description: Text("Choose an issue from the middle column to inspect details.")
-                    )
+                if isInspectorVisible {
+                    if let issue = appState.selectedIssue {
+                        IssueDetailView(issue: issue)
+                    } else {
+                        ContentUnavailableView(
+                            "Select an issue",
+                            systemImage: "square.stack.3d.up",
+                            description: Text("Choose an issue from the middle column to inspect details.")
+                        )
+                    }
                 }
             }
-            .background(.thinMaterial)
+            .background(isInspectorVisible ? .thinMaterial : .clear)
+            .navigationSplitViewColumnWidth(
+                min: isInspectorVisible ? 320 : 0,
+                ideal: isInspectorVisible ? 400 : 0
+            )
         }
         .searchable(text: $searchQuery, placement: .toolbar, prompt: Text("Search issues"))
         .navigationSplitViewStyle(.balanced)

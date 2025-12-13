@@ -21,6 +21,7 @@ struct IssueListView: View {
             } else {
                 Table(issues, selection: $selectedIDs, sortOrder: $sortOrder) {
                     TableColumn("ID", value: \IssueSummary.readableID)
+                        .width(70)
                     TableColumn("Title", value: \IssueSummary.title) { issue in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(issue.title)
@@ -29,10 +30,12 @@ struct IssueListView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                    .width(min: 220, ideal: 420)
                     TableColumn("Updated") { issue in
                         Text(issue.updatedAt.formatted(.relative(presentation: .named)))
                             .font(.subheadline)
                     }
+                    .width(140)
                 }
                 .tableStyle(.inset)
             }

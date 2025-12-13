@@ -72,11 +72,16 @@ final class AppAuthRepository: NSObject, AuthRepository {
                 }
             }
 
-            if let window = Self.activeWindow {
-                self.currentFlow = OIDAuthState.authState(byPresenting: request, presenting: window, callback: callback)
-            } else {
-                self.currentFlow = OIDAuthState.authState(byPresenting: request, callback: callback)
+            guard let presentingWindow = Self.activeWindow else {
+                continuation.resume(throwing: AuthError.presentationUnavailable)
+                return
             }
+
+            self.currentFlow = OIDAuthState.authState(
+                byPresenting: request,
+                presenting: presentingWindow,
+                callback: callback
+            )
         }
     }
 

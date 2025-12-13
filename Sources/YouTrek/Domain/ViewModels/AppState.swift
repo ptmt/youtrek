@@ -38,25 +38,11 @@ final class AppState: ObservableObject {
 
     func toggleSidebarVisibility() {
         isSidebarVisible.toggle()
-        updateColumnVisibility()
+        columnVisibility = isSidebarVisible ? .all : .detailOnly
     }
 
     func setInspectorVisible(_ isVisible: Bool) {
         isInspectorVisible = isVisible
-        updateColumnVisibility()
-    }
-
-    private func updateColumnVisibility() {
-        switch (isSidebarVisible, isInspectorVisible) {
-        case (true, true):
-            columnVisibility = .all
-        case (true, false):
-            columnVisibility = .doubleColumn
-        case (false, true):
-            columnVisibility = .detailOnly
-        case (false, false):
-            columnVisibility = .detailOnly
-        }
     }
 }
 
