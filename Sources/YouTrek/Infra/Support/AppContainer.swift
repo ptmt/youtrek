@@ -11,13 +11,20 @@ final class AppContainer: ObservableObject {
     let syncCoordinator: SyncCoordinator
     let authRepository: AuthRepository
 
+    private let configurationStore: AppConfigurationStore
+    private let issueRepositorySwitcher: SwitchableIssueRepository
+    private let authRepositorySwitcher: SwitchableAuthRepository
+
     private init(
         appState: AppState,
         issueComposer: IssueComposer,
         commandPalette: CommandPaletteCoordinator,
         router: WindowRouter,
         syncCoordinator: SyncCoordinator,
-        authRepository: AuthRepository
+        authRepository: AuthRepository,
+        configurationStore: AppConfigurationStore,
+        issueRepositorySwitcher: SwitchableIssueRepository,
+        authRepositorySwitcher: SwitchableAuthRepository
     ) {
         self.appState = appState
         self.issueComposer = issueComposer
@@ -25,6 +32,9 @@ final class AppContainer: ObservableObject {
         self.router = router
         self.syncCoordinator = syncCoordinator
         self.authRepository = authRepository
+        self.configurationStore = configurationStore
+        self.issueRepositorySwitcher = issueRepositorySwitcher
+        self.authRepositorySwitcher = authRepositorySwitcher
     }
 
     static let live: AppContainer = {
@@ -32,25 +42,22 @@ final class AppContainer: ObservableObject {
         let router = WindowRouter()
         let composer = IssueComposer(router: router)
         let palette = CommandPaletteCoordinator(router: router)
-        let authRepository: AuthRepository
-        let issueRepository: IssueRepository
-
-        do {
-            let configuration = try YouTrackOAuthConfiguration.loadFromEnvironment()
-            let appAuthRepository = AppAuthRepository(configuration: configuration, keychain: KeychainStorage(service: "com.youtrek.auth"))
-            authRepository = appAuthRepository
-            let tokenProvider = YouTrackAPITokenProvider { try await appAuthRepository.currentAccessToken() }
-            let apiConfiguration = YouTrackAPIConfiguration(baseURL: configuration.apiBaseURL, tokenProvider: tokenProvider)
-            issueRepository = YouTrackIssueRepository(configuration: apiConfiguration)
-        } catch {
-            print("⚠️ Missing YouTrack OAuth configuration: \(error.localizedDescription). Falling back to preview data.")
-            let previewAuth = PreviewAuthRepository()
-            authRepository = previewAuth
-            issueRepository = PreviewIssueRepository()
-        }
-
-        let sync = SyncCoordinator(issueRepository: issueRepository)
-        let container = AppContainer(appState: state, issueComposer: composer, commandPalette: palette, router: router, syncCoordinator: sync, authRepository: authRepository)
+        let configurationStore = AppConfigurationStore()
+        let authSwitcher = SwitchableAuthRepository(initial: PreviewAuthRepository())
+        let issueSwitcher = SwitchableIssueRepository(initial: PreviewIssueRepository())
+        let sync = SyncCoordinator(issueRepository: issueSwitcher)
+        let container = AppContainer(
+            appState: state,
+            issueComposer: composer,
+            commandPalette: palette,
+            router: router,
+            syncCoordinator: sync,
+            authRepository: authSwitcher,
+            configurationStore: configurationStore,
+            issueRepositorySwitcher: issueSwitcher,
+            authRepositorySwitcher: authSwitcher
+        )
+        Task { await container.configureIfNeeded() }
         Task { await container.bootstrap() }
         return container
     }()
@@ -62,8 +69,21 @@ final class AppContainer: ObservableObject {
         let palette = CommandPaletteCoordinator(router: router)
         let authRepository = PreviewAuthRepository()
         let issueRepository = PreviewIssueRepository()
-        let sync = SyncCoordinator(issueRepository: issueRepository)
-        return AppContainer(appState: state, issueComposer: composer, commandPalette: palette, router: router, syncCoordinator: sync, authRepository: authRepository)
+        let store = AppConfigurationStore()
+        let authSwitcher = SwitchableAuthRepository(initial: authRepository)
+        let issueSwitcher = SwitchableIssueRepository(initial: issueRepository)
+        let sync = SyncCoordinator(issueRepository: issueSwitcher)
+        return AppContainer(
+            appState: state,
+            issueComposer: composer,
+            commandPalette: palette,
+            router: router,
+            syncCoordinator: sync,
+            authRepository: authSwitcher,
+            configurationStore: store,
+            issueRepositorySwitcher: issueSwitcher,
+            authRepositorySwitcher: authSwitcher
+        )
     }()
 
     func bootstrap() async {
@@ -89,12 +109,64 @@ final class AppContainer: ObservableObject {
             }
         }
     }
+
+    func completeManualSetup(baseURL: URL, token: String) async {
+        configurationStore.save(baseURL: baseURL)
+        let manualAuth = ManualTokenAuthRepository(configurationStore: configurationStore)
+        do {
+            try manualAuth.apply(token: token)
+        } catch {
+            print("Failed to save YouTrack token: \(error.localizedDescription)")
+        }
+
+        authRepositorySwitcher.replace(with: manualAuth)
+
+        let tokenProvider = YouTrackAPITokenProvider {
+            try await manualAuth.currentAccessToken()
+        }
+        let apiConfiguration = YouTrackAPIConfiguration(baseURL: baseURL, tokenProvider: tokenProvider)
+        let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration)
+        await issueRepositorySwitcher.replace(with: issueRepository)
+
+        await bootstrap()
+    }
+
+    func storedConfigurationDraft() -> (baseURL: URL?, token: String?) {
+        (configurationStore.loadBaseURL(), configurationStore.loadToken())
+    }
+
+    private func configureIfNeeded() async {
+        if let oauthConfiguration = try? YouTrackOAuthConfiguration.loadFromEnvironment() {
+            await applyOAuth(configuration: oauthConfiguration)
+            await bootstrap()
+            return
+        }
+
+        if let baseURL = configurationStore.loadBaseURL(), let token = configurationStore.loadToken(), !token.isEmpty {
+            await completeManualSetup(baseURL: baseURL, token: token)
+        } else {
+            await MainActor.run {
+                router.openSetupWindow()
+            }
+        }
+    }
+
+    @MainActor
+    private func applyOAuth(configuration: YouTrackOAuthConfiguration) async {
+        let appAuthRepository = AppAuthRepository(configuration: configuration, keychain: KeychainStorage(service: "com.youtrek.auth"))
+        authRepositorySwitcher.replace(with: appAuthRepository)
+        let tokenProvider = YouTrackAPITokenProvider { try await appAuthRepository.currentAccessToken() }
+        let apiConfiguration = YouTrackAPIConfiguration(baseURL: configuration.apiBaseURL, tokenProvider: tokenProvider)
+        let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration)
+        await issueRepositorySwitcher.replace(with: issueRepository)
+    }
 }
 
 @MainActor
 final class WindowRouter: ObservableObject {
     @Published var pendingIssueToOpen: IssueSummary?
     @Published var shouldOpenNewIssueWindow: Bool = false
+    @Published var shouldOpenSetupWindow: Bool = false
 
     func openIssueDetail(issue: IssueSummary) {
         pendingIssueToOpen = issue
@@ -106,6 +178,14 @@ final class WindowRouter: ObservableObject {
 
     func consumeNewIssueWindowFlag() {
         shouldOpenNewIssueWindow = false
+    }
+
+    func openSetupWindow() {
+        shouldOpenSetupWindow = true
+    }
+
+    func consumeSetupWindowFlag() {
+        shouldOpenSetupWindow = false
     }
 }
 

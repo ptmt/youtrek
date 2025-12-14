@@ -3,7 +3,6 @@
 /build
 /.cache
 /Packages
-YouTrek.xcodeproj/
 xcuserdata/
 DerivedData/
 .swiftpm/configuration/registries.json

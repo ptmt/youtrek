@@ -62,7 +62,11 @@ private struct RootContentView: View {
                     }
                 }
             }
-            .background(isInspectorVisible ? .thinMaterial : .clear)
+            .background {
+                if isInspectorVisible {
+                    Rectangle().fill(.thinMaterial)
+                }
+            }
             .navigationSplitViewColumnWidth(
                 min: isInspectorVisible ? 320 : 0,
                 ideal: isInspectorVisible ? 400 : 0
@@ -83,6 +87,11 @@ private struct RootContentView: View {
             guard shouldOpen else { return }
             openWindow(id: SceneID.newIssue.rawValue)
             container.router.consumeNewIssueWindowFlag()
+        }
+        .onChange(of: container.router.shouldOpenSetupWindow) { _, shouldOpen in
+            guard shouldOpen else { return }
+            openWindow(id: SceneID.setup.rawValue)
+            container.router.consumeSetupWindowFlag()
         }
     }
 

@@ -27,6 +27,12 @@ struct YouTrekApp: App {
         .handlesExternalEvents(matching: ["youtrek://new-issue"])
         .defaultSize(width: 560, height: 520)
 
+        WindowGroup("Connect to YouTrack", id: SceneID.setup.rawValue) {
+            SetupWindow()
+                .environmentObject(container)
+        }
+        .defaultSize(width: 560, height: 360)
+
         Settings {
             SettingsView()
                 .environmentObject(container)
@@ -38,4 +44,5 @@ enum SceneID: String {
     case main
     case issue
     case newIssue
+    case setup
 }
