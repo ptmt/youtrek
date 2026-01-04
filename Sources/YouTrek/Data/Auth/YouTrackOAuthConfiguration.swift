@@ -1,6 +1,8 @@
 import Foundation
 
 struct YouTrackOAuthConfiguration: Sendable {
+    private static let defaultAPIBase: URL = URL(string: "https://youtrack.jetbrains.com/api")!
+
     let apiBaseURL: URL
     let authorizationEndpoint: URL
     let tokenEndpoint: URL
@@ -25,26 +27,26 @@ struct YouTrackOAuthConfiguration: Sendable {
     static func loadFromEnvironment(processInfo: ProcessInfo = .processInfo) throws -> YouTrackOAuthConfiguration {
         let environment = processInfo.environment
 
-        guard let apiBaseRaw = environment["YOUTRACK_BASE_URL"], !apiBaseRaw.isEmpty else {
-            throw YouTrackOAuthConfigurationError.missingValue(key: "YOUTRACK_BASE_URL")
-        }
-        guard let apiBaseURL = URL(string: apiBaseRaw) else {
-            throw YouTrackOAuthConfigurationError.invalidURL(value: apiBaseRaw, key: "YOUTRACK_BASE_URL")
-        }
+        let apiBaseURL: URL = {
+            if let apiBaseRaw = environment["YOUTRACK_BASE_URL"], !apiBaseRaw.isEmpty, let url = URL(string: apiBaseRaw) {
+                return url
+            }
+            return defaultAPIBase
+        }()
 
-        guard let authorizeRaw = environment["YOUTRACK_HUB_AUTHORIZE_URL"], !authorizeRaw.isEmpty else {
-            throw YouTrackOAuthConfigurationError.missingValue(key: "YOUTRACK_HUB_AUTHORIZE_URL")
-        }
-        guard let authorizeURL = URL(string: authorizeRaw) else {
-            throw YouTrackOAuthConfigurationError.invalidURL(value: authorizeRaw, key: "YOUTRACK_HUB_AUTHORIZE_URL")
-        }
+        let authorizeURL: URL = {
+            if let authorizeRaw = environment["YOUTRACK_HUB_AUTHORIZE_URL"], !authorizeRaw.isEmpty, let url = URL(string: authorizeRaw) {
+                return url
+            }
+            return Self.derivedHubURL(from: apiBaseURL, pathComponents: ["hub", "api", "rest", "oauth2", "auth"])
+        }()
 
-        guard let tokenRaw = environment["YOUTRACK_HUB_TOKEN_URL"], !tokenRaw.isEmpty else {
-            throw YouTrackOAuthConfigurationError.missingValue(key: "YOUTRACK_HUB_TOKEN_URL")
-        }
-        guard let tokenURL = URL(string: tokenRaw) else {
-            throw YouTrackOAuthConfigurationError.invalidURL(value: tokenRaw, key: "YOUTRACK_HUB_TOKEN_URL")
-        }
+        let tokenURL: URL = {
+            if let tokenRaw = environment["YOUTRACK_HUB_TOKEN_URL"], !tokenRaw.isEmpty, let url = URL(string: tokenRaw) {
+                return url
+            }
+            return Self.derivedHubURL(from: apiBaseURL, pathComponents: ["hub", "api", "rest", "oauth2", "token"])
+        }()
 
         guard let clientID = environment["YOUTRACK_CLIENT_ID"], !clientID.isEmpty else {
             throw YouTrackOAuthConfigurationError.missingValue(key: "YOUTRACK_CLIENT_ID")
@@ -68,6 +70,17 @@ struct YouTrackOAuthConfiguration: Sendable {
             redirectURI: redirectURL,
             scopes: scopes.isEmpty ? ["YouTrack"] : scopes
         )
+    }
+
+    private static func derivedHubURL(from apiBaseURL: URL, pathComponents: [String]) -> URL {
+        var hubBase = apiBaseURL
+        if hubBase.lastPathComponent.lowercased() == "api" {
+            hubBase.deleteLastPathComponent()
+        }
+        for component in pathComponents {
+            hubBase.appendPathComponent(component)
+        }
+        return hubBase
     }
 }
 

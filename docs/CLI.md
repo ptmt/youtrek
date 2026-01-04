@@ -1,0 +1,1 @@
+This macos app should have a cli interface and work from the command line

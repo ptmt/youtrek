@@ -88,11 +88,6 @@ private struct RootContentView: View {
             openWindow(id: SceneID.newIssue.rawValue)
             container.router.consumeNewIssueWindowFlag()
         }
-        .onChange(of: container.router.shouldOpenSetupWindow) { _, shouldOpen in
-            guard shouldOpen else { return }
-            openWindow(id: SceneID.setup.rawValue)
-            container.router.consumeSetupWindowFlag()
-        }
     }
 
 }

@@ -14,6 +14,8 @@ final class AppContainer: ObservableObject {
     private let configurationStore: AppConfigurationStore
     private let issueRepositorySwitcher: SwitchableIssueRepository
     private let authRepositorySwitcher: SwitchableAuthRepository
+    @Published private(set) var supportsBrowserAuth: Bool = false
+    @Published private(set) var requiresSetup: Bool = true
 
     private init(
         appState: AppState,
@@ -128,11 +130,22 @@ final class AppContainer: ObservableObject {
         let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration)
         await issueRepositorySwitcher.replace(with: issueRepository)
 
+        await MainActor.run {
+            requiresSetup = false
+        }
         await bootstrap()
     }
 
     func storedConfigurationDraft() -> (baseURL: URL?, token: String?) {
         (configurationStore.loadBaseURL(), configurationStore.loadToken())
+    }
+
+    func setBaseURL(_ url: URL) {
+        configurationStore.save(baseURL: url)
+    }
+
+    var browserAuthAvailable: Bool {
+        supportsBrowserAuth
     }
 
     private func configureIfNeeded() async {
@@ -146,7 +159,7 @@ final class AppContainer: ObservableObject {
             await completeManualSetup(baseURL: baseURL, token: token)
         } else {
             await MainActor.run {
-                router.openSetupWindow()
+                requiresSetup = true
             }
         }
     }
@@ -159,6 +172,8 @@ final class AppContainer: ObservableObject {
         let apiConfiguration = YouTrackAPIConfiguration(baseURL: configuration.apiBaseURL, tokenProvider: tokenProvider)
         let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration)
         await issueRepositorySwitcher.replace(with: issueRepository)
+        supportsBrowserAuth = true
+        requiresSetup = false
     }
 }
 
@@ -166,7 +181,6 @@ final class AppContainer: ObservableObject {
 final class WindowRouter: ObservableObject {
     @Published var pendingIssueToOpen: IssueSummary?
     @Published var shouldOpenNewIssueWindow: Bool = false
-    @Published var shouldOpenSetupWindow: Bool = false
 
     func openIssueDetail(issue: IssueSummary) {
         pendingIssueToOpen = issue
@@ -178,14 +192,6 @@ final class WindowRouter: ObservableObject {
 
     func consumeNewIssueWindowFlag() {
         shouldOpenNewIssueWindow = false
-    }
-
-    func openSetupWindow() {
-        shouldOpenSetupWindow = true
-    }
-
-    func consumeSetupWindowFlag() {
-        shouldOpenSetupWindow = false
     }
 }
 
