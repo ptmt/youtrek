@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SetupWindow: View {
     @EnvironmentObject private var container: AppContainer
@@ -22,35 +23,33 @@ struct SetupWindow: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [.accentColor.opacity(0.35), .teal.opacity(0.35)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            Image("AppLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 360)
-                .opacity(0.08)
-                .padding()
+            VisualEffectBackground()
+                .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Welcome to YouTrek")
-                        .font(.system(size: 34, weight: .heavy, design: .rounded))
+                    HStack(spacing: 0) {
+                        Text("YOU")
+                            .font(.system(size: 36, weight: .black))
+                            .italic()
+                        Text(" ")
+                        Text("TREK")
+                            .font(.system(size: 36, weight: .black))
+                            .italic()
+                    }
+                    .tracking(2)
                     Text("Sign in to your YouTrack or paste a personal token. Your URL syncs via iCloud; tokens stay in your keychain.")
-                        .font(.title3)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
 
-                Picker("Sign-in method", selection: $mode) {
+                Picker("", selection: $mode) {
                     ForEach(SignInMode.allCases, id: \.self) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
 
                 VStack(alignment: .leading, spacing: 10) {
                     TextField("https://youtrack.jetbrains.com/api", text: $baseURLString, prompt: Text("YouTrack base URL"))
@@ -61,14 +60,20 @@ struct SetupWindow: View {
                         SecureField("Permanent token", text: $token, prompt: Text("Paste your YouTrack token"))
                             .textContentType(.password)
                             .textFieldStyle(.roundedBorder)
+                        if let tokenPortalURL {
+                            Link("Create a personal token", destination: tokenPortalURL)
+                                .font(.caption)
+                                .foregroundStyle(.tint)
+                                .underline()
+                        }
                     } else {
                         Label(browserHintText, systemImage: container.browserAuthAvailable ? "globe" : "exclamationmark.triangle.fill")
                             .foregroundStyle(container.browserAuthAvailable ? .secondary : Color.yellow)
                             .font(.callout)
                     }
                 }
-                .padding()
-                .frame(maxWidth: 520)
+                .padding(12)
+                .frame(maxWidth: .infinity)
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                 if let errorMessage {
@@ -81,7 +86,6 @@ struct SetupWindow: View {
                     Spacer()
                     Button(action: submit) {
                         Text(actionTitle)
-                            .frame(maxWidth: 220)
                     }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: [.command])
@@ -89,8 +93,9 @@ struct SetupWindow: View {
                 }
             }
             .padding(24)
-            .frame(maxWidth: 720, maxHeight: 520)
+            .frame(width: 480, height: 340)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onAppear(perform: preload)
     }
 
@@ -107,7 +112,7 @@ struct SetupWindow: View {
     private var actionTitle: String {
         switch mode {
         case .browser: "Sign in with Browser"
-        case .token: "Save Token"
+        case .token: "Sign In"
         }
     }
 
@@ -115,8 +120,24 @@ struct SetupWindow: View {
         if container.browserAuthAvailable {
             return "We’ll open your default browser to sign in with YouTrack Hub."
         } else {
-            return "To enable browser sign-in, set Hub OAuth environment values (YOUTRACK_BASE_URL, YOUTRACK_HUB_AUTHORIZE_URL, YOUTRACK_HUB_TOKEN_URL, YOUTRACK_CLIENT_ID, YOUTRACK_REDIRECT_URI)."
+            return "To enable browser sign-in, set YOUTRACK_CLIENT_ID (and YOUTRACK_BASE_URL if you are not using the default YouTrack instance). Register youtrek://oauth_callback in Hub, or set YOUTRACK_REDIRECT_URI to your custom redirect."
         }
+    }
+
+    private var tokenPortalURL: URL? {
+        let trimmedURL = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let apiURL = URL(string: trimmedURL), apiURL.scheme?.hasPrefix("http") == true else {
+            return nil
+        }
+        var uiBase = apiURL
+        if uiBase.lastPathComponent.lowercased() == "api" {
+            uiBase.deleteLastPathComponent()
+        }
+        uiBase.appendPathComponent("users")
+        uiBase.appendPathComponent("me")
+        var components = URLComponents(url: uiBase, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "tab", value: "account-security")]
+        return components?.url
     }
 
     private func preload() {
@@ -144,7 +165,7 @@ struct SetupWindow: View {
         switch mode {
         case .browser:
             guard container.browserAuthAvailable else {
-                errorMessage = "Browser sign-in needs Hub OAuth config (YOUTRACK_* environment variables)."
+                errorMessage = "Browser sign-in needs YOUTRACK_CLIENT_ID in the environment."
                 return
             }
             container.setBaseURL(url)
@@ -160,4 +181,16 @@ struct SetupWindow: View {
             }
         }
     }
+}
+
+private struct VisualEffectBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }

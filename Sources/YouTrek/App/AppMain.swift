@@ -6,17 +6,10 @@ struct YouTrekApp: App {
 
     var body: some Scene {
         WindowGroup(id: SceneID.main.rawValue) {
-            if container.requiresSetup {
-                SetupWindow()
-                    .environmentObject(container)
-            } else {
-                RootView()
-                    .environmentObject(container)
-            }
+            MainWindowContent()
+                .environmentObject(container)
         }
         .commands { AppMenus(container: container) }
-        .windowStyle(.automatic)
-        .defaultSize(width: 1280, height: 800)
 
         WindowGroup("YouTrek Issue", id: SceneID.issue.rawValue) {
             IssueDetailWindow()
@@ -35,6 +28,68 @@ struct YouTrekApp: App {
         Settings {
             SettingsView()
                 .environmentObject(container)
+        }
+    }
+}
+
+private struct MainWindowContent: View {
+    @EnvironmentObject private var container: AppContainer
+
+    var body: some View {
+        Group {
+            if container.requiresSetup {
+                SetupWindow()
+                    .background(WindowAccessor(isSetup: true))
+            } else {
+                RootView()
+                    .background(WindowAccessor(isSetup: false))
+            }
+        }
+    }
+}
+
+private struct WindowAccessor: NSViewRepresentable {
+    let isSetup: Bool
+
+    func makeNSView(context: Context) -> WindowAccessorView {
+        let view = WindowAccessorView()
+        view.isSetup = isSetup
+        return view
+    }
+
+    func updateNSView(_ nsView: WindowAccessorView, context: Context) {
+        nsView.isSetup = isSetup
+        nsView.configureWindowIfNeeded()
+    }
+}
+
+private final class WindowAccessorView: NSView {
+    var isSetup = false
+    private var isConfigured = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        configureWindowIfNeeded()
+    }
+
+    func configureWindowIfNeeded() {
+        guard let window, !isConfigured || window.styleMask.contains(.borderless) != isSetup else { return }
+        isConfigured = true
+
+        if isSetup {
+            window.styleMask = [.borderless]
+            window.isMovableByWindowBackground = true
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = true
+            window.setContentSize(NSSize(width: 480, height: 340))
+            window.center()
+        } else {
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.titlebarAppearsTransparent = false
+            window.titleVisibility = .visible
+            window.isMovableByWindowBackground = false
+            window.setContentSize(NSSize(width: 1280, height: 800))
         }
     }
 }

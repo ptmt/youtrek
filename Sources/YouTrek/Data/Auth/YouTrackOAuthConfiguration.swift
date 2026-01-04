@@ -2,6 +2,7 @@ import Foundation
 
 struct YouTrackOAuthConfiguration: Sendable {
     private static let defaultAPIBase: URL = URL(string: "https://youtrack.jetbrains.com/api")!
+    private static let defaultRedirectURI: URL = URL(string: "youtrek://oauth_callback")!
 
     let apiBaseURL: URL
     let authorizationEndpoint: URL
@@ -52,11 +53,14 @@ struct YouTrackOAuthConfiguration: Sendable {
             throw YouTrackOAuthConfigurationError.missingValue(key: "YOUTRACK_CLIENT_ID")
         }
 
-        guard let redirectRaw = environment["YOUTRACK_REDIRECT_URI"], !redirectRaw.isEmpty else {
-            throw YouTrackOAuthConfigurationError.missingValue(key: "YOUTRACK_REDIRECT_URI")
-        }
-        guard let redirectURL = URL(string: redirectRaw) else {
-            throw YouTrackOAuthConfigurationError.invalidURL(value: redirectRaw, key: "YOUTRACK_REDIRECT_URI")
+        let redirectURL: URL
+        if let redirectRaw = environment["YOUTRACK_REDIRECT_URI"], !redirectRaw.isEmpty {
+            guard let url = URL(string: redirectRaw) else {
+                throw YouTrackOAuthConfigurationError.invalidURL(value: redirectRaw, key: "YOUTRACK_REDIRECT_URI")
+            }
+            redirectURL = url
+        } else {
+            redirectURL = defaultRedirectURI
         }
 
         let scopesString = environment["YOUTRACK_SCOPES"] ?? "YouTrack"

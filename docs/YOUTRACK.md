@@ -29,17 +29,21 @@ A concise, engineer-friendly guide to YouTrack’s REST API for building a light
 * Register an OAuth client in **Hub** (bundled with YouTrack Cloud/Server):
 
   * Grant type: **Authorization Code + PKCE** (native-app standard).
-  * Redirect URI: **loopback** (e.g., `http://127.0.0.1:48000/callback`) or a **custom URI scheme** (`yourapp://oauth2redirect`). Use system browser.
+  * Redirect URI: **loopback** (e.g., `http://127.0.0.1:48000/callback`) or a **custom URI scheme** (e.g., `youtrek://oauth_callback`). Use system browser.
+    * The app registers the `youtrek` URL scheme in its Info.plist. If you use that scheme, set the Hub redirect URI to `youtrek://oauth_callback` (only override `YOUTRACK_REDIRECT_URI` if you need a different redirect).
   * Scopes: request **YouTrack** (add others only if needed).
   
-  > **macOS client setup:** before launching YouTrek, export the following so the AppAuth integration can negotiate with Hub:
-  > 
-  > * `YOUTRACK_BASE_URL` – REST base (for example `https://acme.youtrack.cloud/api`).
-  > * `YOUTRACK_HUB_AUTHORIZE_URL` – Hub authorize endpoint (`https://<hub>/api/rest/oauth2/auth`).
-  > * `YOUTRACK_HUB_TOKEN_URL` – Hub token endpoint (`https://<hub>/api/rest/oauth2/token`).
+  > **macOS client setup:** before launching YouTrek, export only what is required for OAuth; everything else can default.
+  >
+  > **Required (OAuth sign-in will not start without these):**
   > * `YOUTRACK_CLIENT_ID` – the OAuth client identifier from Hub.
-  > * `YOUTRACK_REDIRECT_URI` – the redirect URI you registered (loopback or custom scheme).
-  > * (Optional) `YOUTRACK_SCOPES` – comma separated overrides; defaults to `YouTrack`.
+  >
+  > **Defaults you can embed (or override via env):**
+  > * `YOUTRACK_REDIRECT_URI` – defaults to `youtrek://oauth_callback`. Set this only if you use a loopback or custom redirect.
+  > * `YOUTRACK_BASE_URL` – REST base. Defaults to `https://youtrack.jetbrains.com/api`. Set this for your own YouTrack instance (for example `https://acme.youtrack.cloud/api`).
+  > * `YOUTRACK_HUB_AUTHORIZE_URL` – Hub authorize endpoint. Defaults to `<YOUTRACK_BASE_URL>/../hub/api/rest/oauth2/auth`.
+  > * `YOUTRACK_HUB_TOKEN_URL` – Hub token endpoint. Defaults to `<YOUTRACK_BASE_URL>/../hub/api/rest/oauth2/token`.
+  > * `YOUTRACK_SCOPES` – comma separated overrides; defaults to `YouTrack`.
 * Endpoints (your actual Hub base depends on your deployment):
 
   * **Authorize:** `<HUB_BASE>/api/rest/oauth2/auth`
@@ -47,8 +51,10 @@ A concise, engineer-friendly guide to YouTrack’s REST API for building a light
 * Store the resulting **access token** (short-lived) and, if issued, **refresh token**. Inject `Authorization: Bearer <access_token>` on each REST call.
 * The macOS client now negotiates tokens via AppAuth + ASWebAuthenticationSession and stores the refresh token securely in Keychain. No PAT or token environment variables are required at runtime.
 * UX tip: offer both **“Sign in with YouTrack (Browser)”** *and* **“Use Personal Token”** as fallback.
+  * The token creation page in the YouTrack UI is typically `<YOU_TRACK_UI_BASE>/users/me?tab=account-security`. The app links to this path based on the base URL you enter.
+  * The setup screen shows this as a clickable "Create a personal token" link.
 
-> **Native-app hygiene:** use PKCE, open the system browser, and listen on a localhost/loopback port for the redirect. Avoid embedded webviews.
+> **Native-app hygiene:** use PKCE, open the system browser, and handle a loopback or custom-scheme redirect. Avoid embedded webviews.
 
 ---
 
