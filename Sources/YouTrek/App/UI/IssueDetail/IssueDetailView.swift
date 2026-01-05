@@ -17,6 +17,7 @@ struct IssueDetailView: View {
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
         }
         .background(.ultraThinMaterial)
     }
@@ -29,8 +30,8 @@ struct IssueDetailView: View {
             Text(issue.title)
                 .font(.system(size: 24, weight: .bold))
             HStack(spacing: 8) {
-                BadgeLabel(text: issue.status.displayName, systemImage: issue.status.iconName, tint: issue.status.tint)
-                BadgeLabel(text: issue.priority.displayName, systemImage: issue.priority.iconName, tint: issue.priority.tint)
+                BadgeLabel(text: issue.status.displayName, tint: issue.status.tint)
+                BadgeLabel(text: issue.priority.displayName, tint: issue.priority.tint)
             }
         }
     }
@@ -53,12 +54,10 @@ struct IssueDetailView: View {
 
 private struct BadgeLabel: View {
     let text: String
-    let systemImage: String
     let tint: Color
 
     var body: some View {
-        Label(text, systemImage: systemImage)
-            .labelStyle(.titleAndIcon)
+        Text(text)
             .padding(.vertical, 4)
             .padding(.horizontal, 8)
             .background(tint.opacity(0.15), in: Capsule())

@@ -28,7 +28,7 @@ enum CLIInstaller {
         }
 
         try fileManager.createSymbolicLink(atPath: destinationPath, withDestinationPath: executableURL.path)
-        return "Installed CLI alias at \(destinationPath) → \(executableURL.path)"
+        return "Installed CLI alias at \(destinationPath) -> \(executableURL.path)"
     }
 }
 

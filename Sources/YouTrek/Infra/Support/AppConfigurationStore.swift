@@ -48,3 +48,31 @@ struct AppConfigurationStore {
         try keychain.delete(account: Keys.tokenAccount)
     }
 }
+
+enum AppDebugSettings {
+    enum Keys {
+        static let simulateSlowResponses = "com.potomushto.youtrek.debug.simulate-slow-responses"
+    }
+
+    static var simulateSlowResponses: Bool {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: Keys.simulateSlowResponses)
+        #else
+        return false
+        #endif
+    }
+
+    static func setSimulateSlowResponses(_ value: Bool) {
+        #if DEBUG
+        UserDefaults.standard.set(value, forKey: Keys.simulateSlowResponses)
+        #endif
+    }
+
+    static let slowResponseDelay: TimeInterval = 5
+
+    static func applySlowResponseIfNeeded() async throws {
+        guard simulateSlowResponses else { return }
+        let nanoseconds = UInt64(slowResponseDelay * 1_000_000_000)
+        try await Task.sleep(nanoseconds: nanoseconds)
+    }
+}

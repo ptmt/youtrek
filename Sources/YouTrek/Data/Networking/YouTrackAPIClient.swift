@@ -63,6 +63,7 @@ struct YouTrackAPIClient: Sendable {
     }
 
     func get(path: String, queryItems: [URLQueryItem]) async throws -> Data {
+        try await AppDebugSettings.applySlowResponseIfNeeded()
         guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: true) else {
             throw YouTrackAPIError.unsupportedURL
         }
@@ -103,6 +104,53 @@ struct YouTrackAPIClient: Sendable {
             }
 
             return data
+        } catch let error as YouTrackAPIError {
+            throw error
+        } catch {
+            throw YouTrackAPIError.transport(underlying: error)
+        }
+    }
+
+    func delete(path: String, queryItems: [URLQueryItem] = []) async throws {
+        try await AppDebugSettings.applySlowResponseIfNeeded()
+        guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: true) else {
+            throw YouTrackAPIError.unsupportedURL
+        }
+
+        let appendedPath: String
+        if components.path.isEmpty {
+            appendedPath = "/\(path)"
+        } else {
+            appendedPath = components.path.appendingPathComponent(path)
+        }
+
+        components.path = appendedPath
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
+
+        guard let url = components.url else {
+            throw YouTrackAPIError.unsupportedURL
+        }
+
+        let token = try await configuration.tokenProvider.token()
+        guard !token.isEmpty else {
+            throw YouTrackAPIError.missingAccessToken
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw YouTrackAPIError.invalidResponse
+            }
+
+            guard (200..<300).contains(http.statusCode) else {
+                let body = String(data: data, encoding: .utf8)
+                throw YouTrackAPIError.http(statusCode: http.statusCode, body: body)
+            }
         } catch let error as YouTrackAPIError {
             throw error
         } catch {

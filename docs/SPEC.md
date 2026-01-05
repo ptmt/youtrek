@@ -20,3 +20,14 @@ Think of Apple Mail and Linear
 ## Offline-first sync
 
 When app opens, the syncronization should kick on showing a progress bar right behind the toolbar. It should download as much as possible to show the issue list for all filters like "Created by Me" etc.
+
+## Developer Mode (Debug builds)
+
+- Toolbar adds a "Developer" menu in DEBUG builds only.
+- "Simulate slow responses" toggles a 5-second delay on every API request.
+
+## Sync UX
+
+- All sync work routes through a single operation queue to keep network operations serialized.
+- When the queue is active, the toolbar shows a global "Syncing…" indicator.
+- If a local change conflicts with a remote update, show a conflict dialog with a copyable text area so users can preserve their edits.

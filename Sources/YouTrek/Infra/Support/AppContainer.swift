@@ -50,9 +50,22 @@ final class AppContainer: ObservableObject {
         let palette = CommandPaletteCoordinator(router: router)
         let configurationStore = AppConfigurationStore()
         let authSwitcher = SwitchableAuthRepository(initial: PreviewAuthRepository())
-        let issueSwitcher = SwitchableIssueRepository(initial: PreviewIssueRepository())
+        let issueSwitcher = SwitchableIssueRepository(initial: EmptyIssueRepository())
         let savedQuerySwitcher = SwitchableSavedQueryRepository(initial: PreviewSavedQueryRepository())
-        let sync = SyncCoordinator(issueRepository: issueSwitcher)
+        let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
+            await MainActor.run {
+                state?.updateSyncActivity(isSyncing: pendingCount > 0, label: label)
+            }
+        }
+        let sync = SyncCoordinator(
+            issueRepository: issueSwitcher,
+            operationQueue: syncQueue,
+            conflictHandler: { [weak state] conflict in
+                await MainActor.run {
+                    state?.presentConflict(conflict)
+                }
+            }
+        )
         let container = AppContainer(
             appState: state,
             issueComposer: composer,
@@ -81,7 +94,20 @@ final class AppContainer: ObservableObject {
         let authSwitcher = SwitchableAuthRepository(initial: authRepository)
         let issueSwitcher = SwitchableIssueRepository(initial: issueRepository)
         let savedQuerySwitcher = SwitchableSavedQueryRepository(initial: PreviewSavedQueryRepository())
-        let sync = SyncCoordinator(issueRepository: issueSwitcher)
+        let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
+            await MainActor.run {
+                state?.updateSyncActivity(isSyncing: pendingCount > 0, label: label)
+            }
+        }
+        let sync = SyncCoordinator(
+            issueRepository: issueSwitcher,
+            operationQueue: syncQueue,
+            conflictHandler: { [weak state] conflict in
+                await MainActor.run {
+                    state?.presentConflict(conflict)
+                }
+            }
+        )
         return AppContainer(
             appState: state,
             issueComposer: composer,
@@ -97,7 +123,9 @@ final class AppContainer: ObservableObject {
     }()
 
     func bootstrap() async {
-        let savedQueries = (try? await savedQueryRepositorySwitcher.fetchSavedQueries()) ?? []
+        let savedQueries = (try? await syncCoordinator.enqueue(label: "Sync saved searches") {
+            try await self.savedQueryRepositorySwitcher.fetchSavedQueries()
+        }) ?? []
         let sections = buildSidebarSections(savedQueries: savedQueries)
         let preferredSelectionID = preferredSelectionID(from: savedQueries)
 
@@ -112,6 +140,24 @@ final class AppContainer: ObservableObject {
         lastLoadedSidebarID = selection.id
         guard let issues = try? await syncCoordinator.refreshIssues(using: selection.query) else { return }
         appState.replaceIssues(with: issues)
+    }
+
+    func deleteSavedSearch(id: String) async {
+        do {
+            try await syncCoordinator.enqueue(label: "Delete saved search") {
+                try await self.savedQueryRepositorySwitcher.deleteSavedQuery(id: id)
+            }
+        } catch {
+            print("Failed to delete saved search: \(error.localizedDescription)")
+            return
+        }
+
+        let savedQueries = (try? await syncCoordinator.enqueue(label: "Sync saved searches") {
+            try await self.savedQueryRepositorySwitcher.fetchSavedQueries()
+        }) ?? []
+        let sections = buildSidebarSections(savedQueries: savedQueries)
+        let preferredSelectionID = preferredSelectionID(from: savedQueries)
+        appState.updateSidebar(sections: sections, preferredSelectionID: preferredSelectionID)
     }
 
     func beginSignIn() {
@@ -205,8 +251,9 @@ final class AppContainer: ObservableObject {
 
 private extension AppContainer {
     func buildSidebarSections(savedQueries: [SavedQuery]) -> [SidebarSection] {
+        let visibleSavedQueries = limitedSavedQueries(from: savedQueries)
         let page = IssueQuery.Page(size: 50, offset: 0)
-        let savedInbox = savedQueries.first { $0.name.caseInsensitiveCompare("Inbox") == .orderedSame }
+        let savedInbox = visibleSavedQueries.first { $0.name.caseInsensitiveCompare("Inbox") == .orderedSame }
 
         var smartItems: [SidebarItem] = []
         if savedInbox == nil {
@@ -215,7 +262,7 @@ private extension AppContainer {
         smartItems.append(.assignedToMe(page: page))
         smartItems.append(.createdByMe(page: page))
 
-        let savedItems = savedQueries.map { SidebarItem.savedSearch($0, page: page) }
+        let savedItems = visibleSavedQueries.map { SidebarItem.savedSearch($0, page: page) }
 
         var sections: [SidebarSection] = []
         if !smartItems.isEmpty {
@@ -228,10 +275,17 @@ private extension AppContainer {
     }
 
     func preferredSelectionID(from savedQueries: [SavedQuery]) -> SidebarItem.ID? {
-        if let inbox = savedQueries.first(where: { $0.name.caseInsensitiveCompare("Inbox") == .orderedSame }) {
+        let visibleSavedQueries = limitedSavedQueries(from: savedQueries)
+        if let inbox = visibleSavedQueries.first(where: { $0.name.caseInsensitiveCompare("Inbox") == .orderedSame }) {
             return "saved:\(inbox.id)"
         }
         return "smart:inbox"
+    }
+
+    func limitedSavedQueries(from savedQueries: [SavedQuery]) -> [SavedQuery] {
+        let limit = 7
+        guard savedQueries.count > limit else { return savedQueries }
+        return Array(savedQueries.prefix(limit))
     }
 }
 
@@ -322,11 +376,29 @@ private struct PreviewIssueRepository: IssueRepository {
     }
 }
 
+private struct EmptyIssueRepository: IssueRepository {
+    func fetchIssues(query: IssueQuery) async throws -> [IssueSummary] {
+        []
+    }
+
+    func createIssue(draft: IssueDraft) async throws -> IssueSummary {
+        throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
+    }
+
+    func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {
+        throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
+    }
+}
+
 private struct PreviewSavedQueryRepository: SavedQueryRepository {
     func fetchSavedQueries() async throws -> [SavedQuery] {
         [
             SavedQuery(id: "preview-1", name: "My Team's Bugs", query: "project: YT Type: Bug"),
             SavedQuery(id: "preview-2", name: "Blocked", query: "State: Blocked")
         ]
+    }
+
+    func deleteSavedQuery(id: String) async throws {
+        throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support deletions")
     }
 }

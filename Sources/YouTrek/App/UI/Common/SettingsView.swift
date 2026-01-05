@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var container: AppContainer
+    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .system
 
     var body: some View {
         Form {
@@ -13,6 +14,13 @@ struct SettingsView: View {
             }
 
             Section("Appearance") {
+                Picker("Theme", selection: $theme) {
+                    ForEach(AppTheme.allCases) { theme in
+                        Text(theme.title).tag(theme)
+                    }
+                }
+                .pickerStyle(.segmented)
+
                 Toggle("Use vibrancy", isOn: .constant(true))
                     .disabled(true)
                 Toggle("High contrast", isOn: .constant(false))

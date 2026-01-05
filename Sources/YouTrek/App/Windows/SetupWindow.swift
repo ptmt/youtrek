@@ -61,6 +61,7 @@ struct SetupWindow: View {
                     Label(browserHintText, systemImage: container.browserAuthAvailable ? "globe" : "exclamationmark.triangle.fill")
                         .foregroundColor(container.browserAuthAvailable ? .secondary : .orange)
                         .font(.callout)
+                        .textSelection(.enabled)
                 }
             }
             .padding(12)
@@ -71,6 +72,7 @@ struct SetupWindow: View {
                 Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                     .font(.callout)
+                    .textSelection(.enabled)
             }
 
             HStack {

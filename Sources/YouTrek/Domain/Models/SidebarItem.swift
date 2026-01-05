@@ -19,6 +19,10 @@ struct SidebarItem: Identifiable, Hashable, Sendable {
 
     var isInbox: Bool { kind == .inbox }
     var isSavedSearch: Bool { kind == .savedSearch }
+    var savedQueryID: String? {
+        guard isSavedSearch, id.hasPrefix("saved:") else { return nil }
+        return String(id.dropFirst("saved:".count))
+    }
 }
 
 struct SidebarSection: Identifiable, Hashable, Sendable {

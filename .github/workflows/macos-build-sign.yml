@@ -25,6 +25,18 @@ jobs:
         with:
           xcode-version: "latest-stable"
 
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project YouTrek.xcodeproj \
+            -scheme "$XCODE_SCHEME" \
+            -destination "platform=macOS" \
+            -configuration Debug \
+            test \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
       - name: Create keychain and import signing certificate
         env:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}

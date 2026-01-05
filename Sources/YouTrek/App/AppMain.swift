@@ -1,19 +1,31 @@
 import SwiftUI
 
 @main
+enum YouTrekEntry {
+    static func main() async {
+        if CLIEntrypoint.shouldRun(arguments: CommandLine.arguments) {
+            await CLIEntrypoint.runAndExit(arguments: CommandLine.arguments)
+        }
+        YouTrekApp.main()
+    }
+}
+
 struct YouTrekApp: App {
     @StateObject private var container = AppContainer.live
+    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .system
 
     var body: some Scene {
         WindowGroup(id: SceneID.main.rawValue) {
             MainWindowContent()
                 .environmentObject(container)
+                .preferredColorScheme(theme.colorScheme)
         }
         .commands { AppMenus(container: container) }
 
         WindowGroup("YouTrek Issue", id: SceneID.issue.rawValue) {
             IssueDetailWindow()
                 .environmentObject(container)
+                .preferredColorScheme(theme.colorScheme)
         }
         .handlesExternalEvents(matching: ["youtrek://issue"])
         .defaultSize(width: 720, height: 640)
@@ -21,6 +33,7 @@ struct YouTrekApp: App {
         WindowGroup("New Issue", id: SceneID.newIssue.rawValue) {
             NewIssueWindow()
                 .environmentObject(container)
+                .preferredColorScheme(theme.colorScheme)
         }
         .handlesExternalEvents(matching: ["youtrek://new-issue"])
         .defaultSize(width: 560, height: 520)
@@ -28,6 +41,7 @@ struct YouTrekApp: App {
         Settings {
             SettingsView()
                 .environmentObject(container)
+                .preferredColorScheme(theme.colorScheme)
         }
     }
 }
@@ -80,7 +94,12 @@ private final class WindowAccessorView: NSView {
 
         if isSetup {
             if needsReconfigure {
-                window.styleMask = [.borderless]
+                window.styleMask = [.titled, .fullSizeContentView]
+                window.titlebarAppearsTransparent = true
+                window.titleVisibility = .hidden
+                window.standardWindowButton(.closeButton)?.isHidden = true
+                window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+                window.standardWindowButton(.zoomButton)?.isHidden = true
                 window.isMovableByWindowBackground = true
                 window.isOpaque = false
                 window.backgroundColor = .clear
@@ -88,6 +107,7 @@ private final class WindowAccessorView: NSView {
             }
             window.setContentSize(NSSize(width: 480, height: 340))
             window.center()
+            window.makeKeyAndOrderFront(nil)
         } else if needsReconfigure {
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             window.titlebarAppearsTransparent = false

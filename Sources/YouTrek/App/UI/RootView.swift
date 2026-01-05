@@ -15,10 +15,19 @@ private struct RootContentView: View {
     @ObservedObject var appState: AppState
     @State private var searchQuery: String = ""
     @State private var isInspectorVisible: Bool = true
+    @State private var simulateSlowResponses: Bool = AppDebugSettings.simulateSlowResponses
 
     var body: some View {
         NavigationSplitView(columnVisibility: $appState.columnVisibility) {
-            SidebarView(sections: appState.sidebarSections, selection: $appState.selectedSidebarItem)
+            SidebarView(
+                sections: appState.sidebarSections,
+                selection: $appState.selectedSidebarItem,
+                onDeleteSavedSearch: { savedQueryID in
+                    Task {
+                        await container.deleteSavedSearch(id: savedQueryID)
+                    }
+                }
+            )
         } content: {
             IssueListView(
                 issues: appState.filteredIssues(searchQuery: searchQuery),
@@ -28,6 +37,12 @@ private struct RootContentView: View {
                 ToolbarItemGroup(placement: .automatic) {
                     NewIssueToolbar(container: container)
                         .frame(maxWidth: 280)
+                }
+
+                if appState.isSyncing {
+                    ToolbarItem(placement: .automatic) {
+                        SyncStatusIndicator(label: appState.syncStatusMessage)
+                    }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -48,35 +63,43 @@ private struct RootContentView: View {
                     .buttonStyle(.accessoryBar)
                     .help("Show or hide the inspector column")
                 }
-            }
-        } detail: {
-            Group {
-                if isInspectorVisible {
-                    if let issue = appState.selectedIssue {
-                        IssueDetailView(issue: issue)
-                    } else {
-                        ContentUnavailableView(
-                            "Select an issue",
-                            systemImage: "square.stack.3d.up",
-                            description: Text("Choose an issue from the middle column to inspect details.")
-                        )
+
+                #if DEBUG
+                ToolbarItem(placement: .automatic) {
+                    Menu {
+                        Toggle("Simulate slow responses", isOn: $simulateSlowResponses)
+                    } label: {
+                        Label("Developer", systemImage: "wrench.and.screwdriver")
                     }
                 }
+                #endif
             }
-            .background {
-                if isInspectorVisible {
-                    Rectangle().fill(.thinMaterial)
+        } detail: {
+            Text("Select an issue")
+                .foregroundStyle(.secondary)
+        }
+        .inspector(isPresented: $isInspectorVisible) {
+            Group {
+                if let issue = appState.selectedIssue {
+                    IssueDetailView(issue: issue)
+                } else {
+                    ContentUnavailableView(
+                        "Select an issue",
+                        systemImage: "square.stack.3d.up",
+                        description: Text("Choose an issue from the middle column to inspect details.")
+                    )
                 }
             }
-            .navigationSplitViewColumnWidth(
-                min: isInspectorVisible ? 320 : 0,
-                ideal: isInspectorVisible ? 400 : 0
-            )
+            .inspectorColumnWidth(min: 320, ideal: 400, max: 500)
+            .background(.ultraThinMaterial)
         }
         .searchable(text: $searchQuery, placement: .toolbar, prompt: Text("Search issues"))
         .navigationSplitViewStyle(.balanced)
-        .onAppear {
+        .task {
             isInspectorVisible = appState.isInspectorVisible
+        }
+        .onChange(of: simulateSlowResponses) { _, newValue in
+            AppDebugSettings.setSimulateSlowResponses(newValue)
         }
         .onChange(of: searchQuery) { _, query in
             appState.updateSearch(query: query)
@@ -95,6 +118,24 @@ private struct RootContentView: View {
             openWindow(id: SceneID.newIssue.rawValue)
             container.router.consumeNewIssueWindowFlag()
         }
+        .sheet(item: $appState.activeConflict) { conflict in
+            ConflictResolutionDialog(conflict: conflict)
+        }
     }
 
+}
+
+private struct SyncStatusIndicator: View {
+    let label: String?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.small)
+            Text(label ?? "Syncing…")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+    }
 }

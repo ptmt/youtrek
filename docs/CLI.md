@@ -1,10 +1,10 @@
 # CLI Capabilities Plan
 
-This app should expose a command line interface that reuses the same networking, auth, and domain logic as the macOS UI. The CLI should be a first-class executable target (not a script) so it can be installed and run as `youtrek` from Terminal.
+This app exposes a command line interface that reuses the same networking, auth, and domain logic as the macOS UI. The CLI is built into the app executable so it can be installed and run as `youtrek` from Terminal.
 
 ## Distribution Constraint (Single App Binary)
 
-Because the app is distributed as a single `.app`, the CLI should be **the same executable** as the GUI. The app binary can detect CLI mode (arguments present) and run a command dispatcher instead of launching SwiftUI.
+Because the app is distributed as a single `.app`, the CLI is the **same executable** as the GUI. The app binary detects CLI mode (arguments present) and runs a command dispatcher instead of launching SwiftUI.
 
 This allows `youtrek` in Terminal to execute:
 
@@ -40,7 +40,7 @@ Suggested layers:
 - Allow explicit overrides via flags or env vars:
   - `--base-url` or `YOUTRACK_BASE_URL`
   - `--token` or `YOUTRACK_TOKEN`
-- When the CLI writes a token, store it via `ManualTokenAuthRepository` so the macOS app can reuse it.
+- When the CLI writes a token, store it via `AppConfigurationStore` so the macOS app can reuse it.
 - Optionally add a **shared keychain access group** so both GUI and CLI can read the same credential if the sandboxed app is enabled.
 
 ## CLI Alias Installation (Single Binary)
@@ -52,8 +52,8 @@ To run `youtrek` without the full app path, install a **symlink** or **wrapper s
 
 Provide an in-app action or command to install the alias:
 
-- If unsandboxed: create a symlink in `/usr/local/bin`.
-- If sandboxed (Mac App Store): install into `~/bin` and prompt the user to add it to PATH.
+- Because this app is distributed outside the Mac App Store, install a symlink in `/usr/local/bin` by default.
+- If permissions are denied, fall back to a user-level path and update PATH manually.
 
 Example wrapper script content:
 
@@ -62,30 +62,31 @@ Example wrapper script content:
 exec "/Applications/YouTrek.app/Contents/MacOS/YouTrek" "$@"
 ```
 
-## Command Surface (initial)
+## Current Command Surface
 
-- `youtrek auth login --token <PAT>`
 - `youtrek auth status`
-- `youtrek issues list [--query <ytql>] [--saved <name>] [--top 50]`
+- `youtrek auth login --base-url <url> --token <PAT>`
+- `youtrek issues list [--query <ytql>] [--saved <name>] [--top 50] [--json]`
+- `youtrek saved-queries list [--json]`
+- `youtrek install-cli [--path <path>] [--force]`
+
+## Planned Commands
+
 - `youtrek issues show <id>`
 - `youtrek issues create --project <id> --title <title> [--desc ...] [--priority ...]`
 - `youtrek issues update <id> [--title ...] [--status ...] [--priority ...]`
-- `youtrek saved-queries list`
 
 ## Output Formats
 
 - Default human-readable table (aligned columns).
 - `--json` flag for scripts (machine-friendly).
 
-## Implementation Sketch
+## Implementation Notes
 
-1. Add a CLI entrypoint (ArgumentParser) inside the app executable.
-2. Build a `CLIContainer` that:
-   - resolves config and token
-   - builds `YouTrackIssueRepository` and `YouTrackSavedQueryRepository`
-3. Map each CLI command to repository calls.
-4. Add formatting helpers for table/JSON output.
-5. Add an "Install CLI alias" action that writes the symlink or wrapper script.
+- CLI entrypoint is wired in `@main` and short-circuits SwiftUI on CLI usage.
+- CLI reuses `YouTrackIssueRepository` and `YouTrackSavedQueryRepository`.
+- Output supports table and `--json`.
+- CLI alias can be installed from Terminal (`youtrek install-cli`) or via the in-app menu: **CLI -> Install CLI Alias**.
 
 ## App Integration Notes
 
@@ -95,7 +96,4 @@ exec "/Applications/YouTrek.app/Contents/MacOS/YouTrek" "$@"
 
 ## Open Questions
 
-- Should CLI read the GUI app's Keychain token by default, or require explicit token input?
-- Is the app sandboxed (Mac App Store) or distributed outside the store?
-- Where should we install the alias: `/usr/local/bin` or `~/.local/bin`?
 - Do we need an `inbox` command that maps to the "Inbox" saved search when present?

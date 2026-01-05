@@ -11,8 +11,11 @@ final class AppState: ObservableObject {
     @Published private var searchQuery: String = ""
     @Published private(set) var isInspectorVisible: Bool = true
     @Published private(set) var isSidebarVisible: Bool = true
+    @Published private(set) var isSyncing: Bool = false
+    @Published private(set) var syncStatusMessage: String? = nil
+    @Published var activeConflict: ConflictNotice?
 
-    init(issues: [IssueSummary] = AppStatePlaceholder.sampleIssues()) {
+    init(issues: [IssueSummary] = []) {
         self.issues = issues
     }
 
@@ -60,6 +63,29 @@ final class AppState: ObservableObject {
 
     func setInspectorVisible(_ isVisible: Bool) {
         isInspectorVisible = isVisible
+    }
+
+    func updateSyncActivity(isSyncing: Bool, label: String?) {
+        self.isSyncing = isSyncing
+        self.syncStatusMessage = label
+    }
+
+    func presentConflict(_ conflict: ConflictNotice) {
+        activeConflict = conflict
+    }
+}
+
+struct ConflictNotice: Identifiable, Hashable, Sendable {
+    let id: UUID
+    let title: String
+    let message: String
+    let localChanges: String
+
+    init(id: UUID = UUID(), title: String, message: String, localChanges: String) {
+        self.id = id
+        self.title = title
+        self.message = message
+        self.localChanges = localChanges
     }
 }
 

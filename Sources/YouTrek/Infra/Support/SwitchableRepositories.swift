@@ -67,4 +67,8 @@ actor SwitchableSavedQueryRepository: SavedQueryRepository {
     func fetchSavedQueries() async throws -> [SavedQuery] {
         try await current.fetchSavedQueries()
     }
+
+    func deleteSavedQuery(id: String) async throws {
+        try await current.deleteSavedQuery(id: id)
+    }
 }

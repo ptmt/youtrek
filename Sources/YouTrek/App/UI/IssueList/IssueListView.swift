@@ -14,14 +14,14 @@ struct IssueListView: View {
             if issues.isEmpty {
                 ContentUnavailableView(
                     "No issues",
-                    systemImage: "rectangle.stack.badge.questionmark",
+                    systemImage: "tray",
                     description: Text("Refine your filters or sync to pull the latest issues.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Table(issues, selection: $selectedIDs, sortOrder: $sortOrder) {
                     TableColumn("ID", value: \IssueSummary.readableID)
-                        .width(70)
+                        .width(min: 60, ideal: 100, max: 200)
                     TableColumn("Title", value: \IssueSummary.title) { issue in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(issue.title)
@@ -29,11 +29,13 @@ struct IssueListView: View {
                             metadataRow(for: issue)
                         }
                         .padding(.vertical, 4)
+                        .textSelection(.enabled)
                     }
                     .width(min: 220, ideal: 420)
                     TableColumn("Updated") { issue in
                         Text(issue.updatedAt.formatted(.relative(presentation: .named)))
                             .font(.subheadline)
+                            .textSelection(.enabled)
                     }
                     .width(140)
                 }
@@ -63,22 +65,22 @@ struct IssueListView: View {
                     .labelStyle(.titleAndIcon)
                     .foregroundStyle(.secondary)
             }
-            Label(issue.status.displayName, systemImage: issue.status.iconName)
-                .labelStyle(.titleAndIcon)
+            Text(issue.status.displayName)
                 .foregroundStyle(issue.status.tint)
-            Label(issue.priority.displayName, systemImage: issue.priority.iconName)
-                .labelStyle(.titleAndIcon)
-                .foregroundColor(issue.priority.tint)
+            Text(issue.priority.displayName)
+                .foregroundStyle(issue.priority.tint)
         }
         .font(.caption)
         .lineLimit(1)
     }
 
     private func syncSelectionState() {
-        if let selectedIssue = selection {
-            selectedIDs = [selectedIssue.id]
-        } else {
-            selectedIDs.removeAll()
+        Task { @MainActor in
+            if let selectedIssue = selection {
+                selectedIDs = [selectedIssue.id]
+            } else {
+                selectedIDs.removeAll()
+            }
         }
     }
 }

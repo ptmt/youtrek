@@ -14,31 +14,17 @@ enum CLIEntrypoint {
             "--help",
             "-h"
         ]
-        if knownCommands.contains(first) {
-            return true
-        }
-        return first.hasPrefix("-")
+        return knownCommands.contains(first)
     }
 
-    static func runAndExit(arguments: [String]) -> Never {
-        let exitCode = CLIRunner().run(arguments: Array(arguments.dropFirst()))
+    static func runAndExit(arguments: [String]) async -> Never {
+        let exitCode = await CLIRunner.run(arguments: Array(arguments.dropFirst()))
         exit(Int32(exitCode))
     }
 }
 
-private final class CLIRunner {
-    func run(arguments: [String]) -> Int {
-        let semaphore = DispatchSemaphore(value: 0)
-        var exitCode = 0
-        Task {
-            exitCode = await runAsync(arguments: arguments)
-            semaphore.signal()
-        }
-        semaphore.wait()
-        return exitCode
-    }
-
-    private func runAsync(arguments: [String]) async -> Int {
+private enum CLIRunner {
+    static func run(arguments: [String]) async -> Int {
         guard let command = arguments.first else {
             CLIOutput.printHelp()
             return 0
@@ -69,7 +55,7 @@ private final class CLIRunner {
         }
     }
 
-    private func runCLI(arguments: [String]) async throws -> Int {
+    private static func runCLI(arguments: [String]) async throws -> Int {
         guard let subcommand = arguments.first else {
             CLIOutput.printHelp()
             return 0
@@ -82,7 +68,7 @@ private final class CLIRunner {
         }
     }
 
-    private func runAuth(arguments: [String]) async throws -> Int {
+    private static func runAuth(arguments: [String]) async throws -> Int {
         guard let subcommand = arguments.first else {
             CLIOutput.printAuthHelp()
             return 0
@@ -127,21 +113,21 @@ private final class CLIRunner {
         }
     }
 
-    private func printAuthStatus() {
+    private static func printAuthStatus() {
         let store = AppConfigurationStore()
         let baseURL = store.loadBaseURL()?.absoluteString ?? "(not set)"
         let token = store.loadToken()
 
         if let token, !token.isEmpty {
             let suffix = token.suffix(4)
-            CLIOutput.printInfo("Signed in via token (••••\(suffix)).")
+            CLIOutput.printInfo("Signed in via token (****\(suffix)).")
         } else {
             CLIOutput.printInfo("Not signed in. Run: youtrek auth login --base-url <url> --token <pat>")
         }
         CLIOutput.printInfo("Base URL: \(baseURL)")
     }
 
-    private func runSavedQueries(arguments: [String]) async throws -> Int {
+    private static func runSavedQueries(arguments: [String]) async throws -> Int {
         guard let subcommand = arguments.first else {
             CLIOutput.printSavedQueriesHelp()
             return 0
@@ -176,7 +162,7 @@ private final class CLIRunner {
         }
     }
 
-    private func runIssues(arguments: [String]) async throws -> Int {
+    private static func runIssues(arguments: [String]) async throws -> Int {
         guard let subcommand = arguments.first else {
             CLIOutput.printIssuesHelp()
             return 0
@@ -218,7 +204,7 @@ private final class CLIRunner {
             let issues = try await issueRepository.fetchIssues(query: query)
 
             if parsed.flags.contains("--json") {
-                let output = issues.map(IssueSummaryOutput.init)
+                let output = issues.map { IssueSummaryOutput(issue: $0) }
                 CLIOutput.printJSON(output)
             } else {
                 CLIOutput.printIssues(issues)
@@ -229,7 +215,7 @@ private final class CLIRunner {
         }
     }
 
-    private func runInstallCLI(arguments: [String]) async throws -> Int {
+    private static func runInstallCLI(arguments: [String]) async throws -> Int {
         let parsed = try parseOptions(
             arguments,
             valueOptions: ["--path"],
@@ -247,7 +233,7 @@ private final class CLIRunner {
         return 0
     }
 
-    private func parseOptions(
+    private static func parseOptions(
         _ arguments: [String],
         valueOptions: Set<String>,
         flagOptions: Set<String>
@@ -282,7 +268,7 @@ private final class CLIRunner {
         return parsed
     }
 
-    private func resolveConnection(options: CLIParsedOptions) throws -> CLIConnection {
+    private static func resolveConnection(options: CLIParsedOptions) throws -> CLIConnection {
         let store = AppConfigurationStore()
         let baseURLOverride = options.options["--base-url"] ?? ProcessInfo.processInfo.environment["YOUTRACK_BASE_URL"]
         let baseURL = try resolveBaseURL(override: baseURLOverride, store: store, required: true)
@@ -294,8 +280,11 @@ private final class CLIRunner {
         return CLIConnection(configuration: YouTrackAPIConfiguration(baseURL: baseURL, tokenProvider: .constant(token)))
     }
 
-    private func resolveBaseURL(override: String?, store: AppConfigurationStore, required: Bool) throws -> URL {
-        if let override, let url = URL(string: override) {
+    private static func resolveBaseURL(override: String?, store: AppConfigurationStore, required: Bool) throws -> URL {
+        if let override {
+            guard let url = URL(string: override) else {
+                throw CLIError.invalidValue(option: "--base-url", value: override)
+            }
             return url
         }
         if let stored = store.loadBaseURL() {
@@ -307,7 +296,7 @@ private final class CLIRunner {
         return URL(string: "http://localhost")!
     }
 
-    private func resolveToken(override: String?, store: AppConfigurationStore) -> String? {
+    private static func resolveToken(override: String?, store: AppConfigurationStore) -> String? {
         if let override, !override.isEmpty {
             return override
         }
@@ -327,6 +316,7 @@ private struct CLIConnection {
 private enum CLIError: LocalizedError {
     case invalidCommand(String)
     case invalidOption(String)
+    case invalidValue(option: String, value: String)
     case missingArgument(String)
     case missingConfiguration(String)
 
@@ -336,6 +326,8 @@ private enum CLIError: LocalizedError {
             return "Unknown command: \(command). Run `youtrek --help` for usage."
         case .invalidOption(let option):
             return "Unknown option: \(option). Run `youtrek --help` for usage."
+        case .invalidValue(let option, let value):
+            return "Invalid value for \(option): \(value)"
         case .missingArgument(let option):
             return "Missing value for \(option)."
         case .missingConfiguration(let item):
@@ -419,13 +411,14 @@ private struct CLIOutput {
             return
         }
 
+        let formatter = makeDateFormatter()
         let rows = issues.map { issue in
             [
                 issue.readableID,
                 truncate(issue.title, limit: 60),
                 issue.projectName,
-                dateFormatter.string(from: issue.updatedAt),
-                issue.assignee?.displayName ?? "—",
+                formatter.string(from: issue.updatedAt),
+                issue.assignee?.displayName ?? "-",
                 issue.status.displayName,
                 issue.priority.displayName
             ]
@@ -493,15 +486,15 @@ private struct CLIOutput {
     private static func truncate(_ value: String, limit: Int) -> String {
         guard value.count > limit else { return value }
         let end = value.index(value.startIndex, offsetBy: max(0, limit - 1))
-        return value[..<end] + "…"
+        return String(value[..<end]) + "..."
     }
 
-    private static let dateFormatter: DateFormatter = {
+    private static func makeDateFormatter() -> DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
-    }()
+    }
 }
 
 private extension String {
