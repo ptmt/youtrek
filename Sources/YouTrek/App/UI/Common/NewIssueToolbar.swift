@@ -11,11 +11,15 @@ struct NewIssueToolbar: View {
     var body: some View {
         HStack(spacing: 8) {
             TextField("New issue title", text: $draftTitle, onCommit: createDraft)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
                 .frame(minWidth: 200)
             Button(action: createDraft) {
-                Label("Create Issue", systemImage: "plus.circle.fill")
+                Image(systemName: "plus.circle.fill")
             }
+            .buttonStyle(.accessoryBar)
             .keyboardShortcut(.return, modifiers: [.command])
             .disabled(draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }

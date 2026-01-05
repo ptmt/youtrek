@@ -52,3 +52,19 @@ actor SwitchableIssueRepository: IssueRepository {
         try await current.updateIssue(id: id, patch: patch)
     }
 }
+
+actor SwitchableSavedQueryRepository: SavedQueryRepository {
+    private var current: SavedQueryRepository
+
+    init(initial: SavedQueryRepository) {
+        self.current = initial
+    }
+
+    func replace(with repository: SavedQueryRepository) {
+        current = repository
+    }
+
+    func fetchSavedQueries() async throws -> [SavedQuery] {
+        try await current.fetchSavedQueries()
+    }
+}

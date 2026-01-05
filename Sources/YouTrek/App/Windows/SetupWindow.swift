@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 struct SetupWindow: View {
     @EnvironmentObject private var container: AppContainer
@@ -18,84 +18,74 @@ struct SetupWindow: View {
 
     @State private var baseURLString: String = ""
     @State private var token: String = ""
-    @State private var mode: SignInMode = .browser
+    @State private var mode: SignInMode = .token
     @State private var errorMessage: String?
 
     var body: some View {
-        ZStack {
-            VisualEffectBackground()
-                .ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 0) {
-                        Text("YOU")
-                            .font(.system(size: 36, weight: .black))
-                            .italic()
-                        Text(" ")
-                        Text("TREK")
-                            .font(.system(size: 36, weight: .black))
-                            .italic()
-                    }
-                    .tracking(2)
-                    Text("Sign in to your YouTrack or paste a personal token. Your URL syncs via iCloud; tokens stay in your keychain.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 0) {
+                    Text("YOU")
+                        .font(.system(size: 36, weight: .black))
+                        .italic()
+                    Text(" ")
+                    Text("TREK")
+                        .font(.system(size: 36, weight: .black))
+                        .italic()
                 }
+                .tracking(2)
+            }
 
-                Picker("", selection: $mode) {
-                    ForEach(SignInMode.allCases, id: \.self) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-
-                VStack(alignment: .leading, spacing: 10) {
-                    TextField("https://youtrack.jetbrains.com/api", text: $baseURLString, prompt: Text("YouTrack base URL"))
-                        .textContentType(.URL)
-                        .textFieldStyle(.roundedBorder)
-
-                    if mode == .token {
-                        SecureField("Permanent token", text: $token, prompt: Text("Paste your YouTrack token"))
-                            .textContentType(.password)
-                            .textFieldStyle(.roundedBorder)
-                        if let tokenPortalURL {
-                            Link("Create a personal token", destination: tokenPortalURL)
-                                .font(.caption)
-                                .foregroundStyle(.tint)
-                                .underline()
-                        }
-                    } else {
-                        Label(browserHintText, systemImage: container.browserAuthAvailable ? "globe" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(container.browserAuthAvailable ? .secondary : Color.yellow)
-                            .font(.callout)
-                    }
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.yellow)
-                        .font(.callout)
-                }
-
-                HStack {
-                    Spacer()
-                    Button(action: submit) {
-                        Text(actionTitle)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.return, modifiers: [.command])
-                    .disabled(!canSubmit)
+            Picker("", selection: $mode) {
+                ForEach(SignInMode.allCases, id: \.self) { mode in
+                    Text(mode.title).tag(mode)
                 }
             }
-            .padding(24)
-            .frame(width: 480, height: 340)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            VStack(alignment: .leading, spacing: 10) {
+                TextField("https://youtrack.jetbrains.com", text: $baseURLString, prompt: Text("YouTrack base URL"))
+                    .textContentType(.URL)
+                    .textFieldStyle(.roundedBorder)
+
+                if mode == .token {
+                    TextField("Permanent token", text: $token, prompt: Text("Paste your YouTrack token"))
+                        .textFieldStyle(.roundedBorder)
+                    if let tokenPortalURL {
+                        Link("Create a personal token", destination: tokenPortalURL)
+                            .font(.callout)
+                            .underline()
+                    }
+                } else {
+                    Label(browserHintText, systemImage: container.browserAuthAvailable ? "globe" : "exclamationmark.triangle.fill")
+                        .foregroundColor(container.browserAuthAvailable ? .secondary : .orange)
+                        .font(.callout)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .font(.callout)
+            }
+
+            HStack {
+                Spacer()
+                Button(action: submit) {
+                    Text(actionTitle)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return, modifiers: [.command])
+                .disabled(!canSubmit)
+            }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(24)
+        .frame(width: 480, height: 340)
+        .modifier(GlassBackgroundModifier())
         .onAppear(perform: preload)
     }
 
@@ -143,9 +133,14 @@ struct SetupWindow: View {
     private func preload() {
         let draft = container.storedConfigurationDraft()
         if let baseURL = draft.baseURL {
-            baseURLString = baseURL.absoluteString
+            // Strip /api suffix for display
+            var displayURL = baseURL
+            if displayURL.lastPathComponent.lowercased() == "api" {
+                displayURL.deleteLastPathComponent()
+            }
+            baseURLString = displayURL.absoluteString
         } else if baseURLString.isEmpty {
-            baseURLString = "https://youtrack.jetbrains.com/api"
+            baseURLString = "https://youtrack.jetbrains.com"
         }
         if let storedToken = draft.token {
             token = storedToken
@@ -179,6 +174,20 @@ struct SetupWindow: View {
             Task { @MainActor in
                 await container.completeManualSetup(baseURL: url, token: trimmedToken)
             }
+        }
+    }
+}
+
+private struct GlassBackgroundModifier: ViewModifier {
+    private let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content
+                .background(VisualEffectBackground())
+                .clipShape(shape)
         }
     }
 }

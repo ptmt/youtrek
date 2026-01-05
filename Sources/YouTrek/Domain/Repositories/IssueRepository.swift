@@ -6,19 +6,30 @@ protocol IssueRepository: Sendable {
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary
 }
 
-struct IssueQuery: Equatable {
+struct IssueQuery: Equatable, Hashable, Sendable {
+    var rawQuery: String?
     var search: String
     var filters: [String]
-    var sort: IssueSort
+    var sort: IssueSort?
     var page: Page
 
-    struct Page: Equatable {
+    struct Page: Equatable, Hashable, Sendable {
         var size: Int
         var offset: Int
     }
+
+    static func saved(_ query: String, page: Page) -> IssueQuery {
+        IssueQuery(
+            rawQuery: query,
+            search: "",
+            filters: [],
+            sort: nil,
+            page: page
+        )
+    }
 }
 
-enum IssueSort: Equatable {
+enum IssueSort: Equatable, Hashable, Sendable {
     case updated(descending: Bool)
     case priority(descending: Bool)
 }

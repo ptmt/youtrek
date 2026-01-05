@@ -2,31 +2,30 @@ import Foundation
 
 struct AppConfigurationStore {
     private enum Keys {
-        static let baseURL = "com.youtrek.config.base-url"
-        static let tokenAccount = "com.youtrek.config.token"
+        static let baseURL = "com.potomushto.youtrek.config.base-url"
+        static let tokenAccount = "com.potomushto.youtrek.config.token"
     }
 
-    private let ubiquitousStore: NSUbiquitousKeyValueStore
+    private let defaults: UserDefaults
     private let keychain: KeychainStorage
 
     init(
-        ubiquitousStore: NSUbiquitousKeyValueStore = .default,
-        keychain: KeychainStorage = KeychainStorage(service: "com.youtrek.config")
+        defaults: UserDefaults = .standard,
+        keychain: KeychainStorage = KeychainStorage(service: "com.potomushto.youtrek.config")
     ) {
-        self.ubiquitousStore = ubiquitousStore
+        self.defaults = defaults
         self.keychain = keychain
     }
 
     func loadBaseURL() -> URL? {
-        guard let stored = ubiquitousStore.string(forKey: Keys.baseURL), !stored.isEmpty else {
+        guard let stored = defaults.string(forKey: Keys.baseURL), !stored.isEmpty else {
             return nil
         }
         return URL(string: stored)
     }
 
     func save(baseURL: URL) {
-        ubiquitousStore.set(baseURL.absoluteString, forKey: Keys.baseURL)
-        ubiquitousStore.synchronize()
+        defaults.set(baseURL.absoluteString, forKey: Keys.baseURL)
     }
 
     func loadToken() -> String? {

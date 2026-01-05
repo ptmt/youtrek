@@ -14,6 +14,8 @@ final class AppContainer: ObservableObject {
     private let configurationStore: AppConfigurationStore
     private let issueRepositorySwitcher: SwitchableIssueRepository
     private let authRepositorySwitcher: SwitchableAuthRepository
+    private let savedQueryRepositorySwitcher: SwitchableSavedQueryRepository
+    private var lastLoadedSidebarID: SidebarItem.ID?
     @Published private(set) var supportsBrowserAuth: Bool = false
     @Published private(set) var requiresSetup: Bool = true
 
@@ -26,7 +28,8 @@ final class AppContainer: ObservableObject {
         authRepository: AuthRepository,
         configurationStore: AppConfigurationStore,
         issueRepositorySwitcher: SwitchableIssueRepository,
-        authRepositorySwitcher: SwitchableAuthRepository
+        authRepositorySwitcher: SwitchableAuthRepository,
+        savedQueryRepositorySwitcher: SwitchableSavedQueryRepository
     ) {
         self.appState = appState
         self.issueComposer = issueComposer
@@ -37,6 +40,7 @@ final class AppContainer: ObservableObject {
         self.configurationStore = configurationStore
         self.issueRepositorySwitcher = issueRepositorySwitcher
         self.authRepositorySwitcher = authRepositorySwitcher
+        self.savedQueryRepositorySwitcher = savedQueryRepositorySwitcher
     }
 
     static let live: AppContainer = {
@@ -47,6 +51,7 @@ final class AppContainer: ObservableObject {
         let configurationStore = AppConfigurationStore()
         let authSwitcher = SwitchableAuthRepository(initial: PreviewAuthRepository())
         let issueSwitcher = SwitchableIssueRepository(initial: PreviewIssueRepository())
+        let savedQuerySwitcher = SwitchableSavedQueryRepository(initial: PreviewSavedQueryRepository())
         let sync = SyncCoordinator(issueRepository: issueSwitcher)
         let container = AppContainer(
             appState: state,
@@ -57,7 +62,8 @@ final class AppContainer: ObservableObject {
             authRepository: authSwitcher,
             configurationStore: configurationStore,
             issueRepositorySwitcher: issueSwitcher,
-            authRepositorySwitcher: authSwitcher
+            authRepositorySwitcher: authSwitcher,
+            savedQueryRepositorySwitcher: savedQuerySwitcher
         )
         Task { await container.configureIfNeeded() }
         Task { await container.bootstrap() }
@@ -74,6 +80,7 @@ final class AppContainer: ObservableObject {
         let store = AppConfigurationStore()
         let authSwitcher = SwitchableAuthRepository(initial: authRepository)
         let issueSwitcher = SwitchableIssueRepository(initial: issueRepository)
+        let savedQuerySwitcher = SwitchableSavedQueryRepository(initial: PreviewSavedQueryRepository())
         let sync = SyncCoordinator(issueRepository: issueSwitcher)
         return AppContainer(
             appState: state,
@@ -84,19 +91,26 @@ final class AppContainer: ObservableObject {
             authRepository: authSwitcher,
             configurationStore: store,
             issueRepositorySwitcher: issueSwitcher,
-            authRepositorySwitcher: authSwitcher
+            authRepositorySwitcher: authSwitcher,
+            savedQueryRepositorySwitcher: savedQuerySwitcher
         )
     }()
 
     func bootstrap() async {
-        let query = IssueQuery(
-            search: "",
-            filters: [],
-            sort: .updated(descending: true),
-            page: .init(size: 50, offset: 0)
-        )
+        let savedQueries = (try? await savedQueryRepositorySwitcher.fetchSavedQueries()) ?? []
+        let sections = buildSidebarSections(savedQueries: savedQueries)
+        let preferredSelectionID = preferredSelectionID(from: savedQueries)
 
-        guard let issues = try? await syncCoordinator.refreshIssues(using: query) else { return }
+        appState.updateSidebar(sections: sections, preferredSelectionID: preferredSelectionID)
+        if let selection = appState.selectedSidebarItem {
+            await loadIssues(for: selection)
+        }
+    }
+
+    func loadIssues(for selection: SidebarItem) async {
+        guard selection.id != lastLoadedSidebarID else { return }
+        lastLoadedSidebarID = selection.id
+        guard let issues = try? await syncCoordinator.refreshIssues(using: selection.query) else { return }
         appState.replaceIssues(with: issues)
     }
 
@@ -113,7 +127,15 @@ final class AppContainer: ObservableObject {
     }
 
     func completeManualSetup(baseURL: URL, token: String) async {
-        configurationStore.save(baseURL: baseURL)
+        // Ensure /api suffix for API calls
+        let apiBaseURL: URL
+        if baseURL.lastPathComponent.lowercased() == "api" {
+            apiBaseURL = baseURL
+        } else {
+            apiBaseURL = baseURL.appendingPathComponent("api")
+        }
+
+        configurationStore.save(baseURL: apiBaseURL)
         let manualAuth = ManualTokenAuthRepository(configurationStore: configurationStore)
         do {
             try manualAuth.apply(token: token)
@@ -126,9 +148,11 @@ final class AppContainer: ObservableObject {
         let tokenProvider = YouTrackAPITokenProvider {
             try await manualAuth.currentAccessToken()
         }
-        let apiConfiguration = YouTrackAPIConfiguration(baseURL: baseURL, tokenProvider: tokenProvider)
+        let apiConfiguration = YouTrackAPIConfiguration(baseURL: apiBaseURL, tokenProvider: tokenProvider)
         let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration)
+        let savedQueryRepository = YouTrackSavedQueryRepository(configuration: apiConfiguration)
         await issueRepositorySwitcher.replace(with: issueRepository)
+        await savedQueryRepositorySwitcher.replace(with: savedQueryRepository)
 
         await MainActor.run {
             requiresSetup = false
@@ -166,14 +190,48 @@ final class AppContainer: ObservableObject {
 
     @MainActor
     private func applyOAuth(configuration: YouTrackOAuthConfiguration) async {
-        let appAuthRepository = AppAuthRepository(configuration: configuration, keychain: KeychainStorage(service: "com.youtrek.auth"))
+        let appAuthRepository = AppAuthRepository(configuration: configuration, keychain: KeychainStorage(service: "com.potomushto.youtrek.auth"))
         authRepositorySwitcher.replace(with: appAuthRepository)
         let tokenProvider = YouTrackAPITokenProvider { try await appAuthRepository.currentAccessToken() }
         let apiConfiguration = YouTrackAPIConfiguration(baseURL: configuration.apiBaseURL, tokenProvider: tokenProvider)
         let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration)
+        let savedQueryRepository = YouTrackSavedQueryRepository(configuration: apiConfiguration)
         await issueRepositorySwitcher.replace(with: issueRepository)
+        await savedQueryRepositorySwitcher.replace(with: savedQueryRepository)
         supportsBrowserAuth = true
         requiresSetup = false
+    }
+}
+
+private extension AppContainer {
+    func buildSidebarSections(savedQueries: [SavedQuery]) -> [SidebarSection] {
+        let page = IssueQuery.Page(size: 50, offset: 0)
+        let savedInbox = savedQueries.first { $0.name.caseInsensitiveCompare("Inbox") == .orderedSame }
+
+        var smartItems: [SidebarItem] = []
+        if savedInbox == nil {
+            smartItems.append(.inbox(page: page))
+        }
+        smartItems.append(.assignedToMe(page: page))
+        smartItems.append(.createdByMe(page: page))
+
+        let savedItems = savedQueries.map { SidebarItem.savedSearch($0, page: page) }
+
+        var sections: [SidebarSection] = []
+        if !smartItems.isEmpty {
+            sections.append(SidebarSection(id: "smart", title: "Smart Filters", items: smartItems))
+        }
+        if !savedItems.isEmpty {
+            sections.append(SidebarSection(id: "saved", title: "Saved Searches", items: savedItems))
+        }
+        return sections
+    }
+
+    func preferredSelectionID(from savedQueries: [SavedQuery]) -> SidebarItem.ID? {
+        if let inbox = savedQueries.first(where: { $0.name.caseInsensitiveCompare("Inbox") == .orderedSame }) {
+            return "saved:\(inbox.id)"
+        }
+        return "smart:inbox"
     }
 }
 
@@ -261,5 +319,14 @@ private struct PreviewIssueRepository: IssueRepository {
 
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {
         throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support mutations")
+    }
+}
+
+private struct PreviewSavedQueryRepository: SavedQueryRepository {
+    func fetchSavedQueries() async throws -> [SavedQuery] {
+        [
+            SavedQuery(id: "preview-1", name: "My Team's Bugs", query: "project: YT Type: Bug"),
+            SavedQuery(id: "preview-2", name: "Blocked", query: "State: Blocked")
+        ]
     }
 }

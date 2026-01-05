@@ -103,6 +103,11 @@ private extension YouTrackIssueRepository {
     ].joined(separator: ",")
 
     func buildQueryString(from query: IssueQuery) -> String? {
+        if let raw = query.rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty {
+            return raw
+        }
+
         var parts: [String] = []
 
         let trimmedSearch = query.search.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -115,11 +120,13 @@ private extension YouTrackIssueRepository {
             .filter { !$0.isEmpty }
         parts.append(contentsOf: filterParts)
 
-        switch query.sort {
-        case .updated(let descending):
-            parts.append("sort by: updated \(descending ? "desc" : "asc")")
-        case .priority(let descending):
-            parts.append("sort by: priority \(descending ? "desc" : "asc")")
+        if let sort = query.sort {
+            switch sort {
+            case .updated(let descending):
+                parts.append("sort by: updated \(descending ? "desc" : "asc")")
+            case .priority(let descending):
+                parts.append("sort by: priority \(descending ? "desc" : "asc")")
+            }
         }
 
         guard !parts.isEmpty else { return nil }

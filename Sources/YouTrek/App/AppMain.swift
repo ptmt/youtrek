@@ -63,9 +63,10 @@ private struct WindowAccessor: NSViewRepresentable {
     }
 }
 
+@MainActor
 private final class WindowAccessorView: NSView {
     var isSetup = false
-    private var isConfigured = false
+    private var lastConfiguredForSetup: Bool?
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -73,23 +74,29 @@ private final class WindowAccessorView: NSView {
     }
 
     func configureWindowIfNeeded() {
-        guard let window, !isConfigured || window.styleMask.contains(.borderless) != isSetup else { return }
-        isConfigured = true
+        guard let window else { return }
+        let needsReconfigure = lastConfiguredForSetup != isSetup
+        lastConfiguredForSetup = isSetup
 
         if isSetup {
-            window.styleMask = [.borderless]
-            window.isMovableByWindowBackground = true
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.hasShadow = true
+            if needsReconfigure {
+                window.styleMask = [.borderless]
+                window.isMovableByWindowBackground = true
+                window.isOpaque = false
+                window.backgroundColor = .clear
+                window.hasShadow = true
+            }
             window.setContentSize(NSSize(width: 480, height: 340))
             window.center()
-        } else {
+        } else if needsReconfigure {
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             window.titlebarAppearsTransparent = false
             window.titleVisibility = .visible
             window.isMovableByWindowBackground = false
+            window.isOpaque = true
+            window.backgroundColor = .windowBackgroundColor
             window.setContentSize(NSSize(width: 1280, height: 800))
+            window.center()
         }
     }
 }

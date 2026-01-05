@@ -15,13 +15,14 @@
 		16A7FB3C60588B9DE5336F59 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 3ABE086E9D2CCBAE575E6B6E /* Sentry */; };
 		17484CD88BC62E1E13CF6D9D /* IssueLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */; };
 		1E4C578BD3384B5530AB96DE /* YouTrackIssueRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EBD085B49E4D2450109D389 /* YouTrackIssueRepositoryTests.swift */; };
+		2A3B4C5D6E7F8091A2B3C4D5 /* SavedQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708192A3B4C5 /* SavedQuery.swift */; };
+		2A3B4C5D6E7F8091A2B3C4D6 /* SavedQueryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708192A3B4C6 /* SavedQueryRepository.swift */; };
+		2A3B4C5D6E7F8091A2B3C4D7 /* YouTrackSavedQueryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708192A3B4C7 /* YouTrackSavedQueryRepository.swift */; };
 		2AEC69A4C7052D80523516F2 /* KeychainStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86D2C2DB3FD959E98B994951 /* KeychainStorage.swift */; };
-		B1F0E1B28F16D4C39B3F8A01 /* AppConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A00 /* AppConfigurationStore.swift */; };
 		2B34B76673342CA002EF1E32 /* TelemetryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD57D8CD24C08703B24D3C86 /* TelemetryService.swift */; };
 		2C7F193FF8B70AEE455E2DA1 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 259D750A7F2F67E76894DD3F /* AppContainer.swift */; };
 		4C6245368EDF72B81D7E85EB /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = B83164E55F38E5918B1AC16B /* SQLite */; };
 		5E2253FC639018566A8117DC /* YouTrackOAuthConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4FE22D10515F3D19C04518D /* YouTrackOAuthConfiguration.swift */; };
-		B1F0E1B28F16D4C39B3F8A03 /* SwitchableRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A02 /* SwitchableRepositories.swift */; };
 		601C7017EBC7D39C44ABD474 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = 2F538221E5E814FFE04DB9BB /* Nuke */; };
 		67267D8D7D4B0FE29F5DEB44 /* SidebarItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F838F96136D2FC3F66D4B91 /* SidebarItem.swift */; };
 		6B9DC658B0707436F4A51EB7 /* Issue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603472AD6E49B166DD1EAE1E /* Issue.swift */; };
@@ -31,13 +32,15 @@
 		90DD2022BD6F618D47EB07C3 /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41A20A5EA468A3FDD6C766F3 /* SyncCoordinator.swift */; };
 		9BD6E38CB0F148EE071F5ED7 /* AuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2BB972C688C970A43F8706 /* AuthRepository.swift */; };
 		9FDEA781B9E8312D675F21C4 /* AppMenus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5127E6BFCB6228BCCACF3248 /* AppMenus.swift */; };
-		B1F0E1B28F16D4C39B3F8A05 /* ManualTokenAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A04 /* ManualTokenAuthRepository.swift */; };
 		ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7250E3A5DD409013899A4B /* RootView.swift */; };
 		AE532ADB1F8E36F39E0B6FFF /* LoggingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E846A3202CA8FD93450D72F /* LoggingService.swift */; };
+		B1F0E1B28F16D4C39B3F8A01 /* AppConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A00 /* AppConfigurationStore.swift */; };
+		B1F0E1B28F16D4C39B3F8A03 /* SwitchableRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A02 /* SwitchableRepositories.swift */; };
+		B1F0E1B28F16D4C39B3F8A05 /* ManualTokenAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A04 /* ManualTokenAuthRepository.swift */; };
+		B1F0E1B28F16D4C39B3F8A07 /* SetupWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A06 /* SetupWindow.swift */; };
 		B5E95DA444F525E699F17F2F /* AppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 79FB59A8C56FB49F29358D40 /* AppAuth */; };
 		BB9383DD8D6501FAF39C122F /* IssueDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F4883822D7B393D38B7D0BD /* IssueDetailView.swift */; };
 		C8D69D755B9F5965999415BA /* AppMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC1761A3048AA9CE39B1317D /* AppMain.swift */; };
-		B1F0E1B28F16D4C39B3F8A07 /* SetupWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A06 /* SetupWindow.swift */; };
 		CCB6FC4CB76C79D60B3D8268 /* YouTrackIssueRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB6E61C64224428A2A41938 /* YouTrackIssueRepository.swift */; };
 		DBAD2E130516EF0E97DA9505 /* IssueWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9834245476CD9C6340D38207 /* IssueWindows.swift */; };
 		E830DA0BDF2A88981E76A320 /* YouTrackAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */; };
@@ -58,6 +61,9 @@
 
 /* Begin PBXFileReference section */
 		03C386EF2EEB26BC00BF8B68 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Sources/YouTrek/Assets.xcassets; sourceTree = "<group>"; };
+		1A2B3C4D5E6F708192A3B4C5 /* SavedQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedQuery.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F708192A3B4C6 /* SavedQueryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedQueryRepository.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F708192A3B4C7 /* YouTrackSavedQueryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackSavedQueryRepository.swift; sourceTree = "<group>"; };
 		246CBF4F7505546908106B4E /* YouTrekTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YouTrekTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		259D750A7F2F67E76894DD3F /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
 		3E846A3202CA8FD93450D72F /* LoggingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingService.swift; sourceTree = "<group>"; };
@@ -79,10 +85,10 @@
 		9834245476CD9C6340D38207 /* IssueWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueWindows.swift; sourceTree = "<group>"; };
 		A1F0E1B28F16D4C39B3F8A00 /* AppConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfigurationStore.swift; sourceTree = "<group>"; };
 		A1F0E1B28F16D4C39B3F8A02 /* SwitchableRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitchableRepositories.swift; sourceTree = "<group>"; };
-		B19ECD87B561BBF7954653FA /* YouTrek.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YouTrek.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1F0E1B28F16D4C39B3F8A04 /* ManualTokenAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualTokenAuthRepository.swift; sourceTree = "<group>"; };
-		B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAuthRepository.swift; sourceTree = "<group>"; };
 		A1F0E1B28F16D4C39B3F8A06 /* SetupWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupWindow.swift; sourceTree = "<group>"; };
+		B19ECD87B561BBF7954653FA /* YouTrek.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YouTrek.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAuthRepository.swift; sourceTree = "<group>"; };
 		D2BF004390F090F845328D6B /* IssueListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueListView.swift; sourceTree = "<group>"; };
 		D4FE22D10515F3D19C04518D /* YouTrackOAuthConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackOAuthConfiguration.swift; sourceTree = "<group>"; };
 		DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueLocalStore.swift; sourceTree = "<group>"; };
@@ -176,6 +182,7 @@
 			children = (
 				F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */,
 				4AB6E61C64224428A2A41938 /* YouTrackIssueRepository.swift */,
+				1A2B3C4D5E6F708192A3B4C7 /* YouTrackSavedQueryRepository.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -196,6 +203,7 @@
 			isa = PBXGroup;
 			children = (
 				603472AD6E49B166DD1EAE1E /* Issue.swift */,
+				1A2B3C4D5E6F708192A3B4C5 /* SavedQuery.swift */,
 				6F838F96136D2FC3F66D4B91 /* SidebarItem.swift */,
 			);
 			path = Models;
@@ -259,6 +267,7 @@
 			children = (
 				6A2BB972C688C970A43F8706 /* AuthRepository.swift */,
 				413164C575D17B66BEBD006E /* IssueRepository.swift */,
+				1A2B3C4D5E6F708192A3B4C6 /* SavedQueryRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
@@ -508,6 +517,8 @@
 				778FF05D4EAC43E62857C01D /* NewIssueToolbar.swift in Sources */,
 				ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */,
 				EA94D7A93E3499BBFB64C3CE /* SettingsView.swift in Sources */,
+				2A3B4C5D6E7F8091A2B3C4D5 /* SavedQuery.swift in Sources */,
+				2A3B4C5D6E7F8091A2B3C4D6 /* SavedQueryRepository.swift in Sources */,
 				67267D8D7D4B0FE29F5DEB44 /* SidebarItem.swift in Sources */,
 				7FE5F2F122F937FE6C8833DD /* SidebarView.swift in Sources */,
 				B1F0E1B28F16D4C39B3F8A03 /* SwitchableRepositories.swift in Sources */,
@@ -516,6 +527,7 @@
 				B1F0E1B28F16D4C39B3F8A07 /* SetupWindow.swift in Sources */,
 				E830DA0BDF2A88981E76A320 /* YouTrackAPIClient.swift in Sources */,
 				CCB6FC4CB76C79D60B3D8268 /* YouTrackIssueRepository.swift in Sources */,
+				2A3B4C5D6E7F8091A2B3C4D7 /* YouTrackSavedQueryRepository.swift in Sources */,
 				5E2253FC639018566A8117DC /* YouTrackOAuthConfiguration.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -614,19 +626,13 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleURLTypes = (
-					{
-						CFBundleURLName = "$(PRODUCT_BUNDLE_IDENTIFIER)";
-						CFBundleURLSchemes = (
-							youtrek,
-						);
-					},
-				);
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = \"$(PRODUCT_BUNDLE_IDENTIFIER)\";\n    CFBundleURLSchemes =     (\n        youtrek\n    );\n}";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.potomushto.youtrek.macos;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -721,19 +727,13 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleURLTypes = (
-					{
-						CFBundleURLName = "$(PRODUCT_BUNDLE_IDENTIFIER)";
-						CFBundleURLSchemes = (
-							youtrek,
-						);
-					},
-				);
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = \"$(PRODUCT_BUNDLE_IDENTIFIER)\";\n    CFBundleURLSchemes =     (\n        youtrek\n    );\n}";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.potomushto.youtrek.macos;
 				SDKROOT = macosx;
 			};
 			name = Release;

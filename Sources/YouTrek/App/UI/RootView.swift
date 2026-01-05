@@ -18,13 +18,13 @@ private struct RootContentView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $appState.columnVisibility) {
-            SidebarView(selection: $appState.selectedSidebarItem)
+            SidebarView(sections: appState.sidebarSections, selection: $appState.selectedSidebarItem)
         } content: {
             IssueListView(
                 issues: appState.filteredIssues(searchQuery: searchQuery),
                 selection: $appState.selectedIssue
             )
-            .toolbar(content: {
+            .toolbar {
                 ToolbarItemGroup(placement: .automatic) {
                     NewIssueToolbar(container: container)
                         .frame(maxWidth: 280)
@@ -34,20 +34,21 @@ private struct RootContentView: View {
                     Button(action: container.commandPalette.open) {
                         Label("Command Palette", systemImage: "command.square")
                     }
+                    .buttonStyle(.accessoryBar)
                     .keyboardShortcut("p", modifiers: [.command, .shift])
                 }
 
                 ToolbarItem(placement: .primaryAction) {
-                    Toggle(isOn: $isInspectorVisible) {
+                    Button {
+                        isInspectorVisible.toggle()
+                        appState.setInspectorVisible(isInspectorVisible)
+                    } label: {
                         Label("Toggle Inspector", systemImage: "sidebar.trailing")
                     }
-                    .toggleStyle(.button)
+                    .buttonStyle(.accessoryBar)
                     .help("Show or hide the inspector column")
-                    .onChange(of: isInspectorVisible) { _, newValue in
-                        appState.setInspectorVisible(newValue)
-                    }
                 }
-            })
+            }
         } detail: {
             Group {
                 if isInspectorVisible {
@@ -82,6 +83,12 @@ private struct RootContentView: View {
         }
         .onChange(of: appState.isInspectorVisible) { _, newValue in
             isInspectorVisible = newValue
+        }
+        .onChange(of: appState.selectedSidebarItem) { _, selection in
+            guard let selection else { return }
+            Task {
+                await container.loadIssues(for: selection)
+            }
         }
         .onChange(of: container.router.shouldOpenNewIssueWindow) { _, shouldOpen in
             guard shouldOpen else { return }

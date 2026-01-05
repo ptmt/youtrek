@@ -4,7 +4,8 @@ import SwiftUI
 @MainActor
 final class AppState: ObservableObject {
     @Published var columnVisibility: NavigationSplitViewVisibility = .all
-    @Published var selectedSidebarItem: SidebarItem = .inbox
+    @Published var selectedSidebarItem: SidebarItem?
+    @Published private(set) var sidebarSections: [SidebarSection] = []
     @Published var selectedIssue: IssueSummary?
     @Published private(set) var issues: [IssueSummary]
     @Published private var searchQuery: String = ""
@@ -19,6 +20,22 @@ final class AppState: ObservableObject {
         issues = newIssues
         if let first = newIssues.first {
             selectedIssue = first
+        }
+    }
+
+    func updateSidebar(sections: [SidebarSection], preferredSelectionID: SidebarItem.ID?) {
+        sidebarSections = sections
+        let items = sections.flatMap(\.items)
+
+        if let current = selectedSidebarItem, items.contains(current) {
+            return
+        }
+
+        if let preferredSelectionID,
+           let preferred = items.first(where: { $0.id == preferredSelectionID }) {
+            selectedSidebarItem = preferred
+        } else {
+            selectedSidebarItem = items.first
         }
     }
 
