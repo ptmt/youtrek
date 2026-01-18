@@ -56,10 +56,12 @@ enum YouTrackAPIError: Error, LocalizedError {
 struct YouTrackAPIClient: Sendable {
     private let configuration: YouTrackAPIConfiguration
     private let session: URLSession
+    private let monitor: NetworkRequestMonitor?
 
-    init(configuration: YouTrackAPIConfiguration, session: URLSession = .shared) {
+    init(configuration: YouTrackAPIConfiguration, session: URLSession = .shared, monitor: NetworkRequestMonitor? = nil) {
         self.configuration = configuration
         self.session = session
+        self.monitor = monitor
     }
 
     func get(path: String, queryItems: [URLQueryItem]) async throws -> Data {
@@ -92,22 +94,42 @@ struct YouTrackAPIClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
+        var loggedResponse: URLResponse?
+        var loggedError: Error?
+        let requestStart = Date()
+        defer {
+            let duration = Date().timeIntervalSince(requestStart)
+            if let monitor {
+                Task { @MainActor in
+                    monitor.record(request: request, response: loggedResponse, error: loggedError, duration: duration)
+                }
+            }
+        }
+
         do {
             let (data, response) = try await session.data(for: request)
+            loggedResponse = response
             guard let http = response as? HTTPURLResponse else {
-                throw YouTrackAPIError.invalidResponse
+                let error = YouTrackAPIError.invalidResponse
+                loggedError = error
+                throw error
             }
 
             guard (200..<300).contains(http.statusCode) else {
                 let body = String(data: data, encoding: .utf8)
-                throw YouTrackAPIError.http(statusCode: http.statusCode, body: body)
+                let error = YouTrackAPIError.http(statusCode: http.statusCode, body: body)
+                loggedError = error
+                throw error
             }
 
             return data
         } catch let error as YouTrackAPIError {
+            loggedError = error
             throw error
         } catch {
-            throw YouTrackAPIError.transport(underlying: error)
+            let transportError = YouTrackAPIError.transport(underlying: error)
+            loggedError = transportError
+            throw transportError
         }
     }
 
@@ -141,20 +163,40 @@ struct YouTrackAPIClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
+        var loggedResponse: URLResponse?
+        var loggedError: Error?
+        let requestStart = Date()
+        defer {
+            let duration = Date().timeIntervalSince(requestStart)
+            if let monitor {
+                Task { @MainActor in
+                    monitor.record(request: request, response: loggedResponse, error: loggedError, duration: duration)
+                }
+            }
+        }
+
         do {
             let (data, response) = try await session.data(for: request)
+            loggedResponse = response
             guard let http = response as? HTTPURLResponse else {
-                throw YouTrackAPIError.invalidResponse
+                let error = YouTrackAPIError.invalidResponse
+                loggedError = error
+                throw error
             }
 
             guard (200..<300).contains(http.statusCode) else {
                 let body = String(data: data, encoding: .utf8)
-                throw YouTrackAPIError.http(statusCode: http.statusCode, body: body)
+                let error = YouTrackAPIError.http(statusCode: http.statusCode, body: body)
+                loggedError = error
+                throw error
             }
         } catch let error as YouTrackAPIError {
+            loggedError = error
             throw error
         } catch {
-            throw YouTrackAPIError.transport(underlying: error)
+            let transportError = YouTrackAPIError.transport(underlying: error)
+            loggedError = transportError
+            throw transportError
         }
     }
 }

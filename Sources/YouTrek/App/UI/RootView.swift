@@ -14,7 +14,7 @@ private struct RootContentView: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var appState: AppState
     @State private var searchQuery: String = ""
-    @State private var isInspectorVisible: Bool = false
+    @State private var isInspectorVisible: Bool = true
     @State private var simulateSlowResponses: Bool = AppDebugSettings.simulateSlowResponses
 
     var body: some View {

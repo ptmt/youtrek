@@ -10,6 +10,7 @@ final class AppContainer: ObservableObject {
     let router: WindowRouter
     let syncCoordinator: SyncCoordinator
     let authRepository: AuthRepository
+    let networkMonitor: NetworkRequestMonitor
 
     private let configurationStore: AppConfigurationStore
     private let issueRepositorySwitcher: SwitchableIssueRepository
@@ -26,6 +27,7 @@ final class AppContainer: ObservableObject {
         router: WindowRouter,
         syncCoordinator: SyncCoordinator,
         authRepository: AuthRepository,
+        networkMonitor: NetworkRequestMonitor,
         configurationStore: AppConfigurationStore,
         issueRepositorySwitcher: SwitchableIssueRepository,
         authRepositorySwitcher: SwitchableAuthRepository,
@@ -37,6 +39,7 @@ final class AppContainer: ObservableObject {
         self.router = router
         self.syncCoordinator = syncCoordinator
         self.authRepository = authRepository
+        self.networkMonitor = networkMonitor
         self.configurationStore = configurationStore
         self.issueRepositorySwitcher = issueRepositorySwitcher
         self.authRepositorySwitcher = authRepositorySwitcher
@@ -49,6 +52,7 @@ final class AppContainer: ObservableObject {
         let composer = IssueComposer(router: router)
         let palette = CommandPaletteCoordinator(router: router)
         let configurationStore = AppConfigurationStore()
+        let networkMonitor = NetworkRequestMonitor()
         let authSwitcher = SwitchableAuthRepository(initial: PreviewAuthRepository())
         let issueSwitcher = SwitchableIssueRepository(initial: EmptyIssueRepository())
         let savedQuerySwitcher = SwitchableSavedQueryRepository(initial: PreviewSavedQueryRepository())
@@ -73,6 +77,7 @@ final class AppContainer: ObservableObject {
             router: router,
             syncCoordinator: sync,
             authRepository: authSwitcher,
+            networkMonitor: networkMonitor,
             configurationStore: configurationStore,
             issueRepositorySwitcher: issueSwitcher,
             authRepositorySwitcher: authSwitcher,
@@ -91,6 +96,7 @@ final class AppContainer: ObservableObject {
         let authRepository = PreviewAuthRepository()
         let issueRepository = PreviewIssueRepository()
         let store = AppConfigurationStore()
+        let networkMonitor = NetworkRequestMonitor()
         let authSwitcher = SwitchableAuthRepository(initial: authRepository)
         let issueSwitcher = SwitchableIssueRepository(initial: issueRepository)
         let savedQuerySwitcher = SwitchableSavedQueryRepository(initial: PreviewSavedQueryRepository())
@@ -115,6 +121,7 @@ final class AppContainer: ObservableObject {
             router: router,
             syncCoordinator: sync,
             authRepository: authSwitcher,
+            networkMonitor: networkMonitor,
             configurationStore: store,
             issueRepositorySwitcher: issueSwitcher,
             authRepositorySwitcher: authSwitcher,
@@ -195,8 +202,8 @@ final class AppContainer: ObservableObject {
             try await manualAuth.currentAccessToken()
         }
         let apiConfiguration = YouTrackAPIConfiguration(baseURL: apiBaseURL, tokenProvider: tokenProvider)
-        let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration)
-        let savedQueryRepository = YouTrackSavedQueryRepository(configuration: apiConfiguration)
+        let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration, monitor: networkMonitor)
+        let savedQueryRepository = YouTrackSavedQueryRepository(configuration: apiConfiguration, monitor: networkMonitor)
         await issueRepositorySwitcher.replace(with: issueRepository)
         await savedQueryRepositorySwitcher.replace(with: savedQueryRepository)
 
@@ -240,8 +247,8 @@ final class AppContainer: ObservableObject {
         authRepositorySwitcher.replace(with: appAuthRepository)
         let tokenProvider = YouTrackAPITokenProvider { try await appAuthRepository.currentAccessToken() }
         let apiConfiguration = YouTrackAPIConfiguration(baseURL: configuration.apiBaseURL, tokenProvider: tokenProvider)
-        let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration)
-        let savedQueryRepository = YouTrackSavedQueryRepository(configuration: apiConfiguration)
+        let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration, monitor: networkMonitor)
+        let savedQueryRepository = YouTrackSavedQueryRepository(configuration: apiConfiguration, monitor: networkMonitor)
         await issueRepositorySwitcher.replace(with: issueRepository)
         await savedQueryRepositorySwitcher.replace(with: savedQueryRepository)
         supportsBrowserAuth = true

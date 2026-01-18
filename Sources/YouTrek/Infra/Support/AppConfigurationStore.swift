@@ -52,6 +52,7 @@ struct AppConfigurationStore {
 enum AppDebugSettings {
     enum Keys {
         static let simulateSlowResponses = "com.potomushto.youtrek.debug.simulate-slow-responses"
+        static let showNetworkFooter = "com.potomushto.youtrek.debug.show-network-footer"
     }
 
     static var simulateSlowResponses: Bool {
@@ -62,9 +63,23 @@ enum AppDebugSettings {
         #endif
     }
 
+    static var showNetworkFooter: Bool {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: Keys.showNetworkFooter)
+        #else
+        return false
+        #endif
+    }
+
     static func setSimulateSlowResponses(_ value: Bool) {
         #if DEBUG
         UserDefaults.standard.set(value, forKey: Keys.simulateSlowResponses)
+        #endif
+    }
+
+    static func setShowNetworkFooter(_ value: Bool) {
+        #if DEBUG
+        UserDefaults.standard.set(value, forKey: Keys.showNetworkFooter)
         #endif
     }
 

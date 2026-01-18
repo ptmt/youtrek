@@ -9,8 +9,12 @@ final class YouTrackSavedQueryRepository: SavedQueryRepository, Sendable {
         self.decoder = decoder
     }
 
-    convenience init(configuration: YouTrackAPIConfiguration, session: URLSession = .shared) {
-        self.init(client: YouTrackAPIClient(configuration: configuration, session: session))
+    convenience init(
+        configuration: YouTrackAPIConfiguration,
+        session: URLSession = .shared,
+        monitor: NetworkRequestMonitor? = nil
+    ) {
+        self.init(client: YouTrackAPIClient(configuration: configuration, session: session, monitor: monitor))
     }
 
     func fetchSavedQueries() async throws -> [SavedQuery] {
