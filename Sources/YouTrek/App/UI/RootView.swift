@@ -15,6 +15,8 @@ private struct RootContentView: View {
     @ObservedObject var appState: AppState
     @State private var searchQuery: String = ""
     @State private var isInspectorVisible: Bool = true
+    @AppStorage("issueList.showAssigneeColumn") private var showAssigneeColumn: Bool = false
+    @AppStorage("issueList.showUpdatedColumn") private var showUpdatedColumn: Bool = true
     @State private var simulateSlowResponses: Bool = AppDebugSettings.simulateSlowResponses
 
     var body: some View {
@@ -31,7 +33,9 @@ private struct RootContentView: View {
         } content: {
             IssueListView(
                 issues: appState.filteredIssues(searchQuery: searchQuery),
-                selection: $appState.selectedIssue
+                selection: $appState.selectedIssue,
+                showAssigneeColumn: showAssigneeColumn,
+                showUpdatedColumn: showUpdatedColumn
             )
             .toolbar {
                 ToolbarItemGroup(placement: .automatic) {
@@ -62,6 +66,16 @@ private struct RootContentView: View {
                     }
                     .buttonStyle(.accessoryBar)
                     .help("Show or hide the inspector column")
+                }
+
+                ToolbarItem(placement: .automatic) {
+                    Menu {
+                        Toggle("Assignee as Column", isOn: $showAssigneeColumn)
+                        Toggle("Updated as Column", isOn: $showUpdatedColumn)
+                    } label: {
+                        Label("Columns", systemImage: "tablecells")
+                    }
+                    .help("Show sortable columns or merge details into the title row")
                 }
 
                 #if DEBUG
