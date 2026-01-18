@@ -22,12 +22,50 @@ actor SyncCoordinator {
         do {
             return try await enqueue(label: "Sync issues") {
                 let remote = try await self.issueRepository.fetchIssues(query: query)
-                try await self.localStore.save(issues: remote)
-                return remote
+                await self.localStore.saveRemoteIssues(remote, for: query)
+                return await self.localStore.loadIssues(for: query)
             }
         } catch {
             // On failure fall back to local cache.
-            return (try? await localStore.loadCachedIssues()) ?? []
+            return await localStore.loadIssues(for: query)
+        }
+    }
+
+    func loadCachedIssues(for query: IssueQuery) async -> [IssueSummary] {
+        await localStore.loadIssues(for: query)
+    }
+
+    func applyOptimisticUpdate(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {
+        guard let updated = await localStore.applyPatch(id: id, patch: patch) else {
+            throw YouTrackAPIError.http(statusCode: 404, body: "Issue not found in local store")
+        }
+        _ = await localStore.enqueueUpdate(issueID: id, patch: patch)
+        Task { [weak self] in
+            await self?.flushPendingMutations()
+        }
+        return updated
+    }
+
+    func flushPendingMutations() async {
+        let mutations = await localStore.pendingMutations()
+        guard !mutations.isEmpty else { return }
+
+        for mutation in mutations {
+            await localStore.markMutationAttempted(id: mutation.id, errorDescription: nil)
+            switch mutation.kind {
+            case .update:
+                do {
+                    let updated = try await enqueue(
+                        label: "Sync issue update",
+                        localChanges: mutation.localChanges
+                    ) {
+                        try await self.issueRepository.updateIssue(id: mutation.issueID, patch: mutation.patch)
+                    }
+                    await localStore.markMutationApplied(mutation, updatedIssue: updated)
+                } catch {
+                    await localStore.markMutationAttempted(id: mutation.id, errorDescription: error.localizedDescription)
+                }
+            }
         }
     }
 

@@ -140,13 +140,44 @@ final class AppContainer: ObservableObject {
         if let selection = appState.selectedSidebarItem {
             await loadIssues(for: selection)
         }
+
+        Task { [weak self] in
+            guard let self else { return }
+            await self.syncCoordinator.flushPendingMutations()
+        }
+
+        let queriesToPrefetch = sections.flatMap(\.items).map(\.query)
+        Task { [weak self] in
+            guard let self else { return }
+            for query in queriesToPrefetch {
+                _ = try? await self.syncCoordinator.refreshIssues(using: query)
+            }
+        }
     }
 
     func loadIssues(for selection: SidebarItem) async {
         guard selection.id != lastLoadedSidebarID else { return }
         lastLoadedSidebarID = selection.id
-        guard let issues = try? await syncCoordinator.refreshIssues(using: selection.query) else { return }
+        appState.setIssuesLoading(true)
+
+        let cachedIssues = await syncCoordinator.loadCachedIssues(for: selection.query)
+        if !cachedIssues.isEmpty {
+            appState.replaceIssues(with: cachedIssues)
+            appState.setIssuesLoading(false)
+        }
+
+        let issues = (try? await syncCoordinator.refreshIssues(using: selection.query)) ?? []
         appState.replaceIssues(with: issues)
+        appState.setIssuesLoading(false)
+    }
+
+    func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async {
+        do {
+            let updated = try await syncCoordinator.applyOptimisticUpdate(id: id, patch: patch)
+            appState.updateIssue(updated)
+        } catch {
+            print("Failed to update issue locally: \(error.localizedDescription)")
+        }
     }
 
     func deleteSavedSearch(id: String) async {

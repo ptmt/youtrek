@@ -34,7 +34,7 @@ enum IssueSort: Equatable, Hashable, Sendable {
     case priority(descending: Bool)
 }
 
-struct IssueDraft: Equatable {
+struct IssueDraft: Equatable, Codable {
     var title: String
     var description: String
     var projectID: String
@@ -42,9 +42,28 @@ struct IssueDraft: Equatable {
     var assigneeID: String?
 }
 
-struct IssuePatch: Equatable {
+struct IssuePatch: Equatable, Codable {
     var title: String?
     var description: String?
     var status: IssueStatus?
     var priority: IssuePriority?
+}
+
+extension IssuePatch {
+    var localChangesDescription: String {
+        var parts: [String] = []
+        if let title {
+            parts.append("Title: \(title)")
+        }
+        if let description {
+            parts.append("Description: \(description)")
+        }
+        if let status {
+            parts.append("Status: \(status.displayName)")
+        }
+        if let priority {
+            parts.append("Priority: \(priority.displayName)")
+        }
+        return parts.isEmpty ? "No local changes captured." : parts.joined(separator: "\n")
+    }
 }

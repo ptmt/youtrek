@@ -18,6 +18,7 @@ private struct RootContentView: View {
     @AppStorage("issueList.showAssigneeColumn") private var showAssigneeColumn: Bool = false
     @AppStorage("issueList.showUpdatedColumn") private var showUpdatedColumn: Bool = true
     @State private var simulateSlowResponses: Bool = AppDebugSettings.simulateSlowResponses
+    @State private var showNetworkFooter: Bool = AppDebugSettings.showNetworkFooter
 
     var body: some View {
         NavigationSplitView(columnVisibility: $appState.columnVisibility) {
@@ -35,7 +36,8 @@ private struct RootContentView: View {
                 issues: appState.filteredIssues(searchQuery: searchQuery),
                 selection: $appState.selectedIssue,
                 showAssigneeColumn: showAssigneeColumn,
-                showUpdatedColumn: showUpdatedColumn
+                showUpdatedColumn: showUpdatedColumn,
+                isLoading: appState.isLoadingIssues
             )
             .toolbar {
                 ToolbarItemGroup(placement: .automatic) {
@@ -82,6 +84,7 @@ private struct RootContentView: View {
                 ToolbarItem(placement: .automatic) {
                     Menu {
                         Toggle("Simulate slow responses", isOn: $simulateSlowResponses)
+                        Toggle("Show network footer", isOn: $showNetworkFooter)
                     } label: {
                         Label("Developer", systemImage: "wrench.and.screwdriver")
                     }
@@ -109,11 +112,21 @@ private struct RootContentView: View {
         }
         .searchable(text: $searchQuery, placement: .toolbar, prompt: Text("Search issues"))
         .navigationSplitViewStyle(.balanced)
+        #if DEBUG
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if showNetworkFooter {
+                NetworkRequestFooterView(monitor: container.networkMonitor)
+            }
+        }
+        #endif
         .task {
             isInspectorVisible = appState.isInspectorVisible
         }
         .onChange(of: simulateSlowResponses) { _, newValue in
             AppDebugSettings.setSimulateSlowResponses(newValue)
+        }
+        .onChange(of: showNetworkFooter) { _, newValue in
+            AppDebugSettings.setShowNetworkFooter(newValue)
         }
         .onChange(of: searchQuery) { _, query in
             appState.updateSearch(query: query)

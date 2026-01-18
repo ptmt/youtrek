@@ -37,29 +37,30 @@ struct NetworkRequestEntry: Identifiable, Hashable, Sendable {
 }
 
 @MainActor
-final class NetworkRequestMonitor: ObservableObject {
+final class NetworkRequestMonitor: ObservableObject, @unchecked Sendable {
     @Published private(set) var entries: [NetworkRequestEntry] = []
     private let maxEntries: Int
 
-    init(maxEntries: Int = 60) {
+    init(maxEntries: Int = 200) {
         self.maxEntries = maxEntries
     }
 
-    func record(request: URLRequest, response: URLResponse?, error: Error?, duration: TimeInterval) {
-        let endpoint = Self.describeEndpoint(for: request.url)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode
+    func record(method: String, url: URL?, statusCode: Int?, duration: TimeInterval, errorDescription: String?) {
+        #if DEBUG
+        let endpoint = Self.describeEndpoint(for: url)
         let entry = NetworkRequestEntry(
-            method: request.httpMethod ?? "GET",
+            method: method,
             endpoint: endpoint,
             statusCode: statusCode,
             duration: duration,
-            errorDescription: error?.localizedDescription
+            errorDescription: errorDescription
         )
 
         entries.insert(entry, at: 0)
         if entries.count > maxEntries {
             entries.removeLast(entries.count - maxEntries)
         }
+        #endif
     }
 }
 

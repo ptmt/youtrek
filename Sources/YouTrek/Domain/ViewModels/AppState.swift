@@ -13,6 +13,7 @@ final class AppState: ObservableObject {
     @Published private(set) var isSidebarVisible: Bool = true
     @Published private(set) var isSyncing: Bool = false
     @Published private(set) var syncStatusMessage: String? = nil
+    @Published private(set) var isLoadingIssues: Bool = false
     @Published var activeConflict: ConflictNotice?
 
     init(issues: [IssueSummary] = []) {
@@ -23,6 +24,17 @@ final class AppState: ObservableObject {
         issues = newIssues
         if let first = newIssues.first {
             selectedIssue = first
+        }
+    }
+
+    func updateIssue(_ issue: IssueSummary) {
+        if let index = issues.firstIndex(where: { $0.id == issue.id }) {
+            issues[index] = issue
+        } else {
+            issues.append(issue)
+        }
+        if selectedIssue?.id == issue.id {
+            selectedIssue = issue
         }
     }
 
@@ -68,6 +80,10 @@ final class AppState: ObservableObject {
     func updateSyncActivity(isSyncing: Bool, label: String?) {
         self.isSyncing = isSyncing
         self.syncStatusMessage = label
+    }
+
+    func setIssuesLoading(_ isLoading: Bool) {
+        isLoadingIssues = isLoading
     }
 
     func presentConflict(_ conflict: ConflictNotice) {

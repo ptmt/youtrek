@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-struct IssueSummary: Identifiable, Hashable, Sendable {
+struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
     let id: UUID
     let readableID: String
     let title: String
@@ -39,7 +39,7 @@ struct IssueSummary: Identifiable, Hashable, Sendable {
     }
 }
 
-struct Person: Identifiable, Hashable, Sendable {
+struct Person: Identifiable, Hashable, Sendable, Codable {
     let id: UUID
     let displayName: String
     let avatarURL: URL?
@@ -51,7 +51,7 @@ struct Person: Identifiable, Hashable, Sendable {
     }
 }
 
-enum IssuePriority: String, CaseIterable, Hashable, Sendable {
+enum IssuePriority: String, CaseIterable, Hashable, Sendable, Codable {
     case critical
     case high
     case normal
@@ -85,7 +85,7 @@ enum IssuePriority: String, CaseIterable, Hashable, Sendable {
     }
 }
 
-enum IssueStatus: String, CaseIterable, Hashable, Sendable {
+enum IssueStatus: String, CaseIterable, Hashable, Sendable, Codable {
     case open
     case inProgress
     case inReview

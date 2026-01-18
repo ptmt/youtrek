@@ -94,41 +94,49 @@ struct YouTrackAPIClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        var loggedResponse: URLResponse?
-        var loggedError: Error?
         let requestStart = Date()
-        defer {
+        let requestMethod = request.httpMethod ?? "GET"
+        let requestURL = request.url
+        var didLog = false
+
+        func logOnce(response: URLResponse?, error: Error?) async {
+            guard !didLog, let monitor else { return }
+            didLog = true
             let duration = Date().timeIntervalSince(requestStart)
-            if let monitor {
-                Task { @MainActor in
-                    monitor.record(request: request, response: loggedResponse, error: loggedError, duration: duration)
-                }
-            }
+            let statusCode = (response as? HTTPURLResponse)?.statusCode
+            let errorDescription = error?.localizedDescription
+            await monitor.record(
+                method: requestMethod,
+                url: requestURL,
+                statusCode: statusCode,
+                duration: duration,
+                errorDescription: errorDescription
+            )
         }
 
         do {
             let (data, response) = try await session.data(for: request)
-            loggedResponse = response
             guard let http = response as? HTTPURLResponse else {
                 let error = YouTrackAPIError.invalidResponse
-                loggedError = error
+                await logOnce(response: response, error: error)
                 throw error
             }
 
             guard (200..<300).contains(http.statusCode) else {
                 let body = String(data: data, encoding: .utf8)
                 let error = YouTrackAPIError.http(statusCode: http.statusCode, body: body)
-                loggedError = error
+                await logOnce(response: response, error: error)
                 throw error
             }
 
+            await logOnce(response: response, error: nil)
             return data
         } catch let error as YouTrackAPIError {
-            loggedError = error
+            await logOnce(response: nil, error: error)
             throw error
         } catch {
             let transportError = YouTrackAPIError.transport(underlying: error)
-            loggedError = transportError
+            await logOnce(response: nil, error: transportError)
             throw transportError
         }
     }
@@ -163,39 +171,47 @@ struct YouTrackAPIClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        var loggedResponse: URLResponse?
-        var loggedError: Error?
         let requestStart = Date()
-        defer {
+        let requestMethod = request.httpMethod ?? "GET"
+        let requestURL = request.url
+        var didLog = false
+
+        func logOnce(response: URLResponse?, error: Error?) async {
+            guard !didLog, let monitor else { return }
+            didLog = true
             let duration = Date().timeIntervalSince(requestStart)
-            if let monitor {
-                Task { @MainActor in
-                    monitor.record(request: request, response: loggedResponse, error: loggedError, duration: duration)
-                }
-            }
+            let statusCode = (response as? HTTPURLResponse)?.statusCode
+            let errorDescription = error?.localizedDescription
+            await monitor.record(
+                method: requestMethod,
+                url: requestURL,
+                statusCode: statusCode,
+                duration: duration,
+                errorDescription: errorDescription
+            )
         }
 
         do {
             let (data, response) = try await session.data(for: request)
-            loggedResponse = response
             guard let http = response as? HTTPURLResponse else {
                 let error = YouTrackAPIError.invalidResponse
-                loggedError = error
+                await logOnce(response: response, error: error)
                 throw error
             }
 
             guard (200..<300).contains(http.statusCode) else {
                 let body = String(data: data, encoding: .utf8)
                 let error = YouTrackAPIError.http(statusCode: http.statusCode, body: body)
-                loggedError = error
+                await logOnce(response: response, error: error)
                 throw error
             }
+            await logOnce(response: response, error: nil)
         } catch let error as YouTrackAPIError {
-            loggedError = error
+            await logOnce(response: nil, error: error)
             throw error
         } catch {
             let transportError = YouTrackAPIError.transport(underlying: error)
-            loggedError = transportError
+            await logOnce(response: nil, error: transportError)
             throw transportError
         }
     }

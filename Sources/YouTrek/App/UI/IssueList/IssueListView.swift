@@ -5,6 +5,7 @@ struct IssueListView: View {
     @Binding var selection: IssueSummary?
     let showAssigneeColumn: Bool
     let showUpdatedColumn: Bool
+    let isLoading: Bool
 
     @State private var selectedIDs: Set<IssueSummary.ID> = []
     @State private var sortOrder: [KeyPathComparator<IssueSummary>] = [
@@ -13,7 +14,15 @@ struct IssueListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if issues.isEmpty {
+            if isLoading && issues.isEmpty {
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text("Loading issues…")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if issues.isEmpty {
                 ContentUnavailableView(
                     "No issues",
                     systemImage: "tray",
@@ -22,8 +31,6 @@ struct IssueListView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Table(issues, selection: $selectedIDs, sortOrder: $sortOrder) {
-                    TableColumn("ID", value: \IssueSummary.readableID)
-                        .width(min: 60, ideal: 100, max: 200)
                     TableColumn("Title", value: \IssueSummary.title) { issue in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(issue.title)
