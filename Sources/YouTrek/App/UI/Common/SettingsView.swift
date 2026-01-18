@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var container: AppContainer
-    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .system
+    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .dark
 
     var body: some View {
         Form {

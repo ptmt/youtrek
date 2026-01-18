@@ -33,6 +33,10 @@ struct IssueSummary: Identifiable, Hashable, Sendable {
         self.status = status
         self.tags = tags
     }
+
+    var assigneeDisplayName: String {
+        assignee?.displayName ?? "Unassigned"
+    }
 }
 
 struct Person: Identifiable, Hashable, Sendable {

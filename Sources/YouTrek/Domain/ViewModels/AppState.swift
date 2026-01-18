@@ -9,7 +9,7 @@ final class AppState: ObservableObject {
     @Published var selectedIssue: IssueSummary?
     @Published private(set) var issues: [IssueSummary]
     @Published private var searchQuery: String = ""
-    @Published private(set) var isInspectorVisible: Bool = true
+    @Published private(set) var isInspectorVisible: Bool = false
     @Published private(set) var isSidebarVisible: Bool = true
     @Published private(set) var isSyncing: Bool = false
     @Published private(set) var syncStatusMessage: String? = nil

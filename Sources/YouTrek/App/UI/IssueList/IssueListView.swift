@@ -20,8 +20,6 @@ struct IssueListView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Table(issues, selection: $selectedIDs, sortOrder: $sortOrder) {
-                    TableColumn("ID", value: \IssueSummary.readableID)
-                        .width(min: 60, ideal: 100, max: 200)
                     TableColumn("Title", value: \IssueSummary.title) { issue in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(issue.title)
@@ -32,6 +30,16 @@ struct IssueListView: View {
                         .textSelection(.enabled)
                     }
                     .width(min: 220, ideal: 420)
+                    TableColumn("Assignee", value: \IssueSummary.assigneeDisplayName) { issue in
+                        if let assignee = issue.assignee {
+                            Label(assignee.displayName, systemImage: "person.fill")
+                                .labelStyle(.titleAndIcon)
+                        } else {
+                            Text(issue.assigneeDisplayName)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .width(min: 160, ideal: 200)
                     TableColumn("Updated") { issue in
                         Text(issue.updatedAt.formatted(.relative(presentation: .named)))
                             .font(.subheadline)
@@ -53,18 +61,12 @@ struct IssueListView: View {
             }
             selection = issue
         }
-        .animation(.default, value: issues)
     }
 
     private func metadataRow(for issue: IssueSummary) -> some View {
         HStack(spacing: 8) {
             Text(issue.projectName)
                 .foregroundStyle(.secondary)
-            if let assignee = issue.assignee {
-                Label(assignee.displayName, systemImage: "person.fill")
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(.secondary)
-            }
             Text(issue.status.displayName)
                 .foregroundStyle(issue.status.tint)
             Text(issue.priority.displayName)

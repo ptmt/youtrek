@@ -12,7 +12,7 @@ enum YouTrekEntry {
 
 struct YouTrekApp: App {
     @StateObject private var container = AppContainer.live
-    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .system
+    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .dark
 
     var body: some Scene {
         WindowGroup(id: SceneID.main.rawValue) {
