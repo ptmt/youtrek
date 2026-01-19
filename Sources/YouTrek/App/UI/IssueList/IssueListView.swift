@@ -6,6 +6,7 @@ struct IssueListView: View {
     let showAssigneeColumn: Bool
     let showUpdatedColumn: Bool
     let isLoading: Bool
+    let onIssuesRendered: ((Int) -> Void)?
 
     @State private var selectedIDs: Set<IssueSummary.ID> = []
     @State private var sortOrder: [KeyPathComparator<IssueSummary>] = [
@@ -63,6 +64,9 @@ struct IssueListView: View {
                     }
                 }
                 .tableStyle(.inset)
+                .onAppear {
+                    onIssuesRendered?(issues.count)
+                }
             }
         }
         .onAppear(perform: syncSelectionState)

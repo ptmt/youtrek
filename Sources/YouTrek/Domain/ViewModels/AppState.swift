@@ -3,6 +3,7 @@ import SwiftUI
 
 @MainActor
 final class AppState: ObservableObject {
+    private let launchUptime: TimeInterval
     @Published var columnVisibility: NavigationSplitViewVisibility = .all
     @Published var selectedSidebarItem: SidebarItem?
     @Published private(set) var sidebarSections: [SidebarSection] = []
@@ -15,8 +16,10 @@ final class AppState: ObservableObject {
     @Published private(set) var syncStatusMessage: String? = nil
     @Published private(set) var isLoadingIssues: Bool = false
     @Published var activeConflict: ConflictNotice?
+    private var didLogIssueListRendered = false
 
     init(issues: [IssueSummary] = []) {
+        self.launchUptime = ProcessInfo.processInfo.systemUptime
         self.issues = issues
     }
 
@@ -88,6 +91,16 @@ final class AppState: ObservableObject {
 
     func presentConflict(_ conflict: ConflictNotice) {
         activeConflict = conflict
+    }
+
+    func recordIssueListRendered(issueCount: Int) {
+        guard issueCount > 0, !didLogIssueListRendered else { return }
+        didLogIssueListRendered = true
+        let elapsed = ProcessInfo.processInfo.systemUptime - launchUptime
+        let formatted = String(format: "%.2f", elapsed)
+        LoggingService.general.info(
+            "Startup: issue list rendered in \(formatted, privacy: .public)s (issues: \(issueCount, privacy: .public))"
+        )
     }
 }
 

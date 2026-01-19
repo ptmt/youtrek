@@ -153,16 +153,12 @@ final class AppContainer: ObservableObject {
     }()
 
     func bootstrap() async {
-        async let savedQueries = try syncCoordinator.enqueue(label: "Sync saved searches") {
-            try await self.savedQueryRepositorySwitcher.fetchSavedQueries()
-        }
-        async let boards = loadBoardsForSidebar()
-        let resolvedSavedQueries = (try? await savedQueries) ?? []
-        let resolvedBoards = await boards
-        let sections = buildSidebarSections(savedQueries: resolvedSavedQueries, boards: resolvedBoards)
-        let preferredSelectionID = preferredSelectionID(from: resolvedSavedQueries)
+        let cachedBoards = await boardLocalStore.loadBoards()
+        let initialSections = buildSidebarSections(savedQueries: [], boards: cachedBoards)
+        let initialPreferredSelectionID = preferredSelectionID(from: [])
 
-        appState.updateSidebar(sections: sections, preferredSelectionID: preferredSelectionID)
+        appState.updateSidebar(sections: initialSections, preferredSelectionID: initialPreferredSelectionID)
+        startBoardPrefetch(cachedBoards)
         if let selection = appState.selectedSidebarItem {
             await loadIssues(for: selection)
         }
@@ -172,15 +168,9 @@ final class AppContainer: ObservableObject {
             await self.syncCoordinator.flushPendingMutations()
         }
 
-        let queriesToPrefetch = sections
-            .flatMap(\.items)
-            .filter(\.isBoard)
-            .map(\.query)
         Task { [weak self] in
             guard let self else { return }
-            for query in queriesToPrefetch {
-                _ = try? await self.syncCoordinator.refreshIssues(using: query)
-            }
+            await self.refreshSidebarData()
         }
     }
 
@@ -371,6 +361,33 @@ private extension AppContainer {
 }
 
 private extension AppContainer {
+    func refreshSidebarData() async {
+        async let savedQueriesResult: [SavedQuery] = {
+            do {
+                return try await syncCoordinator.enqueue(label: "Sync saved searches") {
+                    try await self.savedQueryRepositorySwitcher.fetchSavedQueries()
+                }
+            } catch {
+                return []
+            }
+        }()
+        async let boardsResult: [IssueBoard] = loadBoardsForSidebar()
+
+        let resolvedSavedQueries = await savedQueriesResult
+        let resolvedBoards = await boardsResult
+
+        let sections = buildSidebarSections(savedQueries: resolvedSavedQueries, boards: resolvedBoards)
+        let preferredSelectionID = preferredSelectionID(from: resolvedSavedQueries)
+        let previousSelectionID = appState.selectedSidebarItem?.id
+
+        appState.updateSidebar(sections: sections, preferredSelectionID: preferredSelectionID)
+
+        if let selection = appState.selectedSidebarItem, selection.id != previousSelectionID {
+            await loadIssues(for: selection)
+        }
+
+    }
+
     func buildSidebarSections(savedQueries: [SavedQuery], boards: [IssueBoard]) -> [SidebarSection] {
         let visibleSavedQueries = limitedSavedQueries(from: savedQueries)
         let page = IssueQuery.Page(size: 50, offset: 0)
@@ -426,9 +443,25 @@ private extension AppContainer {
                 try await self.boardRepositorySwitcher.fetchBoards()
             }
             await boardLocalStore.saveRemoteBoards(remoteBoards)
+            startBoardPrefetch(remoteBoards)
             return await boardLocalStore.loadBoards()
         } catch {
+            startBoardPrefetch(cachedBoards)
             return cachedBoards
+        }
+    }
+
+    func startBoardPrefetch(_ boards: [IssueBoard]) {
+        let page = IssueQuery.Page(size: 50, offset: 0)
+        let queries = boards
+            .filter(\.isFavorite)
+            .map { SidebarItem.board($0, page: page).query }
+        guard !queries.isEmpty else { return }
+        let coordinator = syncCoordinator
+        Task.detached(priority: .background) {
+            for query in queries {
+                _ = try? await coordinator.refreshIssues(using: query)
+            }
         }
     }
 }

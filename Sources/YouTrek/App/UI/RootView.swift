@@ -49,7 +49,10 @@ private struct RootContentView: View {
                         selection: $appState.selectedIssue,
                         showAssigneeColumn: showAssigneeColumn,
                         showUpdatedColumn: showUpdatedColumn,
-                        isLoading: appState.isLoadingIssues
+                        isLoading: appState.isLoadingIssues,
+                        onIssuesRendered: { count in
+                            appState.recordIssueListRendered(issueCount: count)
+                        }
                     )
                 }
             }

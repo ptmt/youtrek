@@ -122,7 +122,9 @@ extension SidebarItem {
 
     private static func boardQuery(for name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let escaped = trimmed.replacingOccurrences(of: "\"", with: "\\\"")
-        return "Board: \"\(escaped)\""
+        var escaped = trimmed.replacingOccurrences(of: "\\", with: "\\\\")
+        escaped = escaped.replacingOccurrences(of: "{", with: "\\{")
+        escaped = escaped.replacingOccurrences(of: "}", with: "\\}")
+        return "board: {\(escaped)}"
     }
 }

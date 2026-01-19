@@ -20,9 +20,6 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
     func fetchBoards() async throws -> [IssueBoard] {
         let baseFields = Self.agileFieldsBase
         let fieldCandidates = [
-            "\(baseFields),favorite",
-            "\(baseFields),isFavorite",
-            "\(baseFields),isStarred",
             "id,name,favorite,projects(id,name,shortName,archived)"
         ]
 
