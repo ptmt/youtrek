@@ -18,11 +18,12 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
     }
 
     func fetchBoards() async throws -> [IssueBoard] {
+        let baseFields = Self.agileFieldsBase
         let fieldCandidates = [
-            "id,name,isFavorite,projects(shortName,name)",
-            "id,name,favorite,projects(shortName,name)",
-            "id,name,isStarred,projects(shortName,name)",
-            "id,name,projects(shortName,name)"
+            "\(baseFields),favorite",
+            "\(baseFields),isFavorite",
+            "\(baseFields),isStarred",
+            "id,name,favorite,projects(id,name,shortName,archived)"
         ]
 
         var lastError: Error?
@@ -57,6 +58,11 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
             ]
 
             let data = try await client.get(path: "agiles", queryItems: queryItems)
+            if let rawJSON = String(data: data, encoding: .utf8) {
+                print(rawJSON)
+            } else {
+                print("Agiles response was not valid UTF-8.")
+            }
             let page = try decoder.decode([YouTrackAgileBoard].self, from: data)
             allBoards.append(contentsOf: page)
 
@@ -97,4 +103,30 @@ private struct YouTrackAgileBoard: Decodable {
         let name: String?
         let shortName: String?
     }
+}
+
+private extension YouTrackIssueBoardRepository {
+    static let agileFieldsBase: String = [
+        "id",
+        "name",
+        "owner(id,login,fullName,avatarUrl)",
+        "visibleFor(id,name)",
+        "visibleForProjectBased",
+        "updateableBy(id,name)",
+        "updateableByProjectBased",
+        "readSharingSettings(id,permittedGroups(id,name),permittedUsers(id,login,fullName,avatarUrl))",
+        "updateSharingSettings(id,permittedGroups(id,name),permittedUsers(id,login,fullName,avatarUrl))",
+        "orphansAtTheTop",
+        "hideOrphansSwimlane",
+        "estimationField(id,name,localizedName)",
+        "originalEstimationField(id,name,localizedName)",
+        "projects(id,name,shortName,archived)",
+        "sprints(id,name,goal,start,finish,archived,isDefault,unresolvedIssuesCount)",
+        "currentSprint(id,name,goal,start,finish,archived,isDefault,unresolvedIssuesCount)",
+        "columnSettings(id,field(id,name,localizedName),columns(id,presentation,isResolved,ordinal,wipLimit(id,min,max),parent(id),fieldValues(id,name,isResolved)))",
+        "swimlaneSettings(id,enabled)",
+        "sprintsSettings(id,isExplicit,cardOnSeveralSprints,defaultSprint(id,name),disableSprints,explicitQuery,sprintSyncField(id,name,localizedName),hideSubtasksOfCards)",
+        "colorCoding(id)",
+        "status(id,valid,hasJobs,errors,warnings)"
+    ].joined(separator: ",")
 }

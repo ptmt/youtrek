@@ -53,6 +53,7 @@ enum AppDebugSettings {
     enum Keys {
         static let simulateSlowResponses = "com.potomushto.youtrek.debug.simulate-slow-responses"
         static let showNetworkFooter = "com.potomushto.youtrek.debug.show-network-footer"
+        static let disableSyncing = "com.potomushto.youtrek.debug.disable-syncing"
     }
 
     static var simulateSlowResponses: Bool {
@@ -71,6 +72,14 @@ enum AppDebugSettings {
         #endif
     }
 
+    static var disableSyncing: Bool {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: Keys.disableSyncing)
+        #else
+        return false
+        #endif
+    }
+
     static func setSimulateSlowResponses(_ value: Bool) {
         #if DEBUG
         UserDefaults.standard.set(value, forKey: Keys.simulateSlowResponses)
@@ -80,6 +89,12 @@ enum AppDebugSettings {
     static func setShowNetworkFooter(_ value: Bool) {
         #if DEBUG
         UserDefaults.standard.set(value, forKey: Keys.showNetworkFooter)
+        #endif
+    }
+
+    static func setDisableSyncing(_ value: Bool) {
+        #if DEBUG
+        UserDefaults.standard.set(value, forKey: Keys.disableSyncing)
         #endif
     }
 

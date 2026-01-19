@@ -34,7 +34,44 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
     }
 
     func createIssue(draft: IssueDraft) async throws -> IssueSummary {
-        throw YouTrackAPIError.http(statusCode: 501, body: "Issue creation not yet implemented")
+        let trimmedTitle = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedProject = draft.projectID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, !trimmedProject.isEmpty else {
+            throw YouTrackAPIError.http(statusCode: 400, body: "Missing required issue fields.")
+        }
+
+        let description = draft.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let project = IssueCreatePayload.ProjectReference.from(identifier: trimmedProject)
+
+        var customFields: [IssueCreatePayload.CustomField] = []
+        customFields.append(.priority(draft.priority))
+
+        let moduleValue = draft.module?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let moduleValue, !moduleValue.isEmpty {
+            customFields.append(.module(moduleValue))
+        }
+
+        let assigneeValue = draft.assigneeID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let assigneeValue, !assigneeValue.isEmpty {
+            customFields.append(.assignee(assigneeValue))
+        }
+
+        let payload = IssueCreatePayload(
+            summary: trimmedTitle,
+            description: description.isEmpty ? nil : description,
+            project: project,
+            customFields: customFields.isEmpty ? nil : customFields
+        )
+
+        let encoder = JSONEncoder()
+        let body = try encoder.encode(payload)
+        let response = try await client.post(
+            path: "issues",
+            queryItems: [URLQueryItem(name: "fields", value: Self.issueListFields)],
+            body: body
+        )
+        let issue = try decoder.decode(YouTrackIssue.self, from: response)
+        return mapIssue(issue)
     }
 
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {
@@ -244,5 +281,88 @@ private struct YouTrackIssue: Decodable {
                 }
             }
         }
+    }
+}
+
+private struct IssueCreatePayload: Encodable {
+    let summary: String
+    let description: String?
+    let project: ProjectReference
+    let customFields: [CustomField]?
+
+    struct ProjectReference: Encodable {
+        let id: String?
+        let shortName: String?
+
+        static func from(identifier: String) -> ProjectReference {
+            if identifier.isLikelyYouTrackID {
+                return ProjectReference(id: identifier, shortName: nil)
+            }
+            return ProjectReference(id: nil, shortName: identifier)
+        }
+    }
+
+    struct CustomField: Encodable {
+        let typeName: String
+        let name: String
+        let value: CustomFieldValue
+
+        enum CodingKeys: String, CodingKey {
+            case typeName = "$type"
+            case name
+            case value
+        }
+
+        static func priority(_ priority: IssuePriority) -> CustomField {
+            CustomField(
+                typeName: "SingleEnumIssueCustomField",
+                name: "Priority",
+                value: CustomFieldValue(name: priority.displayName)
+            )
+        }
+
+        static func assignee(_ identifier: String) -> CustomField {
+            CustomField(
+                typeName: "SingleUserIssueCustomField",
+                name: "Assignee",
+                value: CustomFieldValue(userIdentifier: identifier)
+            )
+        }
+
+        static func module(_ module: String) -> CustomField {
+            CustomField(
+                typeName: "SingleOwnedIssueCustomField",
+                name: "Subsystem",
+                value: CustomFieldValue(name: module)
+            )
+        }
+    }
+
+    struct CustomFieldValue: Encodable {
+        let id: String?
+        let name: String?
+        let login: String?
+
+        init(id: String? = nil, name: String? = nil, login: String? = nil) {
+            self.id = id
+            self.name = name
+            self.login = login
+        }
+
+        init(userIdentifier: String) {
+            if userIdentifier.isLikelyYouTrackID {
+                self.init(id: userIdentifier)
+            } else {
+                self.init(login: userIdentifier)
+            }
+        }
+    }
+}
+
+private extension String {
+    var isLikelyYouTrackID: Bool {
+        let parts = split(separator: "-")
+        guard parts.count == 2 else { return false }
+        return parts.allSatisfy { !$0.isEmpty && $0.allSatisfy(\.isNumber) }
     }
 }

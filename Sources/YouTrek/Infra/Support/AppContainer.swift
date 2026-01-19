@@ -475,10 +475,18 @@ final class IssueComposer: ObservableObject {
     }
 
     func applyDefaults(from draft: IssueDraft) {
-        draftProjectID = draft.projectID
-        draftModule = draft.module ?? ""
-        draftAssigneeID = draft.assigneeID ?? ""
-        draftPriority = draft.priority
+        if draftProjectID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draftProjectID = draft.projectID
+        }
+        if draftModule.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draftModule = draft.module ?? ""
+        }
+        if draftAssigneeID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draftAssigneeID = draft.assigneeID ?? ""
+        }
+        if draftPriority == .normal {
+            draftPriority = draft.priority
+        }
     }
 
     func makeDraft() -> IssueDraft? {

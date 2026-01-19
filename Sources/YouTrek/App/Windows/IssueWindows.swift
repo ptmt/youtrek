@@ -24,7 +24,7 @@ struct NewIssueWindow: View {
     var body: some View {
         Form {
             TextField("Title", text: draftTitleBinding)
-            TextField("Project", text: draftProjectBinding, prompt: Text("Project ID or short name"))
+            TextField("Project", text: draftProjectBinding, prompt: Text("Project ID"))
             TextField("Module", text: draftModuleBinding, prompt: Text("Subsystem or component"))
             TextField("Assignee", text: draftAssigneeBinding, prompt: Text("Username or user ID"))
             Picker("Priority", selection: draftPriorityBinding) {
@@ -41,7 +41,7 @@ struct NewIssueWindow: View {
             .disabled(!container.issueComposer.canSubmit)
         }
         .padding(24)
-        .frame(minWidth: 420, minHeight: 360)
+        .frame(minWidth: 420, minHeight: 420)
     }
 
     private var draftTitleBinding: Binding<String> {

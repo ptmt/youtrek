@@ -19,6 +19,7 @@ private struct RootContentView: View {
     @AppStorage("issueList.showUpdatedColumn") private var showUpdatedColumn: Bool = true
     @State private var simulateSlowResponses: Bool = AppDebugSettings.simulateSlowResponses
     @State private var showNetworkFooter: Bool = AppDebugSettings.showNetworkFooter
+    @State private var disableSyncing: Bool = AppDebugSettings.disableSyncing
 
     var body: some View {
         NavigationSplitView(columnVisibility: $appState.columnVisibility) {
@@ -92,6 +93,7 @@ private struct RootContentView: View {
                     Menu {
                         Toggle("Simulate slow responses", isOn: $simulateSlowResponses)
                         Toggle("Show network footer", isOn: $showNetworkFooter)
+                        Toggle("Disable syncing", isOn: $disableSyncing)
                     } label: {
                         Label("Developer", systemImage: "wrench.and.screwdriver")
                     }
@@ -134,6 +136,9 @@ private struct RootContentView: View {
         }
         .onChange(of: showNetworkFooter) { _, newValue in
             AppDebugSettings.setShowNetworkFooter(newValue)
+        }
+        .onChange(of: disableSyncing) { _, newValue in
+            AppDebugSettings.setDisableSyncing(newValue)
         }
         .onChange(of: searchQuery) { _, query in
             appState.updateSearch(query: query)

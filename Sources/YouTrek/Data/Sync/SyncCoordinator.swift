@@ -19,6 +19,9 @@ actor SyncCoordinator {
     }
 
     func refreshIssues(using query: IssueQuery) async throws -> [IssueSummary] {
+        if AppDebugSettings.disableSyncing {
+            return await localStore.loadIssues(for: query)
+        }
         do {
             return try await enqueue(label: "Sync issues") {
                 let remote = try await self.issueRepository.fetchIssues(query: query)
@@ -47,6 +50,9 @@ actor SyncCoordinator {
     }
 
     func flushPendingMutations() async {
+        if AppDebugSettings.disableSyncing {
+            return
+        }
         let mutations = await localStore.pendingMutations()
         guard !mutations.isEmpty else { return }
 

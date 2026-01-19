@@ -142,11 +142,14 @@ private enum CLIRunner {
             let parsed = try parseOptions(
                 remaining,
                 valueOptions: ["--base-url", "--token"],
-                flagOptions: ["--json"]
+                flagOptions: ["--json", "--offline"]
             )
             if parsed.flags.contains("--help") {
                 CLIOutput.printSavedQueriesHelp()
                 return 0
+            }
+            if parsed.flags.contains("--offline") {
+                throw CLIError.offlineUnsupported("saved-queries")
             }
 
             let connection = try resolveConnection(options: parsed)
@@ -177,34 +180,51 @@ private enum CLIRunner {
             let parsed = try parseOptions(
                 remaining,
                 valueOptions: ["--query", "--saved", "--top", "--base-url", "--token"],
-                flagOptions: ["--json"]
+                flagOptions: ["--json", "--offline"]
             )
             if parsed.flags.contains("--help") {
                 CLIOutput.printIssuesHelp()
                 return 0
             }
 
-            let connection = try resolveConnection(options: parsed)
-            let issueRepository = YouTrackIssueRepository(configuration: connection.configuration)
-            let savedQueryRepository = YouTrackSavedQueryRepository(configuration: connection.configuration)
-
             let pageSize = parsed.options["--top"].flatMap(Int.init) ?? 50
             let page = IssueQuery.Page(size: pageSize, offset: 0)
 
             let query: IssueQuery
-            if let savedName = parsed.options["--saved"] {
+            if let rawQuery = parsed.options["--query"] {
+                query = IssueQuery(rawQuery: rawQuery, search: "", filters: [], sort: nil, page: page)
+            } else if let savedName = parsed.options["--saved"] {
+                if parsed.flags.contains("--offline") {
+                    throw CLIError.offlineUnsupported("saved search resolution")
+                }
+                let connection = try resolveConnection(options: parsed)
+                let savedQueryRepository = YouTrackSavedQueryRepository(configuration: connection.configuration)
                 let savedQueries = try await savedQueryRepository.fetchSavedQueries()
                 guard let saved = savedQueries.first(where: { $0.name.caseInsensitiveCompare(savedName) == .orderedSame }) else {
                     throw CLIError.missingConfiguration("saved search named \"\(savedName)\"")
                 }
                 query = IssueQuery.saved(saved.query, page: page)
-            } else if let rawQuery = parsed.options["--query"] {
-                query = IssueQuery(rawQuery: rawQuery, search: "", filters: [], sort: nil, page: page)
             } else {
                 query = IssueQuery(rawQuery: nil, search: "", filters: [], sort: .updated(descending: true), page: page)
             }
 
+            if parsed.flags.contains("--offline") {
+                let store = IssueLocalStore()
+                let issues = await store.loadIssues(for: query)
+                if parsed.flags.contains("--json") {
+                    let output = issues.map { IssueSummaryOutput(issue: $0) }
+                    CLIOutput.printJSON(output)
+                } else {
+                    CLIOutput.printIssues(issues)
+                }
+                return 0
+            }
+
+            let connection = try resolveConnection(options: parsed)
+            let issueRepository = YouTrackIssueRepository(configuration: connection.configuration)
             let issues = try await issueRepository.fetchIssues(query: query)
+            let store = IssueLocalStore()
+            await store.saveRemoteIssues(issues, for: query)
 
             if parsed.flags.contains("--json") {
                 let output = issues.map { IssueSummaryOutput(issue: $0) }
@@ -230,16 +250,30 @@ private enum CLIRunner {
             let parsed = try parseOptions(
                 remaining,
                 valueOptions: ["--base-url", "--token"],
-                flagOptions: ["--json"]
+                flagOptions: ["--json", "--offline"]
             )
             if parsed.flags.contains("--help") {
                 CLIOutput.printAgileBoardsHelp()
                 return 0
             }
 
+            if parsed.flags.contains("--offline") {
+                let store = IssueBoardLocalStore()
+                let boards = await store.loadBoards()
+                if parsed.flags.contains("--json") {
+                    let output = boards.map(AgileBoardOutput.init)
+                    CLIOutput.printJSON(output)
+                } else {
+                    CLIOutput.printAgileBoards(boards)
+                }
+                return 0
+            }
+
             let connection = try resolveConnection(options: parsed)
             let repository = YouTrackIssueBoardRepository(configuration: connection.configuration)
             let boards = try await repository.fetchBoards()
+            let store = IssueBoardLocalStore()
+            await store.saveRemoteBoards(boards)
 
             if parsed.flags.contains("--json") {
                 let output = boards.map(AgileBoardOutput.init)
@@ -351,28 +385,31 @@ private struct CLIConnection {
     let configuration: YouTrackAPIConfiguration
 }
 
-private enum CLIError: LocalizedError {
-    case invalidCommand(String)
-    case invalidOption(String)
-    case invalidValue(option: String, value: String)
-    case missingArgument(String)
-    case missingConfiguration(String)
+    private enum CLIError: LocalizedError {
+        case invalidCommand(String)
+        case invalidOption(String)
+        case invalidValue(option: String, value: String)
+        case missingArgument(String)
+        case missingConfiguration(String)
+        case offlineUnsupported(String)
 
-    var errorDescription: String? {
-        switch self {
-        case .invalidCommand(let command):
-            return "Unknown command: \(command). Run `youtrek --help` for usage."
+        var errorDescription: String? {
+            switch self {
+            case .invalidCommand(let command):
+                return "Unknown command: \(command). Run `youtrek --help` for usage."
         case .invalidOption(let option):
             return "Unknown option: \(option). Run `youtrek --help` for usage."
         case .invalidValue(let option, let value):
             return "Invalid value for \(option): \(value)"
-        case .missingArgument(let option):
-            return "Missing value for \(option)."
-        case .missingConfiguration(let item):
-            return "Missing \(item). Set it with `youtrek auth login` or pass a flag."
+            case .missingArgument(let option):
+                return "Missing value for \(option)."
+            case .missingConfiguration(let item):
+                return "Missing \(item). Set it with `youtrek auth login` or pass a flag."
+            case .offlineUnsupported(let feature):
+                return "Offline mode cannot resolve \(feature). Use a direct query or go online."
+            }
         }
     }
-}
 
 private struct CLIOutput {
     static func printHelp() {
@@ -386,8 +423,8 @@ private struct CLIOutput {
             Commands:
               auth status
               auth login --base-url <url> --token <pat>
-              issues list [--query <ytql>] [--saved <name>] [--top <n>] [--json]
-              agile-boards list [--json]
+              issues list [--query <ytql>] [--saved <name>] [--top <n>] [--offline] [--json]
+              agile-boards list [--offline] [--json]
               saved-queries list [--json]
               install-cli [--path <path>] [--force]
 
@@ -410,7 +447,7 @@ private struct CLIOutput {
         print(
             """
             Issues commands:
-              youtrek issues list [--query <ytql>] [--saved <name>] [--top <n>] [--json]
+              youtrek issues list [--query <ytql>] [--saved <name>] [--top <n>] [--offline] [--json]
             """
         )
     }
@@ -420,6 +457,8 @@ private struct CLIOutput {
             """
             Saved queries commands:
               youtrek saved-queries list [--json]
+
+            Note: offline mode is not supported for saved queries.
             """
         )
     }
@@ -428,7 +467,7 @@ private struct CLIOutput {
         print(
             """
             Agile boards commands:
-              youtrek agile-boards list [--json]
+              youtrek agile-boards list [--offline] [--json]
             """
         )
     }

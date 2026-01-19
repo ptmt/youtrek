@@ -1,5 +1,9 @@
 import Foundation
 
+enum SyncOperationQueueError: Error {
+    case syncingDisabled
+}
+
 actor SyncOperationQueue {
     private var pendingCount: Int = 0
     private var currentLabel: String?
@@ -11,6 +15,9 @@ actor SyncOperationQueue {
     }
 
     func enqueue<T: Sendable>(label: String, operation: @Sendable @escaping () async throws -> T) async throws -> T {
+        if AppDebugSettings.disableSyncing {
+            throw SyncOperationQueueError.syncingDisabled
+        }
         let previous = tail
         let task = Task<T, Error> {
             await previous.value

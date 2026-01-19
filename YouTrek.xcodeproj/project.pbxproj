@@ -16,6 +16,7 @@
 		17484CD88BC62E1E13CF6D9D /* IssueLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */; };
 		B33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift */; };
 		1E4C578BD3384B5530AB96DE /* YouTrackIssueRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EBD085B49E4D2450109D389 /* YouTrackIssueRepositoryTests.swift */; };
+		D4E5F60708090A0B0C0D0E0F /* IssueDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F60708090A0B0C0E0F /* IssueDraftStoreTests.swift */; };
 		2A3B4C5D6E7F8091A2B3C4D5 /* SavedQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708192A3B4C5 /* SavedQuery.swift */; };
 		2A3B4C5D6E7F8091A2B3C4D6 /* SavedQueryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708192A3B4C6 /* SavedQueryRepository.swift */; };
 		2A3B4C5D6E7F8091A2B3C4D7 /* YouTrackSavedQueryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708192A3B4C7 /* YouTrackSavedQueryRepository.swift */; };
@@ -45,6 +46,7 @@
 		9FDEA781B9E8312D675F21C4 /* AppMenus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5127E6BFCB6228BCCACF3248 /* AppMenus.swift */; };
 		ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7250E3A5DD409013899A4B /* RootView.swift */; };
 		C1D2E3F405060708090A0B0C /* IssueBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* IssueBoardView.swift */; };
+		C2D3E4F5060708090A0B0C0D /* IssueDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D5E6F708192A3B4C5D /* IssueDraftStore.swift */; };
 		AE532ADB1F8E36F39E0B6FFF /* LoggingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E846A3202CA8FD93450D72F /* LoggingService.swift */; };
 		B1F0E1B28F16D4C39B3F8A01 /* AppConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A00 /* AppConfigurationStore.swift */; };
 		B1F0E1B28F16D4C39B3F8A03 /* SwitchableRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A02 /* SwitchableRepositories.swift */; };
@@ -99,6 +101,7 @@
 		86D2C2DB3FD959E98B994951 /* KeychainStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStorage.swift; sourceTree = "<group>"; };
 		8D3751AABB25A233B2008788 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		8EBD085B49E4D2450109D389 /* YouTrackIssueRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueRepositoryTests.swift; sourceTree = "<group>"; };
+		C3D4E5F60708090A0B0C0E0F /* IssueDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDraftStoreTests.swift; sourceTree = "<group>"; };
 		8F4883822D7B393D38B7D0BD /* IssueDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDetailView.swift; sourceTree = "<group>"; };
 		96D7F507180F29C1DBEBFD1A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		96F1E15A048870421DA67DD8 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
@@ -111,6 +114,7 @@
 		A1F0E1B28F16D4C39B3F8A06 /* SetupWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupWindow.swift; sourceTree = "<group>"; };
 		A9B8C7D6E5F40123456789AB /* NetworkRequestMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkRequestMonitor.swift; sourceTree = "<group>"; };
 		A9B8C7D6E5F40123456789AD /* NetworkRequestFooterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkRequestFooterView.swift; sourceTree = "<group>"; };
+		A2B3C4D5E6F708192A3B4C5D /* IssueDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDraftStore.swift; sourceTree = "<group>"; };
 		B19ECD87B561BBF7954653FA /* YouTrek.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YouTrek.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAuthRepository.swift; sourceTree = "<group>"; };
 		D2BF004390F090F845328D6B /* IssueListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueListView.swift; sourceTree = "<group>"; };
@@ -164,6 +168,7 @@
 			children = (
 				67EE0549798C5BB97F80099A /* YouTrekTests.swift */,
 				2AE80E5F4EA04BE5A252AD14 /* SyncOperationQueueTests.swift */,
+				C3D4E5F60708090A0B0C0E0F /* IssueDraftStoreTests.swift */,
 				C42DA79785B685732D83626E /* Data */,
 			);
 			path = YouTrekTests;
@@ -192,6 +197,7 @@
 				259D750A7F2F67E76894DD3F /* AppContainer.swift */,
 				86D2C2DB3FD959E98B994951 /* KeychainStorage.swift */,
 				A1F0E1B28F16D4C39B3F8A00 /* AppConfigurationStore.swift */,
+				A2B3C4D5E6F708192A3B4C5D /* IssueDraftStore.swift */,
 				1D1E1D1E1D1E1D1E1D1E1D1E /* CLIInstaller.swift */,
 				A1F0E1B28F16D4C39B3F8A02 /* SwitchableRepositories.swift */,
 				A9B8C7D6E5F40123456789AB /* NetworkRequestMonitor.swift */,
@@ -544,6 +550,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1E4C578BD3384B5530AB96DE /* YouTrackIssueRepositoryTests.swift in Sources */,
+				D4E5F60708090A0B0C0D0E0F /* IssueDraftStoreTests.swift in Sources */,
 				879DC3DC38B8CC95B2F99F90 /* YouTrekTests.swift in Sources */,
 				5AD0AADC8F374977AD5209A1 /* SyncOperationQueueTests.swift in Sources */,
 			);
@@ -569,6 +576,7 @@
 				BB9383DD8D6501FAF39C122F /* IssueDetailView.swift in Sources */,
 				C1D2E3F405060708090A0B0C /* IssueBoardView.swift in Sources */,
 				EE1E07C0A405D6A416EB6A4D /* IssueListView.swift in Sources */,
+				C2D3E4F5060708090A0B0C0D /* IssueDraftStore.swift in Sources */,
 				17484CD88BC62E1E13CF6D9D /* IssueLocalStore.swift in Sources */,
 				B33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift in Sources */,
 				00FEB9220801E5364D578CD8 /* IssueRepository.swift in Sources */,

@@ -102,6 +102,109 @@ final class YouTrackIssueRepositoryTests: XCTestCase {
         XCTAssertTrue(queryItems.contains(where: { $0.name == "fields" && $0.value?.contains("idReadable") == true }))
         XCTAssertTrue(queryItems.contains(where: { $0.name == "query" && $0.value?.contains("sort by: updated desc") == true }))
     }
+
+    func testCreateIssueBuildsPayloadAndDecodesResponse() async throws {
+        let sampleResponse = """
+        {
+          "id": "0-123",
+          "idReadable": "YT-123",
+          "summary": "Ship settings panel",
+          "project": {
+            "name": "YouTrek",
+            "shortName": "YT"
+          },
+          "updated": 1697040000000,
+          "customFields": [
+            {
+              "$type": "SingleEnumIssueCustomField",
+              "name": "Priority",
+              "value": { "name": "High" }
+            },
+            {
+              "$type": "StateIssueCustomField",
+              "name": "State",
+              "value": { "name": "Open" }
+            },
+            {
+              "$type": "SingleUserIssueCustomField",
+              "name": "Assignee",
+              "value": {
+                "login": "morgan",
+                "name": "Morgan Chan"
+              }
+            }
+          ],
+          "tags": []
+        }
+        """.data(using: .utf8)!
+
+        MockURLProtocol.requestHandler = { request in
+            guard request.value(forHTTPHeaderField: "Authorization") == "Bearer TOKEN" else {
+                throw NSError(domain: "Auth", code: 0)
+            }
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, sampleResponse)
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+
+        let repo = YouTrackIssueRepository(
+            configuration: YouTrackAPIConfiguration(
+                baseURL: URL(string: "https://example.com/api")!,
+                tokenProvider: .constant("TOKEN")
+            ),
+            session: session
+        )
+
+        let draft = IssueDraft(
+            title: "Ship settings panel",
+            description: "The preferences pane should ship this week.",
+            projectID: "0-1",
+            module: "Settings",
+            priority: .high,
+            assigneeID: "morgan"
+        )
+
+        let created = try await repo.createIssue(draft: draft)
+        XCTAssertEqual(created.readableID, "YT-123")
+        XCTAssertEqual(created.title, "Ship settings panel")
+        XCTAssertEqual(created.projectName, "YT")
+        XCTAssertEqual(created.priority, .high)
+
+        let lastRequest = try XCTUnwrap(MockURLProtocol.lastRequest)
+        XCTAssertEqual(lastRequest.httpMethod, "POST")
+        let components = try XCTUnwrap(URLComponents(url: lastRequest.url!, resolvingAgainstBaseURL: false))
+        let queryItems = components.queryItems ?? []
+        XCTAssertTrue(queryItems.contains(where: { $0.name == "fields" && $0.value?.contains("idReadable") == true }))
+
+        let body = try XCTUnwrap(lastRequest.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["summary"] as? String, "Ship settings panel")
+
+        let project = json["project"] as? [String: Any]
+        XCTAssertEqual(project?["id"] as? String, "0-1")
+
+        let customFields = json["customFields"] as? [[String: Any]]
+        let priorityField = customFields?.first(where: { $0["name"] as? String == "Priority" })
+        let priorityValue = priorityField?["value"] as? [String: Any]
+        XCTAssertEqual(priorityValue?["name"] as? String, "High")
+        XCTAssertEqual(priorityField?["$type"] as? String, "SingleEnumIssueCustomField")
+
+        let assigneeField = customFields?.first(where: { $0["name"] as? String == "Assignee" })
+        let assigneeValue = assigneeField?["value"] as? [String: Any]
+        XCTAssertEqual(assigneeValue?["login"] as? String, "morgan")
+
+        let moduleField = customFields?.first(where: { $0["name"] as? String == "Subsystem" })
+        let moduleValue = moduleField?["value"] as? [String: Any]
+        XCTAssertEqual(moduleValue?["name"] as? String, "Settings")
+    }
 }
 
 private final class MockURLProtocol: URLProtocol {
