@@ -38,6 +38,7 @@ struct IssueDraft: Equatable, Codable {
     var title: String
     var description: String
     var projectID: String
+    var module: String?
     var priority: IssuePriority
     var assigneeID: String?
 }

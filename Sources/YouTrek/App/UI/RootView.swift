@@ -25,6 +25,8 @@ private struct RootContentView: View {
             SidebarView(
                 sections: appState.sidebarSections,
                 selection: $appState.selectedSidebarItem,
+                isSyncing: appState.isSyncing,
+                syncStatusMessage: appState.syncStatusMessage,
                 onDeleteSavedSearch: { savedQueryID in
                     Task {
                         await container.deleteSavedSearch(id: savedQueryID)
@@ -32,23 +34,28 @@ private struct RootContentView: View {
                 }
             )
         } content: {
-            IssueListView(
-                issues: appState.filteredIssues(searchQuery: searchQuery),
-                selection: $appState.selectedIssue,
-                showAssigneeColumn: showAssigneeColumn,
-                showUpdatedColumn: showUpdatedColumn,
-                isLoading: appState.isLoadingIssues
-            )
+            Group {
+                if let selection = appState.selectedSidebarItem, selection.isBoard {
+                    IssueBoardView(
+                        boardTitle: selection.title,
+                        issues: appState.filteredIssues(searchQuery: searchQuery),
+                        selection: $appState.selectedIssue,
+                        isLoading: appState.isLoadingIssues
+                    )
+                } else {
+                    IssueListView(
+                        issues: appState.filteredIssues(searchQuery: searchQuery),
+                        selection: $appState.selectedIssue,
+                        showAssigneeColumn: showAssigneeColumn,
+                        showUpdatedColumn: showUpdatedColumn,
+                        isLoading: appState.isLoadingIssues
+                    )
+                }
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .automatic) {
                     NewIssueToolbar(container: container)
                         .frame(maxWidth: 280)
-                }
-
-                if appState.isSyncing {
-                    ToolbarItem(placement: .automatic) {
-                        SyncStatusIndicator(label: appState.syncStatusMessage)
-                    }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -77,7 +84,7 @@ private struct RootContentView: View {
                     } label: {
                         Label("Columns", systemImage: "tablecells")
                     }
-                    .help("Show sortable columns or merge details into the title row")
+                    .help("Show or hide optional columns in the issue list")
                 }
 
                 #if DEBUG
@@ -152,7 +159,7 @@ private struct RootContentView: View {
 
 }
 
-private struct SyncStatusIndicator: View {
+struct SyncStatusIndicator: View {
     let label: String?
 
     var body: some View {

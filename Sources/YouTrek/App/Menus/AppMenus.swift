@@ -7,7 +7,7 @@ struct AppMenus: Commands {
     var body: some Commands {
         CommandMenu("Issues") {
             Button("New Issue") {
-                container.issueComposer.beginNewIssue(withTitle: "Untitled Issue")
+                container.beginNewIssue(withTitle: "Untitled Issue")
             }
             .keyboardShortcut("n", modifiers: [.command])
 

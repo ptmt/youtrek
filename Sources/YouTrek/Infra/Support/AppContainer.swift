@@ -9,6 +9,7 @@ final class AppContainer: ObservableObject {
     let commandPalette: CommandPaletteCoordinator
     let router: WindowRouter
     let syncCoordinator: SyncCoordinator
+    let issueDraftStore: IssueDraftStore
     let authRepository: AuthRepository
     let networkMonitor: NetworkRequestMonitor
 
@@ -16,6 +17,8 @@ final class AppContainer: ObservableObject {
     private let issueRepositorySwitcher: SwitchableIssueRepository
     private let authRepositorySwitcher: SwitchableAuthRepository
     private let savedQueryRepositorySwitcher: SwitchableSavedQueryRepository
+    private let boardRepositorySwitcher: SwitchableIssueBoardRepository
+    private let boardLocalStore: IssueBoardLocalStore
     private var lastLoadedSidebarID: SidebarItem.ID?
     @Published private(set) var supportsBrowserAuth: Bool = false
     @Published private(set) var requiresSetup: Bool = true
@@ -26,36 +29,46 @@ final class AppContainer: ObservableObject {
         commandPalette: CommandPaletteCoordinator,
         router: WindowRouter,
         syncCoordinator: SyncCoordinator,
+        issueDraftStore: IssueDraftStore,
         authRepository: AuthRepository,
         networkMonitor: NetworkRequestMonitor,
         configurationStore: AppConfigurationStore,
         issueRepositorySwitcher: SwitchableIssueRepository,
         authRepositorySwitcher: SwitchableAuthRepository,
-        savedQueryRepositorySwitcher: SwitchableSavedQueryRepository
+        savedQueryRepositorySwitcher: SwitchableSavedQueryRepository,
+        boardRepositorySwitcher: SwitchableIssueBoardRepository,
+        boardLocalStore: IssueBoardLocalStore
     ) {
         self.appState = appState
         self.issueComposer = issueComposer
         self.commandPalette = commandPalette
         self.router = router
         self.syncCoordinator = syncCoordinator
+        self.issueDraftStore = issueDraftStore
         self.authRepository = authRepository
         self.networkMonitor = networkMonitor
         self.configurationStore = configurationStore
         self.issueRepositorySwitcher = issueRepositorySwitcher
         self.authRepositorySwitcher = authRepositorySwitcher
         self.savedQueryRepositorySwitcher = savedQueryRepositorySwitcher
+        self.boardRepositorySwitcher = boardRepositorySwitcher
+        self.boardLocalStore = boardLocalStore
     }
 
     static let live: AppContainer = {
         let state = AppState()
         let router = WindowRouter()
-        let composer = IssueComposer(router: router)
+        let composer = IssueComposer()
         let palette = CommandPaletteCoordinator(router: router)
         let configurationStore = AppConfigurationStore()
+        let draftStore = IssueDraftStore()
         let networkMonitor = NetworkRequestMonitor()
+        let initialRequiresSetup = AppContainer.requiresSetupOnLaunch(configurationStore: configurationStore)
         let authSwitcher = SwitchableAuthRepository(initial: PreviewAuthRepository())
         let issueSwitcher = SwitchableIssueRepository(initial: EmptyIssueRepository())
         let savedQuerySwitcher = SwitchableSavedQueryRepository(initial: PreviewSavedQueryRepository())
+        let boardSwitcher = SwitchableIssueBoardRepository(initial: PreviewIssueBoardRepository())
+        let boardStore = IssueBoardLocalStore()
         let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
             await MainActor.run {
                 state?.updateSyncActivity(isSyncing: pendingCount > 0, label: label)
@@ -76,13 +89,17 @@ final class AppContainer: ObservableObject {
             commandPalette: palette,
             router: router,
             syncCoordinator: sync,
+            issueDraftStore: draftStore,
             authRepository: authSwitcher,
             networkMonitor: networkMonitor,
             configurationStore: configurationStore,
             issueRepositorySwitcher: issueSwitcher,
             authRepositorySwitcher: authSwitcher,
-            savedQueryRepositorySwitcher: savedQuerySwitcher
+            savedQueryRepositorySwitcher: savedQuerySwitcher,
+            boardRepositorySwitcher: boardSwitcher,
+            boardLocalStore: boardStore
         )
+        container.requiresSetup = initialRequiresSetup
         Task { await container.configureIfNeeded() }
         Task { await container.bootstrap() }
         return container
@@ -91,15 +108,18 @@ final class AppContainer: ObservableObject {
     static let preview: AppContainer = {
         let state = AppState()
         let router = WindowRouter()
-        let composer = IssueComposer(router: router)
+        let composer = IssueComposer()
         let palette = CommandPaletteCoordinator(router: router)
         let authRepository = PreviewAuthRepository()
         let issueRepository = PreviewIssueRepository()
         let store = AppConfigurationStore()
+        let draftStore = IssueDraftStore()
         let networkMonitor = NetworkRequestMonitor()
         let authSwitcher = SwitchableAuthRepository(initial: authRepository)
         let issueSwitcher = SwitchableIssueRepository(initial: issueRepository)
         let savedQuerySwitcher = SwitchableSavedQueryRepository(initial: PreviewSavedQueryRepository())
+        let boardSwitcher = SwitchableIssueBoardRepository(initial: PreviewIssueBoardRepository())
+        let boardStore = IssueBoardLocalStore()
         let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
             await MainActor.run {
                 state?.updateSyncActivity(isSyncing: pendingCount > 0, label: label)
@@ -120,21 +140,27 @@ final class AppContainer: ObservableObject {
             commandPalette: palette,
             router: router,
             syncCoordinator: sync,
+            issueDraftStore: draftStore,
             authRepository: authSwitcher,
             networkMonitor: networkMonitor,
             configurationStore: store,
             issueRepositorySwitcher: issueSwitcher,
             authRepositorySwitcher: authSwitcher,
-            savedQueryRepositorySwitcher: savedQuerySwitcher
+            savedQueryRepositorySwitcher: savedQuerySwitcher,
+            boardRepositorySwitcher: boardSwitcher,
+            boardLocalStore: boardStore
         )
     }()
 
     func bootstrap() async {
-        let savedQueries = (try? await syncCoordinator.enqueue(label: "Sync saved searches") {
+        async let savedQueries = try syncCoordinator.enqueue(label: "Sync saved searches") {
             try await self.savedQueryRepositorySwitcher.fetchSavedQueries()
-        }) ?? []
-        let sections = buildSidebarSections(savedQueries: savedQueries)
-        let preferredSelectionID = preferredSelectionID(from: savedQueries)
+        }
+        async let boards = loadBoardsForSidebar()
+        let resolvedSavedQueries = (try? await savedQueries) ?? []
+        let resolvedBoards = await boards
+        let sections = buildSidebarSections(savedQueries: resolvedSavedQueries, boards: resolvedBoards)
+        let preferredSelectionID = preferredSelectionID(from: resolvedSavedQueries)
 
         appState.updateSidebar(sections: sections, preferredSelectionID: preferredSelectionID)
         if let selection = appState.selectedSidebarItem {
@@ -146,7 +172,10 @@ final class AppContainer: ObservableObject {
             await self.syncCoordinator.flushPendingMutations()
         }
 
-        let queriesToPrefetch = sections.flatMap(\.items).map(\.query)
+        let queriesToPrefetch = sections
+            .flatMap(\.items)
+            .filter(\.isBoard)
+            .map(\.query)
         Task { [weak self] in
             guard let self else { return }
             for query in queriesToPrefetch {
@@ -180,6 +209,40 @@ final class AppContainer: ObservableObject {
         }
     }
 
+    func beginNewIssue(withTitle title: String) {
+        issueComposer.prepareNewIssue(title: title)
+        router.openNewIssueWindow()
+
+        Task { [weak self] in
+            guard let self else { return }
+            guard let defaults = await issueDraftStore.latestSubmittedDraft() else { return }
+            await MainActor.run {
+                self.issueComposer.applyDefaults(from: defaults)
+            }
+        }
+    }
+
+    func submitIssueDraft() {
+        guard let draft = issueComposer.makeDraft() else { return }
+        issueComposer.resetDraft()
+
+        Task { [weak self] in
+            guard let self else { return }
+            let record = await issueDraftStore.saveDraft(draft)
+            do {
+                let created = try await syncCoordinator.enqueue(label: "Create issue") {
+                    try await self.issueRepositorySwitcher.createIssue(draft: draft)
+                }
+                await issueDraftStore.markDraftSubmitted(id: record.id)
+                await MainActor.run {
+                    self.appState.updateIssue(created)
+                }
+            } catch {
+                await issueDraftStore.markDraftFailed(id: record.id, errorDescription: error.localizedDescription)
+            }
+        }
+    }
+
     func deleteSavedSearch(id: String) async {
         do {
             try await syncCoordinator.enqueue(label: "Delete saved search") {
@@ -193,7 +256,8 @@ final class AppContainer: ObservableObject {
         let savedQueries = (try? await syncCoordinator.enqueue(label: "Sync saved searches") {
             try await self.savedQueryRepositorySwitcher.fetchSavedQueries()
         }) ?? []
-        let sections = buildSidebarSections(savedQueries: savedQueries)
+        let boards = await boardLocalStore.loadBoards()
+        let sections = buildSidebarSections(savedQueries: savedQueries, boards: boards)
         let preferredSelectionID = preferredSelectionID(from: savedQueries)
         appState.updateSidebar(sections: sections, preferredSelectionID: preferredSelectionID)
     }
@@ -235,8 +299,10 @@ final class AppContainer: ObservableObject {
         let apiConfiguration = YouTrackAPIConfiguration(baseURL: apiBaseURL, tokenProvider: tokenProvider)
         let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration, monitor: networkMonitor)
         let savedQueryRepository = YouTrackSavedQueryRepository(configuration: apiConfiguration, monitor: networkMonitor)
+        let boardRepository = YouTrackIssueBoardRepository(configuration: apiConfiguration, monitor: networkMonitor)
         await issueRepositorySwitcher.replace(with: issueRepository)
         await savedQueryRepositorySwitcher.replace(with: savedQueryRepository)
+        await boardRepositorySwitcher.replace(with: boardRepository)
 
         await MainActor.run {
             requiresSetup = false
@@ -280,15 +346,32 @@ final class AppContainer: ObservableObject {
         let apiConfiguration = YouTrackAPIConfiguration(baseURL: configuration.apiBaseURL, tokenProvider: tokenProvider)
         let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration, monitor: networkMonitor)
         let savedQueryRepository = YouTrackSavedQueryRepository(configuration: apiConfiguration, monitor: networkMonitor)
+        let boardRepository = YouTrackIssueBoardRepository(configuration: apiConfiguration, monitor: networkMonitor)
         await issueRepositorySwitcher.replace(with: issueRepository)
         await savedQueryRepositorySwitcher.replace(with: savedQueryRepository)
+        await boardRepositorySwitcher.replace(with: boardRepository)
         supportsBrowserAuth = true
         requiresSetup = false
     }
 }
 
 private extension AppContainer {
-    func buildSidebarSections(savedQueries: [SavedQuery]) -> [SidebarSection] {
+    static func requiresSetupOnLaunch(configurationStore: AppConfigurationStore) -> Bool {
+        if (try? YouTrackOAuthConfiguration.loadFromEnvironment()) != nil {
+            return false
+        }
+
+        guard configurationStore.loadBaseURL() != nil,
+              let token = configurationStore.loadToken(),
+              !token.isEmpty else {
+            return true
+        }
+        return false
+    }
+}
+
+private extension AppContainer {
+    func buildSidebarSections(savedQueries: [SavedQuery], boards: [IssueBoard]) -> [SidebarSection] {
         let visibleSavedQueries = limitedSavedQueries(from: savedQueries)
         let page = IssueQuery.Page(size: 50, offset: 0)
         let savedInbox = visibleSavedQueries.first { $0.name.caseInsensitiveCompare("Inbox") == .orderedSame }
@@ -301,11 +384,21 @@ private extension AppContainer {
         smartItems.append(.createdByMe(page: page))
 
         let savedItems = visibleSavedQueries.map { SidebarItem.savedSearch($0, page: page) }
+        let favoriteBoards = boards.filter(\.isFavorite)
+        let boardItems = favoriteBoards.map { SidebarItem.board($0, page: page) }
 
         var sections: [SidebarSection] = []
         if !smartItems.isEmpty {
             sections.append(SidebarSection(id: "smart", title: "Smart Filters", items: smartItems))
         }
+        sections.append(
+            SidebarSection(
+                id: "boards",
+                title: "Agile Boards",
+                items: boardItems,
+                emptyMessage: "No favorite boards"
+            )
+        )
         if !savedItems.isEmpty {
             sections.append(SidebarSection(id: "saved", title: "Saved Searches", items: savedItems))
         }
@@ -324,6 +417,19 @@ private extension AppContainer {
         let limit = 7
         guard savedQueries.count > limit else { return savedQueries }
         return Array(savedQueries.prefix(limit))
+    }
+
+    func loadBoardsForSidebar() async -> [IssueBoard] {
+        let cachedBoards = await boardLocalStore.loadBoards()
+        do {
+            let remoteBoards = try await syncCoordinator.enqueue(label: "Sync agile boards") {
+                try await self.boardRepositorySwitcher.fetchBoards()
+            }
+            await boardLocalStore.saveRemoteBoards(remoteBoards)
+            return await boardLocalStore.loadBoards()
+        } catch {
+            return cachedBoards
+        }
     }
 }
 
@@ -349,24 +455,58 @@ final class WindowRouter: ObservableObject {
 final class IssueComposer: ObservableObject {
     @Published var draftTitle: String = ""
     @Published var draftDescription: String = ""
+    @Published var draftProjectID: String = ""
+    @Published var draftModule: String = ""
+    @Published var draftAssigneeID: String = ""
+    @Published var draftPriority: IssuePriority = .normal
 
-    private let router: WindowRouter
-
-    init(router: WindowRouter) {
-        self.router = router
+    var canSubmit: Bool {
+        !draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !draftProjectID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    func beginNewIssue(withTitle title: String) {
+    func prepareNewIssue(title: String) {
         draftTitle = title
         draftDescription = ""
-        router.openNewIssueWindow()
+        draftProjectID = ""
+        draftModule = ""
+        draftAssigneeID = ""
+        draftPriority = .normal
     }
 
-    func submitDraft() {
-        // TODO: Feed into IssueRepository once mutations are wired.
+    func applyDefaults(from draft: IssueDraft) {
+        draftProjectID = draft.projectID
+        draftModule = draft.module ?? ""
+        draftAssigneeID = draft.assigneeID ?? ""
+        draftPriority = draft.priority
+    }
+
+    func makeDraft() -> IssueDraft? {
+        let trimmedTitle = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedProject = draftProjectID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, !trimmedProject.isEmpty else { return nil }
+
+        let trimmedDescription = draftDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedModule = draftModule.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAssignee = draftAssigneeID.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return IssueDraft(
+            title: trimmedTitle,
+            description: trimmedDescription,
+            projectID: trimmedProject,
+            module: trimmedModule.isEmpty ? nil : trimmedModule,
+            priority: draftPriority,
+            assigneeID: trimmedAssignee.isEmpty ? nil : trimmedAssignee
+        )
+    }
+
+    func resetDraft() {
         draftTitle = ""
         draftDescription = ""
-        router.consumeNewIssueWindowFlag()
+        draftProjectID = ""
+        draftModule = ""
+        draftAssigneeID = ""
+        draftPriority = .normal
     }
 }
 
@@ -438,5 +578,15 @@ private struct PreviewSavedQueryRepository: SavedQueryRepository {
 
     func deleteSavedQuery(id: String) async throws {
         throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support deletions")
+    }
+}
+
+private struct PreviewIssueBoardRepository: IssueBoardRepository {
+    func fetchBoards() async throws -> [IssueBoard] {
+        [
+            IssueBoard(id: "preview-board-1", name: "Growth Sprint Board", isFavorite: true, projectNames: ["YT"]),
+            IssueBoard(id: "preview-board-2", name: "Bug Triage", isFavorite: true, projectNames: ["YT"]),
+            IssueBoard(id: "preview-board-3", name: "Internal Roadmap", isFavorite: false, projectNames: ["YT"])
+        ]
     }
 }

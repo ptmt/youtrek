@@ -141,6 +141,85 @@ struct YouTrackAPIClient: Sendable {
         }
     }
 
+    func post(path: String, queryItems: [URLQueryItem] = [], body: Data?) async throws -> Data {
+        try await AppDebugSettings.applySlowResponseIfNeeded()
+        guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: true) else {
+            throw YouTrackAPIError.unsupportedURL
+        }
+
+        let appendedPath: String
+        if components.path.isEmpty {
+            appendedPath = "/\(path)"
+        } else {
+            appendedPath = components.path.appendingPathComponent(path)
+        }
+
+        components.path = appendedPath
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
+
+        guard let url = components.url else {
+            throw YouTrackAPIError.unsupportedURL
+        }
+
+        let token = try await configuration.tokenProvider.token()
+        guard !token.isEmpty else {
+            throw YouTrackAPIError.missingAccessToken
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let requestStart = Date()
+        let requestMethod = request.httpMethod ?? "POST"
+        let requestURL = request.url
+        var didLog = false
+
+        func logOnce(response: URLResponse?, error: Error?) async {
+            guard !didLog, let monitor else { return }
+            didLog = true
+            let duration = Date().timeIntervalSince(requestStart)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode
+            let errorDescription = error?.localizedDescription
+            await monitor.record(
+                method: requestMethod,
+                url: requestURL,
+                statusCode: statusCode,
+                duration: duration,
+                errorDescription: errorDescription
+            )
+        }
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                let error = YouTrackAPIError.invalidResponse
+                await logOnce(response: response, error: error)
+                throw error
+            }
+
+            guard (200..<300).contains(http.statusCode) else {
+                let body = String(data: data, encoding: .utf8)
+                let error = YouTrackAPIError.http(statusCode: http.statusCode, body: body)
+                await logOnce(response: response, error: error)
+                throw error
+            }
+
+            await logOnce(response: response, error: nil)
+            return data
+        } catch let error as YouTrackAPIError {
+            await logOnce(response: nil, error: error)
+            throw error
+        } catch {
+            let transportError = YouTrackAPIError.transport(underlying: error)
+            await logOnce(response: nil, error: transportError)
+            throw transportError
+        }
+    }
+
     func delete(path: String, queryItems: [URLQueryItem] = []) async throws {
         try await AppDebugSettings.applySlowResponseIfNeeded()
         guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: true) else {

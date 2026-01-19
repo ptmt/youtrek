@@ -72,3 +72,19 @@ actor SwitchableSavedQueryRepository: SavedQueryRepository {
         try await current.deleteSavedQuery(id: id)
     }
 }
+
+actor SwitchableIssueBoardRepository: IssueBoardRepository {
+    private var current: IssueBoardRepository
+
+    init(initial: IssueBoardRepository) {
+        self.current = initial
+    }
+
+    func replace(with repository: IssueBoardRepository) {
+        current = repository
+    }
+
+    func fetchBoards() async throws -> [IssueBoard] {
+        try await current.fetchBoards()
+    }
+}

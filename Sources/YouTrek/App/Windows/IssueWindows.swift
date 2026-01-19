@@ -24,12 +24,21 @@ struct NewIssueWindow: View {
     var body: some View {
         Form {
             TextField("Title", text: draftTitleBinding)
+            TextField("Project", text: draftProjectBinding, prompt: Text("Project ID or short name"))
+            TextField("Module", text: draftModuleBinding, prompt: Text("Subsystem or component"))
+            TextField("Assignee", text: draftAssigneeBinding, prompt: Text("Username or user ID"))
+            Picker("Priority", selection: draftPriorityBinding) {
+                ForEach(IssuePriority.allCases, id: \.self) { priority in
+                    Text(priority.displayName).tag(priority)
+                }
+            }
             TextField("Description", text: draftDescriptionBinding, axis: .vertical)
                 .lineLimit(5...10)
-            Button("Submit Issue") {
+            Button("Create") {
                 submit()
             }
-            .keyboardShortcut(.return, modifiers: [.command])
+            .keyboardShortcut(.defaultAction)
+            .disabled(!container.issueComposer.canSubmit)
         }
         .padding(24)
         .frame(minWidth: 420, minHeight: 360)
@@ -49,10 +58,37 @@ struct NewIssueWindow: View {
         )
     }
 
+    private var draftProjectBinding: Binding<String> {
+        Binding(
+            get: { container.issueComposer.draftProjectID },
+            set: { container.issueComposer.draftProjectID = $0 }
+        )
+    }
+
+    private var draftModuleBinding: Binding<String> {
+        Binding(
+            get: { container.issueComposer.draftModule },
+            set: { container.issueComposer.draftModule = $0 }
+        )
+    }
+
+    private var draftAssigneeBinding: Binding<String> {
+        Binding(
+            get: { container.issueComposer.draftAssigneeID },
+            set: { container.issueComposer.draftAssigneeID = $0 }
+        )
+    }
+
+    private var draftPriorityBinding: Binding<IssuePriority> {
+        Binding(
+            get: { container.issueComposer.draftPriority },
+            set: { container.issueComposer.draftPriority = $0 }
+        )
+    }
+
     private func submit() {
-        guard !container.issueComposer.draftTitle.isEmpty else { return }
         Task { @MainActor in
-            container.issueComposer.submitDraft()
+            container.submitIssueDraft()
             dismissWindow(id: SceneID.newIssue.rawValue)
         }
     }

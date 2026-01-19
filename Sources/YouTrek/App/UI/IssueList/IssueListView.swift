@@ -83,21 +83,6 @@ struct IssueListView: View {
         HStack(spacing: 8) {
             Text(issue.projectName)
                 .foregroundStyle(.secondary)
-            if !showAssigneeColumn {
-                if let assignee = issue.assignee {
-                    Label(assignee.displayName, systemImage: "person.fill")
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(issue.assigneeDisplayName)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if !showUpdatedColumn {
-                Label(issue.updatedAt.formatted(.relative(presentation: .named)), systemImage: "clock")
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(.secondary)
-            }
             Text(issue.status.displayName)
                 .foregroundStyle(issue.status.tint)
             Text(issue.priority.displayName)

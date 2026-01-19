@@ -29,7 +29,7 @@ struct NewIssueToolbar: View {
     private func createDraft() {
         let trimmed = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        container.issueComposer.beginNewIssue(withTitle: trimmed)
+        container.beginNewIssue(withTitle: trimmed)
         draftTitle = ""
     }
 }

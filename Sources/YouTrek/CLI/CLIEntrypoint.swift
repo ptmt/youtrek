@@ -7,6 +7,7 @@ enum CLIEntrypoint {
         let knownCommands: Set<String> = [
             "auth",
             "issues",
+            "agile-boards",
             "saved-queries",
             "install-cli",
             "cli",
@@ -42,6 +43,8 @@ private enum CLIRunner {
                 return try await runSavedQueries(arguments: remaining)
             case "issues":
                 return try await runIssues(arguments: remaining)
+            case "agile-boards":
+                return try await runAgileBoards(arguments: remaining)
             case "install-cli":
                 return try await runInstallCLI(arguments: remaining)
             case "cli":
@@ -215,6 +218,41 @@ private enum CLIRunner {
         }
     }
 
+    private static func runAgileBoards(arguments: [String]) async throws -> Int {
+        guard let subcommand = arguments.first else {
+            CLIOutput.printAgileBoardsHelp()
+            return 0
+        }
+        let remaining = Array(arguments.dropFirst())
+
+        switch subcommand {
+        case "list":
+            let parsed = try parseOptions(
+                remaining,
+                valueOptions: ["--base-url", "--token"],
+                flagOptions: ["--json"]
+            )
+            if parsed.flags.contains("--help") {
+                CLIOutput.printAgileBoardsHelp()
+                return 0
+            }
+
+            let connection = try resolveConnection(options: parsed)
+            let repository = YouTrackIssueBoardRepository(configuration: connection.configuration)
+            let boards = try await repository.fetchBoards()
+
+            if parsed.flags.contains("--json") {
+                let output = boards.map(AgileBoardOutput.init)
+                CLIOutput.printJSON(output)
+            } else {
+                CLIOutput.printAgileBoards(boards)
+            }
+            return 0
+        default:
+            throw CLIError.invalidCommand("agile-boards \(subcommand)")
+        }
+    }
+
     private static func runInstallCLI(arguments: [String]) async throws -> Int {
         let parsed = try parseOptions(
             arguments,
@@ -349,6 +387,7 @@ private struct CLIOutput {
               auth status
               auth login --base-url <url> --token <pat>
               issues list [--query <ytql>] [--saved <name>] [--top <n>] [--json]
+              agile-boards list [--json]
               saved-queries list [--json]
               install-cli [--path <path>] [--force]
 
@@ -381,6 +420,15 @@ private struct CLIOutput {
             """
             Saved queries commands:
               youtrek saved-queries list [--json]
+            """
+        )
+    }
+
+    static func printAgileBoardsHelp() {
+        print(
+            """
+            Agile boards commands:
+              youtrek agile-boards list [--json]
             """
         )
     }
@@ -441,6 +489,24 @@ private struct CLIOutput {
         }
 
         printTable(headers: ["Name", "Query"], rows: rows)
+    }
+
+    static func printAgileBoards(_ boards: [IssueBoard]) {
+        if boards.isEmpty {
+            print("No agile boards found.")
+            return
+        }
+
+        let rows = boards.map { board in
+            [
+                board.name,
+                board.isFavorite ? "Yes" : "No",
+                board.projectNames.joined(separator: ", "),
+                board.id
+            ]
+        }
+
+        printTable(headers: ["Name", "Favorite", "Projects", "ID"], rows: rows)
     }
 
     static func printJSON<T: Encodable>(_ value: T) {
@@ -542,5 +608,19 @@ private struct SavedQueryOutput: Encodable {
         self.id = savedQuery.id
         self.name = savedQuery.name
         self.query = savedQuery.query
+    }
+}
+
+private struct AgileBoardOutput: Encodable {
+    let id: String
+    let name: String
+    let isFavorite: Bool
+    let projects: [String]
+
+    init(_ board: IssueBoard) {
+        self.id = board.id
+        self.name = board.name
+        self.isFavorite = board.isFavorite
+        self.projects = board.projectNames
     }
 }
