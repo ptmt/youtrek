@@ -20,7 +20,7 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
     func fetchBoards() async throws -> [IssueBoard] {
         let baseFields = Self.agileFieldsBase
         let fieldCandidates = [
-            "id,name,favorite,projects(id,name,shortName,archived)"
+            "\(baseFields),favorite"
         ]
 
         var lastError: Error?

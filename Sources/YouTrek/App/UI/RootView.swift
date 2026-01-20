@@ -164,6 +164,7 @@ private struct RootContentView: View {
         }
         .onChange(of: appState.selectedSidebarItem) { _, selection in
             guard let selection else { return }
+            container.recordSidebarSelection(selection)
             Task {
                 await container.loadIssues(for: selection)
             }

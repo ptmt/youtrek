@@ -155,7 +155,7 @@ final class AppContainer: ObservableObject {
     func bootstrap() async {
         let cachedBoards = await boardLocalStore.loadBoards()
         let initialSections = buildSidebarSections(savedQueries: [], boards: cachedBoards)
-        let initialPreferredSelectionID = preferredSelectionID(from: [])
+        let initialPreferredSelectionID = storedSidebarSelectionID() ?? preferredSelectionID(from: [])
 
         appState.updateSidebar(sections: initialSections, preferredSelectionID: initialPreferredSelectionID)
         startBoardPrefetch(cachedBoards)
@@ -314,6 +314,10 @@ final class AppContainer: ObservableObject {
         configurationStore.save(baseURL: url)
     }
 
+    func recordSidebarSelection(_ selection: SidebarItem) {
+        configurationStore.saveLastSidebarSelectionID(selection.id)
+    }
+
     var browserAuthAvailable: Bool {
         supportsBrowserAuth
     }
@@ -383,7 +387,7 @@ private extension AppContainer {
         let resolvedBoards = await boardsResult
 
         let sections = buildSidebarSections(savedQueries: resolvedSavedQueries, boards: resolvedBoards)
-        let preferredSelectionID = preferredSelectionID(from: resolvedSavedQueries)
+        let preferredSelectionID = storedSidebarSelectionID() ?? preferredSelectionID(from: resolvedSavedQueries)
         let previousSelectionID = appState.selectedSidebarItem?.id
 
         appState.updateSidebar(sections: sections, preferredSelectionID: preferredSelectionID)
@@ -426,6 +430,10 @@ private extension AppContainer {
             sections.append(SidebarSection(id: "saved", title: "Saved Searches", items: savedItems))
         }
         return sections
+    }
+
+    func storedSidebarSelectionID() -> SidebarItem.ID? {
+        configurationStore.loadLastSidebarSelectionID()
     }
 
     func preferredSelectionID(from savedQueries: [SavedQuery]) -> SidebarItem.ID? {

@@ -45,7 +45,9 @@ final class AppState: ObservableObject {
         sidebarSections = sections
         let items = sections.flatMap(\.items)
 
-        if let current = selectedSidebarItem, items.contains(current) {
+        if let current = selectedSidebarItem,
+           let updated = items.first(where: { $0.id == current.id }) {
+            selectedSidebarItem = updated
             return
         }
 

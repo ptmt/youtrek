@@ -4,6 +4,7 @@ struct AppConfigurationStore {
     private enum Keys {
         static let baseURL = "com.potomushto.youtrek.config.base-url"
         static let tokenAccount = "com.potomushto.youtrek.config.token"
+        static let lastSidebarSelectionID = "com.potomushto.youtrek.config.last-sidebar-selection"
     }
 
     private let defaults: UserDefaults
@@ -46,6 +47,14 @@ struct AppConfigurationStore {
 
     func clearToken() throws {
         try keychain.delete(account: Keys.tokenAccount)
+    }
+
+    func loadLastSidebarSelectionID() -> String? {
+        defaults.string(forKey: Keys.lastSidebarSelectionID)
+    }
+
+    func saveLastSidebarSelectionID(_ id: String) {
+        defaults.set(id, forKey: Keys.lastSidebarSelectionID)
     }
 }
 
