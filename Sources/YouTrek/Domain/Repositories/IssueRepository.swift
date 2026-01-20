@@ -29,6 +29,29 @@ struct IssueQuery: Equatable, Hashable, Sendable {
     }
 }
 
+extension IssueQuery {
+    static func boardQuery(boardName: String, sprintName: String?) -> String {
+        let trimmedBoard = boardName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let escapedBoard = escapeQueryValue(trimmedBoard)
+        var query = "board: {\(escapedBoard)}"
+        if let sprintName {
+            let trimmedSprint = sprintName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedSprint.isEmpty {
+                let escapedSprint = escapeQueryValue(trimmedSprint)
+                query += " Sprint: {\(escapedSprint)}"
+            }
+        }
+        return query
+    }
+
+    private static func escapeQueryValue(_ value: String) -> String {
+        var escaped = value.replacingOccurrences(of: "\\", with: "\\\\")
+        escaped = escaped.replacingOccurrences(of: "{", with: "\\{")
+        escaped = escaped.replacingOccurrences(of: "}", with: "\\}")
+        return escaped
+    }
+}
+
 enum IssueSort: Equatable, Hashable, Sendable {
     case updated(descending: Bool)
     case priority(descending: Bool)

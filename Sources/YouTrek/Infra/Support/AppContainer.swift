@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import SwiftUI
+import AppKit
 
 @MainActor
 final class AppContainer: ObservableObject {
@@ -19,7 +20,7 @@ final class AppContainer: ObservableObject {
     private let savedQueryRepositorySwitcher: SwitchableSavedQueryRepository
     private let boardRepositorySwitcher: SwitchableIssueBoardRepository
     private let boardLocalStore: IssueBoardLocalStore
-    private var lastLoadedSidebarID: SidebarItem.ID?
+    private var lastLoadedIssueQuery: IssueQuery?
     @Published private(set) var supportsBrowserAuth: Bool = false
     @Published private(set) var requiresSetup: Bool = true
 
@@ -181,19 +182,98 @@ final class AppContainer: ObservableObject {
     }
 
     func loadIssues(for selection: SidebarItem) async {
-        guard selection.id != lastLoadedSidebarID else { return }
-        lastLoadedSidebarID = selection.id
+        let query = issueQuery(for: selection)
+        guard query != lastLoadedIssueQuery else { return }
+        lastLoadedIssueQuery = query
         appState.setIssuesLoading(true)
 
-        let cachedIssues = await syncCoordinator.loadCachedIssues(for: selection.query)
+        let cachedIssues = await syncCoordinator.loadCachedIssues(for: query)
         if !cachedIssues.isEmpty {
             appState.replaceIssues(with: cachedIssues)
             appState.setIssuesLoading(false)
+            await refreshIssueSeenUpdates(for: cachedIssues)
         }
 
-        let issues = (try? await syncCoordinator.refreshIssues(using: selection.query)) ?? []
+        let issues = (try? await syncCoordinator.refreshIssues(using: query)) ?? []
         appState.replaceIssues(with: issues)
         appState.setIssuesLoading(false)
+        await refreshIssueSeenUpdates(for: issues)
+        if selection.isBoard, let boardID = selection.boardID {
+            appState.recordBoardSync(boardID: boardID)
+        }
+    }
+
+    func refreshBoardIssues(for item: SidebarItem) async {
+        guard item.isBoard else { return }
+        let isSelected = appState.selectedSidebarItem?.id == item.id
+        if isSelected {
+            appState.setIssuesLoading(true)
+        }
+        let query = issueQuery(for: item)
+        let issues = (try? await syncCoordinator.refreshIssues(using: query)) ?? []
+        if isSelected {
+            appState.replaceIssues(with: issues)
+            appState.setIssuesLoading(false)
+            await refreshIssueSeenUpdates(for: issues)
+        }
+        if let boardID = item.boardID {
+            appState.recordBoardSync(boardID: boardID)
+        }
+    }
+
+    func sprintFilter(for board: IssueBoard) -> BoardSprintFilter {
+        appState.sprintFilter(for: board)
+    }
+
+    func updateSprintFilter(_ filter: BoardSprintFilter, for board: IssueBoard) async {
+        let resolved = board.resolveSprintFilter(filter)
+        appState.updateSprintFilter(resolved, for: board.id)
+        if let selection = appState.selectedSidebarItem, selection.boardID == board.id {
+            await loadIssues(for: selection)
+        }
+    }
+
+    func boardWebURL(for item: SidebarItem) -> URL? {
+        guard let boardID = item.boardID ?? item.board?.id else { return nil }
+        guard let apiBase = configurationStore.loadBaseURL() else { return nil }
+        var uiBase = apiBase
+        if uiBase.lastPathComponent.lowercased() == "api" {
+            uiBase.deleteLastPathComponent()
+        }
+        uiBase.appendPathComponent("agiles")
+        uiBase.appendPathComponent(boardID)
+        return uiBase
+    }
+
+    func openBoardInWeb(_ item: SidebarItem) {
+        guard let url = boardWebURL(for: item) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    func clearCacheAndRefetch() {
+        Task { [weak self] in
+            guard let self else { return }
+            await syncCoordinator.clearCachedIssues()
+            await boardLocalStore.clearCache()
+            await MainActor.run {
+                appState.replaceIssues(with: [])
+                appState.resetIssueSeenUpdates()
+                appState.selectedIssue = nil
+                appState.setIssuesLoading(true)
+                self.lastLoadedIssueQuery = nil
+            }
+            await refreshSidebarData()
+            if let selection = appState.selectedSidebarItem {
+                await loadIssues(for: selection)
+            }
+        }
+    }
+
+    func markIssueSeen(_ issue: IssueSummary) {
+        appState.markIssueSeen(issue)
+        Task { [weak self] in
+            await self?.syncCoordinator.markIssueSeen(issue)
+        }
     }
 
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async {
@@ -457,6 +537,10 @@ private extension AppContainer {
                 try await self.boardRepositorySwitcher.fetchBoards()
             }
             await boardLocalStore.saveRemoteBoards(remoteBoards)
+            let syncDate = Date()
+            for board in remoteBoards {
+                appState.recordBoardSync(boardID: board.id, at: syncDate)
+            }
             startBoardPrefetch(remoteBoards)
             return await boardLocalStore.loadBoards()
         } catch {
@@ -469,7 +553,7 @@ private extension AppContainer {
         let page = IssueQuery.Page(size: 50, offset: 0)
         let queries = boards
             .filter(\.isFavorite)
-            .map { SidebarItem.board($0, page: page).query }
+            .map { boardIssueQuery(for: $0, page: page) }
         guard !queries.isEmpty else { return }
         let coordinator = syncCoordinator
         Task.detached(priority: .background) {
@@ -477,6 +561,41 @@ private extension AppContainer {
                 _ = try? await coordinator.refreshIssues(using: query)
             }
         }
+    }
+
+    private func issueQuery(for selection: SidebarItem) -> IssueQuery {
+        guard selection.isBoard else { return selection.query }
+        let page = selection.query.page
+        let board = selection.board ?? IssueBoard(
+            id: selection.boardID ?? selection.id,
+            name: selection.title,
+            isFavorite: true,
+            projectNames: []
+        )
+        return boardIssueQuery(for: board, page: page)
+    }
+
+    private func boardIssueQuery(for board: IssueBoard, page: IssueQuery.Page) -> IssueQuery {
+        let filter = appState.sprintFilter(for: board)
+        let resolved = board.resolveSprintFilter(filter)
+        if resolved != filter {
+            appState.updateSprintFilter(resolved, for: board.id)
+        }
+        let sprintName = board.sprintName(for: resolved)
+        let rawQuery = IssueQuery.boardQuery(boardName: board.name, sprintName: sprintName)
+        return IssueQuery(
+            rawQuery: rawQuery,
+            search: "",
+            filters: [],
+            sort: .updated(descending: true),
+            page: page
+        )
+    }
+
+    func refreshIssueSeenUpdates(for issues: [IssueSummary]) async {
+        guard !issues.isEmpty else { return }
+        let updates = await syncCoordinator.loadIssueSeenUpdates(for: issues.map(\.id))
+        appState.updateIssueSeenUpdates(updates)
     }
 }
 

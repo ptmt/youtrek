@@ -64,7 +64,8 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
             skip += pageSize
         }
 
-        return mapBoards(allBoards)
+        let mapped = mapBoards(allBoards)
+        return await hydrateFavoriteBoardsIfNeeded(mapped, fields: fields)
     }
 
     private func mapBoards(_ boards: [YouTrackAgileBoard]) -> [IssueBoard] {
@@ -72,6 +73,8 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
             .map { board in
                 let isFavorite = board.favorite ?? board.isFavorite ?? board.isStarred ?? false
                 let projectNames = board.projects?.compactMap { $0.shortName ?? $0.name } ?? []
+                let mappedSprints = mapSprints(board.sprints, current: board.currentSprint)
+                let currentSprintID = board.currentSprint?.id
                 let columnFieldName = board.columnSettings?.field?.resolvedName
                 let columns = mapColumns(from: board.columnSettings)
                 let swimlaneSettings = mapSwimlaneSettings(from: board.swimlaneSettings)
@@ -80,6 +83,8 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
                     name: board.name,
                     isFavorite: isFavorite,
                     projectNames: projectNames,
+                    sprints: mappedSprints,
+                    currentSprintID: currentSprintID,
                     columnFieldName: columnFieldName,
                     columns: columns,
                     swimlaneSettings: swimlaneSettings,
@@ -88,6 +93,44 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
                 )
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private func hydrateFavoriteBoardsIfNeeded(_ boards: [IssueBoard], fields: String) async -> [IssueBoard] {
+        let favoritesNeedingDetails = boards.filter { board in
+            board.isFavorite && board.columns.isEmpty && board.columnFieldName == nil
+        }
+        guard !favoritesNeedingDetails.isEmpty else { return boards }
+
+        var detailedByID: [String: IssueBoard] = [:]
+        await withTaskGroup(of: (String, IssueBoard?).self) { group in
+            for board in favoritesNeedingDetails {
+                group.addTask { [weak self] in
+                    guard let self else { return (board.id, nil) }
+                    do {
+                        let detail = try await self.fetchBoardDetails(id: board.id, fields: fields)
+                        let mappedDetail = self.mapBoards([detail]).first
+                        return (board.id, mappedDetail)
+                    } catch {
+                        return (board.id, nil)
+                    }
+                }
+            }
+
+            for await (id, detail) in group {
+                if let detail {
+                    detailedByID[id] = detail
+                }
+            }
+        }
+
+        guard !detailedByID.isEmpty else { return boards }
+        return boards.map { detailedByID[$0.id] ?? $0 }
+    }
+
+    private func fetchBoardDetails(id: String, fields: String) async throws -> YouTrackAgileBoard {
+        let queryItems = [URLQueryItem(name: "fields", value: fields)]
+        let data = try await client.get(path: "agiles/\(id)", queryItems: queryItems)
+        return try decoder.decode(YouTrackAgileBoard.self, from: data)
     }
 
     private func mapColumns(from settings: YouTrackAgileBoard.ColumnSettings?) -> [IssueBoardColumn] {
@@ -102,7 +145,15 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
             .compactMap { column in
                 let valueNames = column.fieldValues?.compactMap { $0.resolvedName } ?? []
                 let presentation = column.presentation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                let title = presentation.isEmpty ? valueNames.joined(separator: ", ") : presentation
+                let fallbackName = column.resolvedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let title: String
+                if !presentation.isEmpty {
+                    title = presentation
+                } else if !fallbackName.isEmpty {
+                    title = fallbackName
+                } else {
+                    title = valueNames.joined(separator: ", ")
+                }
                 guard !title.isEmpty else { return nil }
                 return IssueBoardColumn(
                     id: column.id ?? UUID().uuidString,
@@ -127,6 +178,30 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
             values: values
         )
     }
+
+    private func mapSprints(_ sprints: [YouTrackAgileBoard.Sprint]?, current: YouTrackAgileBoard.Sprint?) -> [IssueBoardSprint] {
+        let mapped = (sprints ?? []).compactMap { mapSprint($0) }
+        guard let current, let currentMapped = mapSprint(current) else {
+            return mapped
+        }
+        if mapped.contains(where: { $0.id == currentMapped.id }) {
+            return mapped
+        }
+        return [currentMapped] + mapped
+    }
+
+    private func mapSprint(_ sprint: YouTrackAgileBoard.Sprint) -> IssueBoardSprint? {
+        let name = sprint.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !name.isEmpty else { return nil }
+        return IssueBoardSprint(
+            id: sprint.id,
+            name: name,
+            start: sprint.startDate,
+            finish: sprint.finishDate,
+            isArchived: sprint.archived ?? false,
+            isDefault: sprint.isDefault ?? false
+        )
+    }
 }
 
 private struct YouTrackAgileBoard: Decodable {
@@ -136,6 +211,8 @@ private struct YouTrackAgileBoard: Decodable {
     let isFavorite: Bool?
     let isStarred: Bool?
     let projects: [Project]?
+    let sprints: [Sprint]?
+    let currentSprint: Sprint?
     let orphansAtTheTop: Bool?
     let hideOrphansSwimlane: Bool?
     let columnSettings: ColumnSettings?
@@ -173,11 +250,17 @@ private struct YouTrackAgileBoard: Decodable {
 
     struct Column: Decodable {
         let id: String?
+        let name: String?
+        let localizedName: String?
         let presentation: String?
         let isResolved: Bool?
         let ordinal: Int?
         let parent: ColumnParent?
         let fieldValues: [FieldValue]?
+
+        var resolvedName: String? {
+            name ?? localizedName
+        }
     }
 
     struct ColumnParent: Decodable {
@@ -195,6 +278,25 @@ private struct YouTrackAgileBoard: Decodable {
             case enabled
             case field
             case values
+        }
+    }
+
+    struct Sprint: Decodable {
+        let id: String
+        let name: String?
+        let start: Int?
+        let finish: Int?
+        let archived: Bool?
+        let isDefault: Bool?
+
+        var startDate: Date? {
+            guard let start else { return nil }
+            return Date(timeIntervalSince1970: TimeInterval(start) / 1000.0)
+        }
+
+        var finishDate: Date? {
+            guard let finish else { return nil }
+            return Date(timeIntervalSince1970: TimeInterval(finish) / 1000.0)
         }
     }
 }
@@ -217,7 +319,7 @@ private extension YouTrackIssueBoardRepository {
         "projects(id,name,shortName,archived)",
         "sprints(id,name,goal,start,finish,archived,isDefault,unresolvedIssuesCount)",
         "currentSprint(id,name,goal,start,finish,archived,isDefault,unresolvedIssuesCount)",
-        "columnSettings(id,field(id,name,localizedName),columns(id,presentation,isResolved,ordinal,wipLimit(id,min,max),parent(id),fieldValues(id,name,localizedName,isResolved)))",
+        "columnSettings(id,field(id,name,localizedName),columns(id,name,localizedName,presentation,isResolved,ordinal,wipLimit(id,min,max),parent(id),fieldValues(id,name,localizedName,isResolved)))",
         "swimlaneSettings($type,id,enabled,field(id,name,localizedName),values(id,name,localizedName))",
         "sprintsSettings(id,isExplicit,cardOnSeveralSprints,defaultSprint(id,name),disableSprints,explicitQuery,sprintSyncField(id,name,localizedName),hideSubtasksOfCards)",
         "colorCoding(id)",

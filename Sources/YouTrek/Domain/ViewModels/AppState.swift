@@ -9,12 +9,15 @@ final class AppState: ObservableObject {
     @Published private(set) var sidebarSections: [SidebarSection] = []
     @Published var selectedIssue: IssueSummary?
     @Published private(set) var issues: [IssueSummary]
+    @Published private(set) var issueSeenUpdates: [IssueSummary.ID: Date] = [:]
     @Published private var searchQuery: String = ""
     @Published private(set) var isInspectorVisible: Bool = true
     @Published private(set) var isSidebarVisible: Bool = true
     @Published private(set) var isSyncing: Bool = false
     @Published private(set) var syncStatusMessage: String? = nil
     @Published private(set) var isLoadingIssues: Bool = false
+    @Published private(set) var boardSyncTimestamps: [String: Date] = [:]
+    @Published private var boardSprintFilters: [String: BoardSprintFilter] = [:]
     @Published var activeConflict: ConflictNotice?
     private var didLogIssueListRendered = false
 
@@ -39,6 +42,23 @@ final class AppState: ObservableObject {
         if selectedIssue?.id == issue.id {
             selectedIssue = issue
         }
+    }
+
+    func updateIssueSeenUpdates(_ updates: [IssueSummary.ID: Date]) {
+        issueSeenUpdates.merge(updates) { _, new in new }
+    }
+
+    func markIssueSeen(_ issue: IssueSummary) {
+        issueSeenUpdates[issue.id] = issue.updatedAt
+    }
+
+    func resetIssueSeenUpdates() {
+        issueSeenUpdates = [:]
+    }
+
+    func isIssueUnread(_ issue: IssueSummary) -> Bool {
+        guard let seenAt = issueSeenUpdates[issue.id] else { return true }
+        return issue.updatedAt > seenAt
     }
 
     func updateSidebar(sections: [SidebarSection], preferredSelectionID: SidebarItem.ID?) {
@@ -95,6 +115,38 @@ final class AppState: ObservableObject {
         self.syncStatusMessage = label
     }
 
+    func recordBoardSync(boardID: String, at date: Date = Date()) {
+        boardSyncTimestamps[boardID] = date
+    }
+
+    func sprintFilter(for board: IssueBoard) -> BoardSprintFilter {
+        if let existing = boardSprintFilters[board.id] {
+            let resolved = board.resolveSprintFilter(existing)
+            if resolved != existing {
+                boardSprintFilters[board.id] = resolved
+            }
+            return resolved
+        }
+
+        let fallback = board.defaultSprintFilter
+        boardSprintFilters[board.id] = fallback
+        return fallback
+    }
+
+    func updateSprintFilter(_ filter: BoardSprintFilter, for boardID: String) {
+        boardSprintFilters[boardID] = filter
+    }
+
+    func boardSyncStatus(for item: SidebarItem, now: Date = Date()) -> String? {
+        guard let boardID = item.boardID else { return nil }
+        return boardSyncStatus(boardID: boardID, now: now)
+    }
+
+    func boardSyncStatus(boardID: String, now: Date = Date()) -> String {
+        guard let date = boardSyncTimestamps[boardID] else { return "never" }
+        return relativeTimeString(since: date, now: now)
+    }
+
     func setIssuesLoading(_ isLoading: Bool) {
         isLoadingIssues = isLoading
     }
@@ -133,6 +185,23 @@ private extension AppState {
 
     func columnVisibilityDescription(_ value: NavigationSplitViewVisibility) -> String {
         String(describing: value)
+    }
+
+    func relativeTimeString(since date: Date, now: Date) -> String {
+        let elapsed = max(0, Int(now.timeIntervalSince(date)))
+        if elapsed < 60 {
+            return "just now"
+        }
+        let minutes = elapsed / 60
+        if minutes < 60 {
+            return "\(minutes) min ago"
+        }
+        let hours = minutes / 60
+        if hours < 24 {
+            return "\(hours) hr ago"
+        }
+        let days = hours / 24
+        return "\(days) d ago"
     }
 }
 

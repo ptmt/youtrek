@@ -3,10 +3,14 @@ import Foundation
 struct YouTrackAPIConfiguration: Sendable {
     let baseURL: URL
     let tokenProvider: YouTrackAPITokenProvider
+    let requestTimeout: TimeInterval
 
-    init(baseURL: URL, tokenProvider: YouTrackAPITokenProvider) {
+    static let defaultRequestTimeout: TimeInterval = 120
+
+    init(baseURL: URL, tokenProvider: YouTrackAPITokenProvider, requestTimeout: TimeInterval = Self.defaultRequestTimeout) {
         self.baseURL = baseURL
         self.tokenProvider = tokenProvider
+        self.requestTimeout = requestTimeout
     }
 }
 
@@ -91,6 +95,7 @@ struct YouTrackAPIClient: Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.timeoutInterval = configuration.requestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
@@ -168,6 +173,7 @@ struct YouTrackAPIClient: Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = configuration.requestTimeout
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -247,6 +253,7 @@ struct YouTrackAPIClient: Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
+        request.timeoutInterval = configuration.requestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 

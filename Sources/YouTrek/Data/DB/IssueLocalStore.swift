@@ -12,6 +12,7 @@ actor IssueLocalStore {
     private let title = Expression<String>("title")
     private let projectName = Expression<String>("project_name")
     private let updatedAt = Expression<Double>("updated_at")
+    private let lastSeenUpdatedAt = Expression<Double?>("last_seen_updated_at")
     private let assigneeID = Expression<String?>("assignee_id")
     private let assigneeName = Expression<String?>("assignee_name")
     private let assigneeAvatarURL = Expression<String?>("assignee_avatar_url")
@@ -82,7 +83,7 @@ actor IssueLocalStore {
                 let existingRow = try db.pluck(issues.filter(issueID == idString))
                 let isLocalDirty = existingRow?[isDirty] ?? false
                 if !isLocalDirty {
-                    try upsert(issue: issue, db: db, markDirty: false)
+                    try upsert(issue: issue, db: db, existingRow: existingRow, markDirty: false)
                 }
                 let seenAt = Date().timeIntervalSince1970
                 let insert = issueQueries.insert(or: .replace,
@@ -99,6 +100,42 @@ actor IssueLocalStore {
         }
     }
 
+    func clearCache() async {
+        guard let db else { return }
+        do {
+            try db.run("BEGIN IMMEDIATE TRANSACTION")
+            try db.run(issueQueries.delete())
+            try db.run(issues.delete())
+            try db.run("COMMIT")
+        } catch {
+            try? db.run("ROLLBACK")
+            print("IssueLocalStore failed to clear cache: \(error.localizedDescription)")
+        }
+    }
+
+    func loadIssueSeenUpdates(for issueIDs: [IssueSummary.ID]) async -> [IssueSummary.ID: Date] {
+        guard let db else { return [:] }
+        var results: [IssueSummary.ID: Date] = [:]
+        for id in Set(issueIDs) {
+            guard let row = try? db.pluck(issues.filter(issueID == id.uuidString)),
+                  let seenAt = row[lastSeenUpdatedAt]
+            else { continue }
+            results[id] = Date(timeIntervalSince1970: seenAt)
+        }
+        return results
+    }
+
+    func markIssueSeen(_ issue: IssueSummary) async {
+        guard let db else { return }
+        do {
+            let seenAt = issue.updatedAt.timeIntervalSince1970
+            let row = issues.filter(issueID == issue.id.uuidString)
+            try db.run(row.update(lastSeenUpdatedAt <- seenAt))
+        } catch {
+            return
+        }
+    }
+
     func applyPatch(id: IssueSummary.ID, patch: IssuePatch) async -> IssueSummary? {
         guard let db else { return nil }
         do {
@@ -108,7 +145,8 @@ actor IssueLocalStore {
             var issue = issueFromRow(row)
             issue = applyPatch(patch, to: issue)
             let now = Date().timeIntervalSince1970
-            let setters = issueSetters(for: issue, markDirty: true)
+            let seenAt = row[lastSeenUpdatedAt]
+            let setters = issueSetters(for: issue, markDirty: true, lastSeenUpdatedAt: seenAt)
                 + [localUpdatedAt <- now, isDirty <- true]
             try db.run(issues.filter(issueID == id.uuidString).update(setters))
             return issue
@@ -188,18 +226,29 @@ actor IssueLocalStore {
     }
 
     private func upsert(issue: IssueSummary, db: Connection, markDirty: Bool) throws {
-        let setters = issueSetters(for: issue, markDirty: markDirty)
+        let existingRow = try? db.pluck(issues.filter(issueID == issue.id.uuidString))
+        try upsert(issue: issue, db: db, existingRow: existingRow, markDirty: markDirty)
+    }
+
+    private func upsert(issue: IssueSummary, db: Connection, existingRow: Row?, markDirty: Bool) throws {
+        let seenAt = existingRow?[lastSeenUpdatedAt]
+        let setters = issueSetters(for: issue, markDirty: markDirty, lastSeenUpdatedAt: seenAt)
         let insert = issues.insert(or: .replace, setters)
         try db.run(insert)
     }
 
-    private func issueSetters(for issue: IssueSummary, markDirty: Bool) -> [Setter] {
+    private func issueSetters(
+        for issue: IssueSummary,
+        markDirty: Bool,
+        lastSeenUpdatedAt: Double?
+    ) -> [Setter] {
         [
             issueID <- issue.id.uuidString,
             readableID <- issue.readableID,
             title <- issue.title,
             projectName <- issue.projectName,
             updatedAt <- issue.updatedAt.timeIntervalSince1970,
+            self.lastSeenUpdatedAt <- lastSeenUpdatedAt,
             assigneeID <- issue.assignee?.id.uuidString,
             assigneeName <- issue.assignee?.displayName,
             assigneeAvatarURL <- issue.assignee?.avatarURL?.absoluteString,
@@ -372,6 +421,7 @@ actor IssueLocalStore {
         let titleColumn = Expression<String>("title")
         let projectNameColumn = Expression<String>("project_name")
         let updatedAtColumn = Expression<Double>("updated_at")
+        let lastSeenUpdatedAtColumn = Expression<Double?>("last_seen_updated_at")
         let assigneeIDColumn = Expression<String?>("assignee_id")
         let assigneeNameColumn = Expression<String?>("assignee_name")
         let assigneeAvatarURLColumn = Expression<String?>("assignee_avatar_url")
@@ -405,6 +455,7 @@ actor IssueLocalStore {
             table.column(titleColumn)
             table.column(projectNameColumn)
             table.column(updatedAtColumn)
+            table.column(lastSeenUpdatedAtColumn)
             table.column(assigneeIDColumn)
             table.column(assigneeNameColumn)
             table.column(assigneeAvatarURLColumn)
@@ -418,6 +469,7 @@ actor IssueLocalStore {
         })
 
         try addColumnIfNeeded(db, table: "issues", column: "custom_fields_json", type: "TEXT")
+        try addColumnIfNeeded(db, table: "issues", column: "last_seen_updated_at", type: "DOUBLE")
 
         try db.run(issueQueriesTable.create(ifNotExists: true) { table in
             table.column(queryKeyColumn)

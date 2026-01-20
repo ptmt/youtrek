@@ -126,7 +126,7 @@ extension SidebarItem {
             title: board.name,
             iconName: "rectangle.3.group.fill",
             query: IssueQuery(
-                rawQuery: boardQuery(for: board.name),
+                rawQuery: IssueQuery.boardQuery(boardName: board.name, sprintName: nil),
                 search: "",
                 filters: [],
                 sort: .updated(descending: true),
@@ -134,13 +134,5 @@ extension SidebarItem {
             ),
             board: board
         )
-    }
-
-    private static func boardQuery(for name: String) -> String {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        var escaped = trimmed.replacingOccurrences(of: "\\", with: "\\\\")
-        escaped = escaped.replacingOccurrences(of: "{", with: "\\{")
-        escaped = escaped.replacingOccurrences(of: "}", with: "\\}")
-        return "board: {\(escaped)}"
     }
 }

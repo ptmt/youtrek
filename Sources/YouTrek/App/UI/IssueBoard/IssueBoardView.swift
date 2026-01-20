@@ -5,6 +5,8 @@ struct IssueBoardView: View {
     let issues: [IssueSummary]
     @Binding var selection: IssueSummary?
     let isLoading: Bool
+    let sprintFilter: BoardSprintFilter
+    let onSelectSprint: (BoardSprintFilter) -> Void
 
     @State private var collapsedGroups: Set<String> = []
 
@@ -73,8 +75,50 @@ struct IssueBoardView: View {
                 .foregroundStyle(.secondary)
             Text(board.name)
                 .font(.title3.weight(.semibold))
+            if showsSprintControls {
+                sprintControls
+            }
             Spacer()
         }
+    }
+
+    private var showsSprintControls: Bool {
+        board.displaySprints.count > 1
+    }
+
+    private var sprintControls: some View {
+        let selectedSprintName = board.sprintName(for: sprintFilter)
+        let menuTitle = selectedSprintName ?? "Sprint"
+
+        return HStack(spacing: 6) {
+            Button {
+                onSelectSprint(.backlog)
+            } label: {
+                Image(systemName: "tray")
+                    .foregroundStyle(sprintFilter.isBacklog ? .primary : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Backlog")
+
+            Menu {
+                ForEach(board.displaySprints) { sprint in
+                    Button {
+                        onSelectSprint(.sprint(id: sprint.id))
+                    } label: {
+                        if sprint.id == sprintFilter.sprintID {
+                            Label(sprint.name, systemImage: "checkmark")
+                        } else {
+                            Text(sprint.name)
+                        }
+                    }
+                }
+            } label: {
+                Label(menuTitle, systemImage: "flag.checkered")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(selectedSprintName == nil ? .secondary : .primary)
+            }
+        }
+        .font(.caption)
     }
 
     private var columnDescriptors: [IssueBoardColumnDescriptor] {

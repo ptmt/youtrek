@@ -11,6 +11,8 @@ actor IssueBoardLocalStore {
     private let name = Expression<String>("name")
     private let isFavorite = Expression<Bool>("is_favorite")
     private let projectNamesJSON = Expression<String>("project_names_json")
+    private let sprintsJSON = Expression<String?>("sprints_json")
+    private let currentSprintID = Expression<String?>("current_sprint_id")
     private let columnFieldName = Expression<String?>("column_field_name")
     private let columnsJSON = Expression<String?>("columns_json")
     private let swimlaneJSON = Expression<String?>("swimlane_json")
@@ -65,6 +67,8 @@ actor IssueBoardLocalStore {
                     name <- board.name,
                     isFavorite <- board.isFavorite,
                     projectNamesJSON <- encodeProjects(board.projectNames),
+                    sprintsJSON <- encodeSprints(board.sprints),
+                    currentSprintID <- board.currentSprintID,
                     columnFieldName <- board.columnFieldName,
                     columnsJSON <- encodeColumns(board.columns),
                     swimlaneJSON <- encodeSwimlane(board.swimlaneSettings),
@@ -81,12 +85,23 @@ actor IssueBoardLocalStore {
         }
     }
 
+    func clearCache() async {
+        guard let db else { return }
+        do {
+            try db.run(boards.delete())
+        } catch {
+            print("IssueBoardLocalStore failed to clear cache: \(error.localizedDescription)")
+        }
+    }
+
     private func boardFromRow(_ row: Row) -> IssueBoard {
         IssueBoard(
             id: row[boardID],
             name: row[name],
             isFavorite: row[isFavorite],
             projectNames: decodeProjects(row[projectNamesJSON]),
+            sprints: decodeSprints(row[sprintsJSON]),
+            currentSprintID: row[currentSprintID],
             columnFieldName: row[columnFieldName],
             columns: decodeColumns(row[columnsJSON]),
             swimlaneSettings: decodeSwimlane(row[swimlaneJSON]),
@@ -120,6 +135,19 @@ actor IssueBoardLocalStore {
         return columns
     }
 
+    private func encodeSprints(_ sprints: [IssueBoardSprint]) -> String? {
+        guard !sprints.isEmpty, let data = try? encoder.encode(sprints) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func decodeSprints(_ json: String?) -> [IssueBoardSprint] {
+        guard let json,
+              let data = json.data(using: .utf8),
+              let sprints = try? decoder.decode([IssueBoardSprint].self, from: data)
+        else { return [] }
+        return sprints
+    }
+
     private func encodeSwimlane(_ settings: IssueBoardSwimlaneSettings) -> String? {
         guard let data = try? encoder.encode(settings) else { return nil }
         return String(decoding: data, as: UTF8.self)
@@ -151,6 +179,8 @@ actor IssueBoardLocalStore {
         let nameColumn = Expression<String>("name")
         let isFavoriteColumn = Expression<Bool>("is_favorite")
         let projectNamesJSONColumn = Expression<String>("project_names_json")
+        let sprintsJSONColumn = Expression<String?>("sprints_json")
+        let currentSprintIDColumn = Expression<String?>("current_sprint_id")
         let columnFieldNameColumn = Expression<String?>("column_field_name")
         let columnsJSONColumn = Expression<String?>("columns_json")
         let swimlaneJSONColumn = Expression<String?>("swimlane_json")
@@ -163,6 +193,8 @@ actor IssueBoardLocalStore {
             table.column(nameColumn)
             table.column(isFavoriteColumn, defaultValue: false)
             table.column(projectNamesJSONColumn)
+            table.column(sprintsJSONColumn)
+            table.column(currentSprintIDColumn)
             table.column(columnFieldNameColumn)
             table.column(columnsJSONColumn)
             table.column(swimlaneJSONColumn)
@@ -176,6 +208,8 @@ actor IssueBoardLocalStore {
         try addColumnIfNeeded(db, table: "issue_boards", column: "swimlane_json", type: "TEXT")
         try addColumnIfNeeded(db, table: "issue_boards", column: "orphans_at_top", type: "INTEGER")
         try addColumnIfNeeded(db, table: "issue_boards", column: "hide_orphans_swimlane", type: "INTEGER")
+        try addColumnIfNeeded(db, table: "issue_boards", column: "sprints_json", type: "TEXT")
+        try addColumnIfNeeded(db, table: "issue_boards", column: "current_sprint_id", type: "TEXT")
     }
 
     private static func addColumnIfNeeded(_ db: Connection, table: String, column: String, type: String) throws {

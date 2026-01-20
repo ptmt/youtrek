@@ -22,118 +22,29 @@ private struct RootContentView: View {
     @State private var disableSyncing: Bool = AppDebugSettings.disableSyncing
 
     var body: some View {
-        let columnVisibilityBinding = Binding(
+        rootSplitView
+    }
+
+    private var columnVisibilityBinding: Binding<NavigationSplitViewVisibility> {
+        Binding(
             get: { appState.columnVisibility },
             set: { newValue in
                 appState.updateColumnVisibility(newValue, source: "NavigationSplitView")
             }
         )
+    }
 
+    private var rootSplitView: some View {
         NavigationSplitView(columnVisibility: columnVisibilityBinding) {
-            SidebarView(
-                sections: appState.sidebarSections,
-                selection: $appState.selectedSidebarItem,
-                isSyncing: appState.isSyncing,
-                syncStatusMessage: appState.syncStatusMessage,
-                onDeleteSavedSearch: { savedQueryID in
-                    Task {
-                        await container.deleteSavedSearch(id: savedQueryID)
-                    }
-                }
-            )
+            sidebarContent
         } content: {
-            Group {
-                if let selection = appState.selectedSidebarItem, selection.isBoard {
-                    let board = selection.board ?? IssueBoard(
-                        id: selection.boardID ?? selection.id,
-                        name: selection.title,
-                        isFavorite: true,
-                        projectNames: []
-                    )
-                    IssueBoardView(
-                        board: board,
-                        issues: appState.filteredIssues(searchQuery: searchQuery),
-                        selection: $appState.selectedIssue,
-                        isLoading: appState.isLoadingIssues
-                    )
-                } else {
-                    IssueListView(
-                        issues: appState.filteredIssues(searchQuery: searchQuery),
-                        selection: $appState.selectedIssue,
-                        showAssigneeColumn: showAssigneeColumn,
-                        showUpdatedColumn: showUpdatedColumn,
-                        isLoading: appState.isLoadingIssues,
-                        onIssuesRendered: { count in
-                            appState.recordIssueListRendered(issueCount: count)
-                        }
-                    )
-                }
-            }
-            .toolbar {
-                ToolbarItemGroup(placement: .automatic) {
-                    NewIssueToolbar(container: container)
-                        .frame(maxWidth: 280)
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(action: container.commandPalette.open) {
-                        Label("Command Palette", systemImage: "command.square")
-                    }
-                    .buttonStyle(.accessoryBar)
-                    .keyboardShortcut("p", modifiers: [.command, .shift])
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        isInspectorVisible.toggle()
-                        appState.setInspectorVisible(isInspectorVisible)
-                    } label: {
-                        Label("Toggle Inspector", systemImage: "sidebar.trailing")
-                    }
-                    .buttonStyle(.accessoryBar)
-                    .help("Show or hide the inspector column")
-                }
-
-                ToolbarItem(placement: .automatic) {
-                    Menu {
-                        Toggle("Assignee as Column", isOn: $showAssigneeColumn)
-                        Toggle("Updated as Column", isOn: $showUpdatedColumn)
-                    } label: {
-                        Label("Columns", systemImage: "tablecells")
-                    }
-                    .help("Show or hide optional columns in the issue list")
-                }
-
-                #if DEBUG
-                ToolbarItem(placement: .automatic) {
-                    Menu {
-                        Toggle("Simulate slow responses", isOn: $simulateSlowResponses)
-                        Toggle("Show network footer", isOn: $showNetworkFooter)
-                        Toggle("Disable syncing", isOn: $disableSyncing)
-                    } label: {
-                        Label("Developer", systemImage: "wrench.and.screwdriver")
-                    }
-                }
-                #endif
-            }
+            mainContent
+                .toolbar { mainToolbar }
         } detail: {
-            Text("Select an issue")
-                .foregroundStyle(.secondary)
+            detailContent
         }
         .inspector(isPresented: $isInspectorVisible) {
-            Group {
-                if let issue = appState.selectedIssue {
-                    IssueDetailView(issue: issue)
-                } else {
-                    ContentUnavailableView(
-                        "Select an issue",
-                        systemImage: "square.stack.3d.up",
-                        description: Text("Choose an issue from the middle column to inspect details.")
-                    )
-                }
-            }
-            .inspectorColumnWidth(min: 320, ideal: 400, max: 500)
-            .background(.ultraThinMaterial)
+            inspectorContent
         }
         .searchable(text: $searchQuery, placement: .toolbar, prompt: Text("Search issues"))
         .navigationSplitViewStyle(.balanced)
@@ -162,6 +73,10 @@ private struct RootContentView: View {
         .onChange(of: appState.isInspectorVisible) { _, newValue in
             isInspectorVisible = newValue
         }
+        .onChange(of: appState.selectedIssue) { _, issue in
+            guard let issue else { return }
+            container.markIssueSeen(issue)
+        }
         .onChange(of: appState.selectedSidebarItem) { _, selection in
             guard let selection else { return }
             container.recordSidebarSelection(selection)
@@ -179,6 +94,158 @@ private struct RootContentView: View {
         }
     }
 
+    private var sidebarContent: some View {
+        SidebarView(
+            sections: appState.sidebarSections,
+            selection: $appState.selectedSidebarItem,
+            isSyncing: appState.isSyncing,
+            syncStatusMessage: appState.syncStatusMessage,
+            onDeleteSavedSearch: { savedQueryID in
+                Task {
+                    await container.deleteSavedSearch(id: savedQueryID)
+                }
+            },
+            onRefreshBoard: { item in
+                Task {
+                    await container.refreshBoardIssues(for: item)
+                }
+            },
+            onOpenBoardInWeb: { item in
+                container.openBoardInWeb(item)
+            },
+            boardSyncStatus: { item in
+                appState.boardSyncStatus(for: item)
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
+        if let selection = appState.selectedSidebarItem, selection.isBoard {
+            BoardContentView(
+                appState: appState,
+                selection: selection,
+                searchQuery: searchQuery
+            )
+        } else {
+            IssueListView(
+                issues: appState.filteredIssues(searchQuery: searchQuery),
+                selection: $appState.selectedIssue,
+                showAssigneeColumn: showAssigneeColumn,
+                showUpdatedColumn: showUpdatedColumn,
+                isLoading: appState.isLoadingIssues,
+                isIssueUnread: { issue in
+                    appState.isIssueUnread(issue)
+                },
+                onIssuesRendered: { count in
+                    appState.recordIssueListRendered(issueCount: count)
+                }
+            )
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var mainToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .automatic) {
+            NewIssueToolbar(container: container)
+                .frame(maxWidth: 280)
+        }
+
+        ToolbarItem(placement: .confirmationAction) {
+            Button(action: container.commandPalette.open) {
+                Label("Command Palette", systemImage: "command.square")
+            }
+            .buttonStyle(.accessoryBar)
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                isInspectorVisible.toggle()
+                appState.setInspectorVisible(isInspectorVisible)
+            } label: {
+                Label("Toggle Inspector", systemImage: "sidebar.trailing")
+            }
+            .buttonStyle(.accessoryBar)
+            .help("Show or hide the inspector column")
+        }
+
+        ToolbarItem(placement: .automatic) {
+            Menu {
+                Toggle("Assignee as Column", isOn: $showAssigneeColumn)
+                Toggle("Updated as Column", isOn: $showUpdatedColumn)
+            } label: {
+                Label("Columns", systemImage: "tablecells")
+            }
+            .help("Show or hide optional columns in the issue list")
+        }
+
+        #if DEBUG
+                ToolbarItem(placement: .automatic) {
+                    Menu {
+                        Toggle("Simulate slow responses", isOn: $simulateSlowResponses)
+                        Toggle("Show network footer", isOn: $showNetworkFooter)
+                        Toggle("Disable syncing", isOn: $disableSyncing)
+                        Divider()
+                        Button("Clear cache and refetch") {
+                            container.clearCacheAndRefetch()
+                        }
+                    } label: {
+                        Label("Developer", systemImage: "wrench.and.screwdriver")
+                    }
+                }
+        #endif
+    }
+
+    private var detailContent: some View {
+        Text("Select an issue")
+            .foregroundStyle(.secondary)
+    }
+
+    private var inspectorContent: some View {
+        Group {
+            if let issue = appState.selectedIssue {
+                IssueDetailView(issue: issue)
+            } else {
+                ContentUnavailableView(
+                    "Select an issue",
+                    systemImage: "square.stack.3d.up",
+                    description: Text("Choose an issue from the middle column to inspect details.")
+                )
+            }
+        }
+        .inspectorColumnWidth(min: 320, ideal: 400, max: 500)
+        .background(.ultraThinMaterial)
+    }
+}
+
+private struct BoardContentView: View {
+    @EnvironmentObject private var container: AppContainer
+    @ObservedObject var appState: AppState
+    let selection: SidebarItem
+    let searchQuery: String
+
+    var body: some View {
+        let board = selection.board ?? IssueBoard(
+            id: selection.boardID ?? selection.id,
+            name: selection.title,
+            isFavorite: true,
+            projectNames: []
+        )
+        let sprintFilter = container.sprintFilter(for: board)
+        IssueBoardView(
+            board: board,
+            issues: appState.filteredIssues(searchQuery: searchQuery),
+            selection: $appState.selectedIssue,
+            isLoading: appState.isLoadingIssues,
+            sprintFilter: sprintFilter,
+            onSelectSprint: { filter in
+                Task {
+                    await container.updateSprintFilter(filter, for: board)
+                }
+            }
+        )
+    }
 }
 
 struct SyncStatusIndicator: View {

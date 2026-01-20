@@ -6,6 +6,9 @@ struct SidebarView: View {
     let isSyncing: Bool
     let syncStatusMessage: String?
     let onDeleteSavedSearch: ((String) -> Void)?
+    let onRefreshBoard: ((SidebarItem) -> Void)?
+    let onOpenBoardInWeb: ((SidebarItem) -> Void)?
+    let boardSyncStatus: ((SidebarItem) -> String?)?
 
     var body: some View {
         List(selection: $selection) {
@@ -27,6 +30,23 @@ struct SidebarView: View {
                                 .contextMenu {
                                     Button("Delete Saved Search", role: .destructive) {
                                         onDeleteSavedSearch?(savedQueryID)
+                                    }
+                                }
+                            } else if item.isBoard {
+                                NavigationLink(value: item) {
+                                    Label(item.displayTitle, systemImage: item.iconName)
+                                }
+                                .contextMenu {
+                                    Button("Refresh") {
+                                        onRefreshBoard?(item)
+                                    }
+                                    Button("Open in Web") {
+                                        onOpenBoardInWeb?(item)
+                                    }
+                                    if let status = boardSyncStatus?(item) {
+                                        Divider()
+                                        Text("Last synced: \(status)")
+                                            .disabled(true)
                                     }
                                 }
                             } else {

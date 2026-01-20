@@ -38,6 +38,18 @@ actor SyncCoordinator {
         await localStore.loadIssues(for: query)
     }
 
+    func clearCachedIssues() async {
+        await localStore.clearCache()
+    }
+
+    func loadIssueSeenUpdates(for issueIDs: [IssueSummary.ID]) async -> [IssueSummary.ID: Date] {
+        await localStore.loadIssueSeenUpdates(for: issueIDs)
+    }
+
+    func markIssueSeen(_ issue: IssueSummary) async {
+        await localStore.markIssueSeen(issue)
+    }
+
     func applyOptimisticUpdate(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {
         guard let updated = await localStore.applyPatch(id: id, patch: patch) else {
             throw YouTrackAPIError.http(statusCode: 404, body: "Issue not found in local store")

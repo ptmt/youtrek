@@ -6,6 +6,7 @@ struct IssueListView: View {
     let showAssigneeColumn: Bool
     let showUpdatedColumn: Bool
     let isLoading: Bool
+    let isIssueUnread: (IssueSummary) -> Bool
     let onIssuesRendered: ((Int) -> Void)?
 
     @State private var selectedIDs: Set<IssueSummary.ID> = []
@@ -33,9 +34,11 @@ struct IssueListView: View {
             } else {
                 Table(issues, selection: $selectedIDs, sortOrder: $sortOrder) {
                     TableColumn("Title", value: \IssueSummary.title) { issue in
+                        let unread = isIssueUnread(issue)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(issue.title)
-                                .font(.headline)
+                                .font(.headline.weight(.regular))
+                                .foregroundStyle(titleColor(isUnread: unread))
                             metadataRow(for: issue)
                         }
                         .padding(.vertical, 4)
@@ -94,6 +97,10 @@ struct IssueListView: View {
         }
         .font(.caption)
         .lineLimit(1)
+    }
+
+    private func titleColor(isUnread: Bool) -> Color {
+        isUnread ? .primary : .primary.opacity(0.78)
     }
 
     private func syncSelectionState() {
