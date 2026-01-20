@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct IssueBoardView: View {
-    let boardTitle: String
+    let board: IssueBoard
     let issues: [IssueSummary]
     @Binding var selection: IssueSummary?
     let isLoading: Bool
@@ -39,7 +39,7 @@ struct IssueBoardView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 boardHeader
                 IssueBoardColumnHeaderRow(
-                    statuses: columns,
+                    columns: columnDescriptors,
                     issues: issues,
                     columnWidth: columnWidth,
                     spacing: columnSpacing
@@ -48,7 +48,7 @@ struct IssueBoardView: View {
                     DisclosureGroup(isExpanded: binding(for: group.id)) {
                         IssueBoardLane(
                             group: group,
-                            statuses: columns,
+                            columns: columnDescriptors,
                             columnWidth: columnWidth,
                             spacing: columnSpacing,
                             onSelect: { selection = $0 }
@@ -60,6 +60,7 @@ struct IssueBoardView: View {
             }
             .padding(16)
         }
+        .scrollIndicators(.visible)
     }
 
     private var boardHeader: some View {
@@ -70,25 +71,146 @@ struct IssueBoardView: View {
             Image(systemName: "chevron.right")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(boardTitle)
+            Text(board.name)
                 .font(.title3.weight(.semibold))
             Spacer()
         }
     }
 
-    private var columns: [IssueStatus] {
-        [.open, .blocked, .inProgress, .inReview, .done]
+    private var columnDescriptors: [IssueBoardColumnDescriptor] {
+        if let fieldName = board.columnFieldName, !board.columns.isEmpty {
+            let normalizedField = fieldName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let columns = board.columns.sorted { (left, right) in
+                let leftOrdinal = left.ordinal ?? Int.max
+                let rightOrdinal = right.ordinal ?? Int.max
+                if leftOrdinal != rightOrdinal { return leftOrdinal < rightOrdinal }
+                return left.title.localizedCaseInsensitiveCompare(right.title) == .orderedAscending
+            }
+            return columns.map { column in
+                let matchValues = column.valueNames.map { $0.lowercased() }
+                return IssueBoardColumnDescriptor(
+                    id: column.id,
+                    title: column.title,
+                    match: { issue in
+                        let values = issue.fieldValues(named: normalizedField).map { $0.lowercased() }
+                        if matchValues.isEmpty {
+                            let title = column.title.lowercased()
+                            return values.contains(title)
+                        }
+                        return values.contains(where: { matchValues.contains($0) })
+                    }
+                )
+            }
+        }
+
+        let fallback: [IssueStatus] = [.open, .blocked, .inProgress, .inReview, .done]
+        return fallback.map { status in
+            IssueBoardColumnDescriptor(
+                id: status.rawValue,
+                title: status.displayName,
+                match: { issue in issue.status == status }
+            )
+        }
     }
 
     private var groupModels: [IssueBoardGroup] {
-        let grouped = Dictionary(grouping: issues, by: { $0.assigneeDisplayName })
-        let groups = grouped.map { IssueBoardGroup(id: $0.key, title: $0.key, issues: $0.value) }
-        return groups.sorted { left, right in
-            if left.isUnassigned != right.isUnassigned {
-                return !left.isUnassigned
-            }
-            return left.title.localizedCaseInsensitiveCompare(right.title) == .orderedAscending
+        guard board.swimlaneSettings.isEnabled, let fieldName = board.swimlaneSettings.fieldName else {
+            return [IssueBoardGroup(
+                id: "all-cards",
+                title: "All cards",
+                issues: issues,
+                iconName: "rectangle.stack",
+                isUnassigned: false,
+                sortIndex: 0
+            )]
         }
+
+        let normalizedField = fieldName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let isAssignee = normalizedField == "assignee"
+        let explicitValues = board.swimlaneSettings.values
+        let lookup = Dictionary(uniqueKeysWithValues: explicitValues.map { ($0.lowercased(), $0) })
+
+        var buckets: [String: [IssueSummary]] = [:]
+        var unassigned: [IssueSummary] = []
+
+        for issue in issues {
+            let values = swimlaneValues(for: issue, fieldName: normalizedField, isAssignee: isAssignee)
+            if values.isEmpty {
+                unassigned.append(issue)
+                continue
+            }
+
+            var matched = false
+            for value in values {
+                let key = value.lowercased()
+                if let canonical = lookup[key] {
+                    buckets[canonical, default: []].append(issue)
+                    matched = true
+                } else if explicitValues.isEmpty {
+                    buckets[value, default: []].append(issue)
+                    matched = true
+                }
+            }
+            if !matched {
+                unassigned.append(issue)
+            }
+        }
+
+        var groups: [IssueBoardGroup] = []
+        if !explicitValues.isEmpty {
+            for (index, value) in explicitValues.enumerated() {
+                let issues = buckets[value] ?? []
+                groups.append(IssueBoardGroup(
+                    id: value,
+                    title: value,
+                    issues: issues,
+                    iconName: isAssignee ? "person.crop.circle.fill" : "square.stack.3d.up.fill",
+                    isUnassigned: false,
+                    sortIndex: index
+                ))
+            }
+        } else {
+            let sortedKeys = buckets.keys.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            for (index, key) in sortedKeys.enumerated() {
+                groups.append(IssueBoardGroup(
+                    id: key,
+                    title: key,
+                    issues: buckets[key] ?? [],
+                    iconName: isAssignee ? "person.crop.circle.fill" : "square.stack.3d.up.fill",
+                    isUnassigned: false,
+                    sortIndex: index
+                ))
+            }
+        }
+
+        if !unassigned.isEmpty, !board.hideOrphansSwimlane {
+            let orphanGroup = IssueBoardGroup(
+                id: "Unassigned",
+                title: isAssignee ? "Unassigned" : "Other",
+                issues: unassigned,
+                iconName: isAssignee ? "person.crop.circle.badge.questionmark" : "questionmark.folder",
+                isUnassigned: true,
+                sortIndex: board.orphansAtTheTop ? -1 : (groups.last?.sortIndex ?? 0) + 1
+            )
+            if board.orphansAtTheTop {
+                groups.insert(orphanGroup, at: 0)
+            } else {
+                groups.append(orphanGroup)
+            }
+        }
+
+        if groups.isEmpty {
+            return [IssueBoardGroup(
+                id: "all-cards",
+                title: "All cards",
+                issues: issues,
+                iconName: "rectangle.stack",
+                isUnassigned: false,
+                sortIndex: 0
+            )]
+        }
+
+        return groups
     }
 
     private func binding(for id: String) -> Binding<Bool> {
@@ -103,14 +225,28 @@ struct IssueBoardView: View {
             }
         )
     }
+
+    private func swimlaneValues(for issue: IssueSummary, fieldName: String, isAssignee: Bool) -> [String] {
+        if isAssignee {
+            return issue.assignee.map { [$0.displayName] } ?? []
+        }
+        return issue.fieldValues(named: fieldName)
+    }
+}
+
+private struct IssueBoardColumnDescriptor: Identifiable {
+    let id: String
+    let title: String
+    let match: (IssueSummary) -> Bool
 }
 
 private struct IssueBoardGroup: Identifiable {
     let id: String
     let title: String
     let issues: [IssueSummary]
-
-    var isUnassigned: Bool { title == "Unassigned" }
+    let iconName: String
+    let isUnassigned: Bool
+    let sortIndex: Int
 }
 
 private struct IssueBoardGroupHeader: View {
@@ -118,7 +254,7 @@ private struct IssueBoardGroupHeader: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: group.isUnassigned ? "person.crop.circle.badge.questionmark" : "person.crop.circle.fill")
+            Image(systemName: group.iconName)
                 .foregroundStyle(.secondary)
             Text(group.title)
                 .font(.headline)
@@ -132,17 +268,17 @@ private struct IssueBoardGroupHeader: View {
 }
 
 private struct IssueBoardColumnHeaderRow: View {
-    let statuses: [IssueStatus]
+    let columns: [IssueBoardColumnDescriptor]
     let issues: [IssueSummary]
     let columnWidth: CGFloat
     let spacing: CGFloat
 
     var body: some View {
         HStack(alignment: .top, spacing: spacing) {
-            ForEach(statuses, id: \.self) { status in
+            ForEach(columns) { column in
                 IssueBoardColumnHeader(
-                    title: status.displayName,
-                    count: issues.filter { $0.status == status }.count
+                    title: column.title,
+                    count: issues.filter(column.match).count
                 )
                 .frame(width: columnWidth, alignment: .leading)
             }
@@ -173,16 +309,16 @@ private struct IssueBoardColumnHeader: View {
 
 private struct IssueBoardLane: View {
     let group: IssueBoardGroup
-    let statuses: [IssueStatus]
+    let columns: [IssueBoardColumnDescriptor]
     let columnWidth: CGFloat
     let spacing: CGFloat
     let onSelect: (IssueSummary) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: spacing) {
-            ForEach(statuses, id: \.self) { status in
-                IssueBoardColumn(
-                    issues: group.issues.filter { $0.status == status },
+            ForEach(columns) { column in
+                IssueBoardColumnView(
+                    issues: group.issues.filter(column.match),
                     columnWidth: columnWidth,
                     onSelect: onSelect
                 )
@@ -193,7 +329,7 @@ private struct IssueBoardLane: View {
     }
 }
 
-private struct IssueBoardColumn: View {
+private struct IssueBoardColumnView: View {
     let issues: [IssueSummary]
     let columnWidth: CGFloat
     let onSelect: (IssueSummary) -> Void

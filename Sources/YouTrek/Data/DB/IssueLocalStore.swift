@@ -19,6 +19,7 @@ actor IssueLocalStore {
     private let priorityRank = Expression<Int>("priority_rank")
     private let status = Expression<String>("status")
     private let tagsJSON = Expression<String>("tags_json")
+    private let customFieldsJSON = Expression<String?>("custom_fields_json")
     private let isDirty = Expression<Bool>("is_dirty")
     private let localUpdatedAt = Expression<Double?>("local_updated_at")
 
@@ -206,6 +207,7 @@ actor IssueLocalStore {
             priorityRank <- issue.priority.sortRank,
             status <- issue.status.rawValue,
             tagsJSON <- encodeTags(issue.tags),
+            customFieldsJSON <- encodeCustomFields(issue.customFieldValues),
             isDirty <- markDirty
         ]
     }
@@ -223,6 +225,7 @@ actor IssueLocalStore {
         let priorityValue = IssuePriority(rawValue: row[priority]) ?? .normal
         let statusValue = IssueStatus(rawValue: row[status]) ?? .open
         let tags = decodeTags(row[tagsJSON])
+        let customFields = decodeCustomFields(row[customFieldsJSON])
         return IssueSummary(
             id: idValue,
             readableID: row[readableID],
@@ -232,7 +235,8 @@ actor IssueLocalStore {
             assignee: assignee,
             priority: priorityValue,
             status: statusValue,
-            tags: tags
+            tags: tags,
+            customFieldValues: customFields
         )
     }
 
@@ -315,6 +319,19 @@ actor IssueLocalStore {
         return tags
     }
 
+    private func encodeCustomFields(_ fields: [String: [String]]) -> String? {
+        guard !fields.isEmpty, let data = try? encoder.encode(fields) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func decodeCustomFields(_ json: String?) -> [String: [String]] {
+        guard let json,
+              let data = json.data(using: .utf8),
+              let fields = try? decoder.decode([String: [String]].self, from: data)
+        else { return [:] }
+        return fields
+    }
+
     private func queryKey(for query: IssueQuery) -> String {
         let rawQuery = query.rawQuery ?? ""
         let filters = query.filters.joined(separator: "|")
@@ -362,6 +379,7 @@ actor IssueLocalStore {
         let priorityRankColumn = Expression<Int>("priority_rank")
         let statusColumn = Expression<String>("status")
         let tagsJSONColumn = Expression<String>("tags_json")
+        let customFieldsJSONColumn = Expression<String?>("custom_fields_json")
         let isDirtyColumn = Expression<Bool>("is_dirty")
         let localUpdatedAtColumn = Expression<Double?>("local_updated_at")
 
@@ -394,9 +412,12 @@ actor IssueLocalStore {
             table.column(priorityRankColumn)
             table.column(statusColumn)
             table.column(tagsJSONColumn)
+            table.column(customFieldsJSONColumn)
             table.column(isDirtyColumn, defaultValue: false)
             table.column(localUpdatedAtColumn)
         })
+
+        try addColumnIfNeeded(db, table: "issues", column: "custom_fields_json", type: "TEXT")
 
         try db.run(issueQueriesTable.create(ifNotExists: true) { table in
             table.column(queryKeyColumn)
@@ -416,6 +437,23 @@ actor IssueLocalStore {
             table.column(mutationRetryCountColumn, defaultValue: 0)
             table.column(mutationLastErrorColumn)
         })
+    }
+
+    private static func addColumnIfNeeded(_ db: Connection, table: String, column: String, type: String) throws {
+        let existing = try existingColumns(in: table, db: db)
+        guard !existing.contains(column) else { return }
+        try db.run("ALTER TABLE \(table) ADD COLUMN \(column) \(type)")
+    }
+
+    private static func existingColumns(in table: String, db: Connection) throws -> Set<String> {
+        let rows = try db.prepare("PRAGMA table_info(\(table))")
+        var columns = Set<String>()
+        for row in rows {
+            if let name = row[1] as? String {
+                columns.insert(name)
+            }
+        }
+        return columns
     }
 }
 

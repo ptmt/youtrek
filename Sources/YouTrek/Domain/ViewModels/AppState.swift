@@ -4,7 +4,7 @@ import SwiftUI
 @MainActor
 final class AppState: ObservableObject {
     private let launchUptime: TimeInterval
-    @Published var columnVisibility: NavigationSplitViewVisibility = .all
+    @Published private(set) var columnVisibility: NavigationSplitViewVisibility = .all
     @Published var selectedSidebarItem: SidebarItem?
     @Published private(set) var sidebarSections: [SidebarSection] = []
     @Published var selectedIssue: IssueSummary?
@@ -71,9 +71,17 @@ final class AppState: ObservableObject {
         searchQuery = query
     }
 
-    func toggleSidebarVisibility() {
-        isSidebarVisible.toggle()
-        columnVisibility = isSidebarVisible ? .all : .detailOnly
+    func toggleSidebarVisibility(source: String = "menu") {
+        let shouldShow = columnVisibility != .all
+        updateColumnVisibility(shouldShow ? .all : .doubleColumn, source: source)
+    }
+
+    func updateColumnVisibility(_ newValue: NavigationSplitViewVisibility, source: String) {
+        guard columnVisibility != newValue else { return }
+        let oldValue = columnVisibility
+        columnVisibility = newValue
+        isSidebarVisible = newValue == .all
+        logSidebarVisibilityChange(from: oldValue, to: newValue, source: source)
     }
 
     func setInspectorVisible(_ isVisible: Bool) {
@@ -101,6 +109,28 @@ final class AppState: ObservableObject {
         LoggingService.general.info(
             "Startup: issue list rendered in \(formatted, privacy: .public)s (issues: \(issueCount, privacy: .public))"
         )
+    }
+}
+
+private extension AppState {
+    func logSidebarVisibilityChange(
+        from oldValue: NavigationSplitViewVisibility,
+        to newValue: NavigationSplitViewVisibility,
+        source: String
+    ) {
+        let oldDescription = columnVisibilityDescription(oldValue)
+        let newDescription = columnVisibilityDescription(newValue)
+        LoggingService.general.info(
+            "Sidebar visibility changed: \(oldDescription, privacy: .public) -> \(newDescription, privacy: .public) source=\(source, privacy: .public)"
+        )
+        #if DEBUG
+        let stack = Thread.callStackSymbols.prefix(8).joined(separator: " | ")
+        LoggingService.general.debug("Sidebar visibility stack: \(stack, privacy: .public)")
+        #endif
+    }
+
+    func columnVisibilityDescription(_ value: NavigationSplitViewVisibility) -> String {
+        String(describing: value)
     }
 }
 

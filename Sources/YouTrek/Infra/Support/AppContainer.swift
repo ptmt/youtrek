@@ -170,6 +170,12 @@ final class AppContainer: ObservableObject {
 
         Task { [weak self] in
             guard let self else { return }
+            guard !AppDebugSettings.disableSyncing else { return }
+            let delay = AppDebugSettings.syncStartDelay
+            if delay > 0 {
+                let nanoseconds = UInt64(delay * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanoseconds)
+            }
             await self.refreshSidebarData()
         }
     }
@@ -625,9 +631,48 @@ private struct PreviewSavedQueryRepository: SavedQueryRepository {
 private struct PreviewIssueBoardRepository: IssueBoardRepository {
     func fetchBoards() async throws -> [IssueBoard] {
         [
-            IssueBoard(id: "preview-board-1", name: "Growth Sprint Board", isFavorite: true, projectNames: ["YT"]),
-            IssueBoard(id: "preview-board-2", name: "Bug Triage", isFavorite: true, projectNames: ["YT"]),
-            IssueBoard(id: "preview-board-3", name: "Internal Roadmap", isFavorite: false, projectNames: ["YT"])
+            IssueBoard(
+                id: "preview-board-1",
+                name: "Growth Sprint Board",
+                isFavorite: true,
+                projectNames: ["YT"],
+                columnFieldName: "State",
+                columns: [
+                    IssueBoardColumn(id: "preview-col-1", title: "Open", valueNames: ["Open"]),
+                    IssueBoardColumn(id: "preview-col-2", title: "In Progress", valueNames: ["In Progress"]),
+                    IssueBoardColumn(id: "preview-col-3", title: "Review", valueNames: ["In Review"]),
+                    IssueBoardColumn(id: "preview-col-4", title: "Done", valueNames: ["Done"])
+                ],
+                swimlaneSettings: IssueBoardSwimlaneSettings(kind: .attribute, isEnabled: true, fieldName: "Assignee", values: []),
+                orphansAtTheTop: true,
+                hideOrphansSwimlane: false
+            ),
+            IssueBoard(
+                id: "preview-board-2",
+                name: "Bug Triage",
+                isFavorite: true,
+                projectNames: ["YT"],
+                columnFieldName: "State",
+                columns: [
+                    IssueBoardColumn(id: "preview-col-5", title: "Open", valueNames: ["Open"]),
+                    IssueBoardColumn(id: "preview-col-6", title: "Investigating", valueNames: ["Investigating"]),
+                    IssueBoardColumn(id: "preview-col-7", title: "Fixed", valueNames: ["Fixed"])
+                ],
+                swimlaneSettings: IssueBoardSwimlaneSettings(kind: .none, isEnabled: false, fieldName: nil, values: []),
+                orphansAtTheTop: false,
+                hideOrphansSwimlane: true
+            ),
+            IssueBoard(
+                id: "preview-board-3",
+                name: "Internal Roadmap",
+                isFavorite: false,
+                projectNames: ["YT"],
+                columnFieldName: nil,
+                columns: [],
+                swimlaneSettings: .disabled,
+                orphansAtTheTop: false,
+                hideOrphansSwimlane: false
+            )
         ]
     }
 }

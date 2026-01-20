@@ -103,6 +103,7 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         let status = statusField?.value.firstValue?.name.flatMap(IssueStatus.init(apiName:)) ?? .open
         let priority = priorityField?.value.firstValue?.name.flatMap(IssuePriority.init(apiName:)) ?? .normal
         let tags = issue.tags?.compactMap { $0.name } ?? []
+        let customFieldValues = extractCustomFieldValues(from: customFields)
 
         return IssueSummary(
             id: makeStableIdentifier(for: issue.idReadable),
@@ -113,7 +114,8 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
             assignee: assignee,
             priority: priority,
             status: status,
-            tags: tags
+            tags: tags,
+            customFieldValues: customFieldValues
         )
     }
 
@@ -172,6 +174,20 @@ private extension YouTrackIssueRepository {
 
         guard !parts.isEmpty else { return nil }
         return parts.joined(separator: " ")
+    }
+
+    func extractCustomFieldValues(from fields: [YouTrackIssue.CustomField]) -> [String: [String]] {
+        var result: [String: [String]] = [:]
+        result.reserveCapacity(fields.count)
+        for field in fields {
+            let key = field.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty else { continue }
+            let values = field.value.displayNames
+            if !values.isEmpty {
+                result[key] = values
+            }
+        }
+        return result
     }
 }
 
@@ -265,6 +281,10 @@ private struct YouTrackIssue: Decodable {
                     name ?? localizedName ?? fullName
                 }
 
+                var resolvedName: String? {
+                    displayName ?? login ?? id
+                }
+
                 var compositeIdentifier: String {
                     [id, login, name, fullName].compactMap { $0 }.joined(separator: "|")
                 }
@@ -279,6 +299,19 @@ private struct YouTrackIssue: Decodable {
                 case .array(let values):
                     return values.first
                 }
+            }
+
+            var displayNames: [String] {
+                let values: [Value]
+                switch self {
+                case .none:
+                    values = []
+                case .object(let value):
+                    values = [value]
+                case .array(let array):
+                    values = array
+                }
+                return values.compactMap { $0.resolvedName }
             }
         }
     }

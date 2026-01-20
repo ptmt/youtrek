@@ -11,6 +11,7 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
     let priority: IssuePriority
     let status: IssueStatus
     let tags: [String]
+    let customFieldValues: [String: [String]]
 
     init(
         id: UUID = UUID(),
@@ -21,7 +22,8 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
         assignee: Person? = nil,
         priority: IssuePriority = .normal,
         status: IssueStatus = .open,
-        tags: [String] = []
+        tags: [String] = [],
+        customFieldValues: [String: [String]] = [:]
     ) {
         self.id = id
         self.readableID = readableID
@@ -32,10 +34,16 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
         self.priority = priority
         self.status = status
         self.tags = tags
+        self.customFieldValues = customFieldValues
     }
 
     var assigneeDisplayName: String {
         assignee?.displayName ?? "Unassigned"
+    }
+
+    func fieldValues(named fieldName: String) -> [String] {
+        let key = fieldName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return customFieldValues[key] ?? []
     }
 }
 

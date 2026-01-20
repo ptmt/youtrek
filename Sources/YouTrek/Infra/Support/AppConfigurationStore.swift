@@ -99,6 +99,7 @@ enum AppDebugSettings {
     }
 
     static let slowResponseDelay: TimeInterval = 5
+    static let syncStartDelay: TimeInterval = 2.0 // we postpone syncing to make sure we fetch first from offline
 
     static func applySlowResponseIfNeeded() async throws {
         guard simulateSlowResponses else { return }

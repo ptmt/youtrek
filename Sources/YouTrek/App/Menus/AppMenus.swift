@@ -19,7 +19,7 @@ struct AppMenus: Commands {
 
         CommandGroup(after: .appVisibility) {
             Button("Toggle Sidebar") {
-                container.appState.toggleSidebarVisibility()
+                container.appState.toggleSidebarVisibility(source: "menu")
             }
             .keyboardShortcut("s", modifiers: [.command, .option])
         }

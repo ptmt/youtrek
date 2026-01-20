@@ -22,7 +22,14 @@ private struct RootContentView: View {
     @State private var disableSyncing: Bool = AppDebugSettings.disableSyncing
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $appState.columnVisibility) {
+        let columnVisibilityBinding = Binding(
+            get: { appState.columnVisibility },
+            set: { newValue in
+                appState.updateColumnVisibility(newValue, source: "NavigationSplitView")
+            }
+        )
+
+        NavigationSplitView(columnVisibility: columnVisibilityBinding) {
             SidebarView(
                 sections: appState.sidebarSections,
                 selection: $appState.selectedSidebarItem,
@@ -37,8 +44,14 @@ private struct RootContentView: View {
         } content: {
             Group {
                 if let selection = appState.selectedSidebarItem, selection.isBoard {
+                    let board = selection.board ?? IssueBoard(
+                        id: selection.boardID ?? selection.id,
+                        name: selection.title,
+                        isFavorite: true,
+                        projectNames: []
+                    )
                     IssueBoardView(
-                        boardTitle: selection.title,
+                        board: board,
                         issues: appState.filteredIssues(searchQuery: searchQuery),
                         selection: $appState.selectedIssue,
                         isLoading: appState.isLoadingIssues

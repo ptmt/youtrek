@@ -15,6 +15,7 @@ struct SidebarItem: Identifiable, Hashable, Sendable {
     let title: String
     let iconName: String
     let query: IssueQuery
+    let board: IssueBoard?
 
     var displayTitle: LocalizedStringKey { LocalizedStringKey(title) }
 
@@ -28,6 +29,16 @@ struct SidebarItem: Identifiable, Hashable, Sendable {
     var boardID: String? {
         guard isBoard, id.hasPrefix("board:") else { return nil }
         return String(id.dropFirst("board:".count))
+    }
+}
+
+extension SidebarItem {
+    static func == (lhs: SidebarItem, rhs: SidebarItem) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 }
 
@@ -58,7 +69,8 @@ extension SidebarItem {
                 filters: ["for: me", "#Unresolved"],
                 sort: .updated(descending: true),
                 page: page
-            )
+            ),
+            board: nil
         )
     }
 
@@ -74,7 +86,8 @@ extension SidebarItem {
                 filters: ["assignee: me"],
                 sort: .updated(descending: true),
                 page: page
-            )
+            ),
+            board: nil
         )
     }
 
@@ -90,7 +103,8 @@ extension SidebarItem {
                 filters: ["reporter: me"],
                 sort: .updated(descending: true),
                 page: page
-            )
+            ),
+            board: nil
         )
     }
 
@@ -100,7 +114,8 @@ extension SidebarItem {
             kind: .savedSearch,
             title: savedQuery.name,
             iconName: "sparkle.magnifyingglass",
-            query: IssueQuery.saved(savedQuery.query, page: page)
+            query: IssueQuery.saved(savedQuery.query, page: page),
+            board: nil
         )
     }
 
@@ -116,7 +131,8 @@ extension SidebarItem {
                 filters: [],
                 sort: .updated(descending: true),
                 page: page
-            )
+            ),
+            board: board
         )
     }
 
