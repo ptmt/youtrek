@@ -102,15 +102,18 @@ struct YouTrackAPIClient: Sendable {
         let requestStart = Date()
         let requestMethod = request.httpMethod ?? "GET"
         let requestURL = request.url
+        let requestID = await monitor?.recordStart(method: requestMethod, url: requestURL)
         var didLog = false
 
         func logOnce(response: URLResponse?, error: Error?) async {
-            guard !didLog, let monitor else { return }
+            guard !didLog else { return }
             didLog = true
+            guard let monitor, let requestID else { return }
             let duration = Date().timeIntervalSince(requestStart)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             let errorDescription = error?.localizedDescription
-            await monitor.record(
+            await monitor.recordFinish(
+                id: requestID,
                 method: requestMethod,
                 url: requestURL,
                 statusCode: statusCode,
@@ -182,15 +185,18 @@ struct YouTrackAPIClient: Sendable {
         let requestStart = Date()
         let requestMethod = request.httpMethod ?? "POST"
         let requestURL = request.url
+        let requestID = await monitor?.recordStart(method: requestMethod, url: requestURL)
         var didLog = false
 
         func logOnce(response: URLResponse?, error: Error?) async {
-            guard !didLog, let monitor else { return }
+            guard !didLog else { return }
             didLog = true
+            guard let monitor, let requestID else { return }
             let duration = Date().timeIntervalSince(requestStart)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             let errorDescription = error?.localizedDescription
-            await monitor.record(
+            await monitor.recordFinish(
+                id: requestID,
                 method: requestMethod,
                 url: requestURL,
                 statusCode: statusCode,
@@ -260,15 +266,18 @@ struct YouTrackAPIClient: Sendable {
         let requestStart = Date()
         let requestMethod = request.httpMethod ?? "GET"
         let requestURL = request.url
+        let requestID = await monitor?.recordStart(method: requestMethod, url: requestURL)
         var didLog = false
 
         func logOnce(response: URLResponse?, error: Error?) async {
-            guard !didLog, let monitor else { return }
+            guard !didLog else { return }
             didLog = true
+            guard let monitor, let requestID else { return }
             let duration = Date().timeIntervalSince(requestStart)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             let errorDescription = error?.localizedDescription
-            await monitor.record(
+            await monitor.recordFinish(
+                id: requestID,
                 method: requestMethod,
                 url: requestURL,
                 statusCode: statusCode,

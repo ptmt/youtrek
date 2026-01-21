@@ -16,6 +16,8 @@ final class AppState: ObservableObject {
     @Published private(set) var isSyncing: Bool = false
     @Published private(set) var syncStatusMessage: String? = nil
     @Published private(set) var isLoadingIssues: Bool = false
+    @Published private(set) var hasCompletedIssueSync: Bool = false
+    @Published private(set) var hasCompletedBoardSync: Bool = false
     @Published private(set) var boardSyncTimestamps: [String: Date] = [:]
     @Published private var boardSprintFilters: [String: BoardSprintFilter] = [:]
     @Published var activeConflict: ConflictNotice?
@@ -113,6 +115,14 @@ final class AppState: ObservableObject {
     func updateSyncActivity(isSyncing: Bool, label: String?) {
         self.isSyncing = isSyncing
         self.syncStatusMessage = label
+    }
+
+    func recordIssueSyncCompleted() {
+        hasCompletedIssueSync = true
+    }
+
+    func recordBoardListSyncCompleted() {
+        hasCompletedBoardSync = true
     }
 
     func recordBoardSync(boardID: String, at date: Date = Date()) {

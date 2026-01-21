@@ -134,6 +134,7 @@ private struct RootContentView: View {
                 showAssigneeColumn: showAssigneeColumn,
                 showUpdatedColumn: showUpdatedColumn,
                 isLoading: appState.isLoadingIssues,
+                hasCompletedSync: appState.hasCompletedIssueSync,
                 isIssueUnread: { issue in
                     appState.isIssueUnread(issue)
                 },

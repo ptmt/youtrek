@@ -194,10 +194,16 @@ final class AppContainer: ObservableObject {
             await refreshIssueSeenUpdates(for: cachedIssues)
         }
 
-        let issues = (try? await syncCoordinator.refreshIssues(using: query)) ?? []
-        appState.replaceIssues(with: issues)
-        appState.setIssuesLoading(false)
-        await refreshIssueSeenUpdates(for: issues)
+        do {
+            let issues = try await syncCoordinator.refreshIssues(using: query)
+            appState.recordIssueSyncCompleted()
+            appState.replaceIssues(with: issues)
+            appState.setIssuesLoading(false)
+            await refreshIssueSeenUpdates(for: issues)
+        } catch {
+            appState.replaceIssues(with: [])
+            appState.setIssuesLoading(false)
+        }
         if selection.isBoard, let boardID = selection.boardID {
             appState.recordBoardSync(boardID: boardID)
         }
@@ -210,11 +216,19 @@ final class AppContainer: ObservableObject {
             appState.setIssuesLoading(true)
         }
         let query = issueQuery(for: item)
-        let issues = (try? await syncCoordinator.refreshIssues(using: query)) ?? []
-        if isSelected {
-            appState.replaceIssues(with: issues)
-            appState.setIssuesLoading(false)
-            await refreshIssueSeenUpdates(for: issues)
+        do {
+            let issues = try await syncCoordinator.refreshIssues(using: query)
+            appState.recordIssueSyncCompleted()
+            if isSelected {
+                appState.replaceIssues(with: issues)
+                appState.setIssuesLoading(false)
+                await refreshIssueSeenUpdates(for: issues)
+            }
+        } catch {
+            if isSelected {
+                appState.replaceIssues(with: [])
+                appState.setIssuesLoading(false)
+            }
         }
         if let boardID = item.boardID {
             appState.recordBoardSync(boardID: boardID)
@@ -498,12 +512,13 @@ private extension AppContainer {
         if !smartItems.isEmpty {
             sections.append(SidebarSection(id: "smart", title: "Smart Filters", items: smartItems))
         }
+        let boardEmptyMessage = appState.hasCompletedBoardSync ? "No favorite boards" : nil
         sections.append(
             SidebarSection(
                 id: "boards",
                 title: "Agile Boards",
                 items: boardItems,
-                emptyMessage: "No favorite boards"
+                emptyMessage: boardEmptyMessage
             )
         )
         if !savedItems.isEmpty {
@@ -536,6 +551,7 @@ private extension AppContainer {
             let remoteBoards = try await syncCoordinator.enqueue(label: "Sync agile boards") {
                 try await self.boardRepositorySwitcher.fetchBoards()
             }
+            appState.recordBoardListSyncCompleted()
             await boardLocalStore.saveRemoteBoards(remoteBoards)
             let syncDate = Date()
             for board in remoteBoards {

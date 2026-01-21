@@ -6,6 +6,7 @@ struct IssueListView: View {
     let showAssigneeColumn: Bool
     let showUpdatedColumn: Bool
     let isLoading: Bool
+    let hasCompletedSync: Bool
     let isIssueUnread: (IssueSummary) -> Bool
     let onIssuesRendered: ((Int) -> Void)?
 
@@ -24,22 +25,25 @@ struct IssueListView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if issues.isEmpty {
+            } else if issues.isEmpty && hasCompletedSync {
                 ContentUnavailableView(
                     "No issues",
                     systemImage: "tray",
                     description: Text("Refine your filters or sync to pull the latest issues.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if issues.isEmpty {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Table(issues, selection: $selectedIDs, sortOrder: $sortOrder) {
                     TableColumn("Title", value: \IssueSummary.title) { issue in
                         let unread = isIssueUnread(issue)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(issue.title)
-                                .font(.headline.weight(.regular))
+                                .font(.headline.weight(unread ? .semibold : .regular))
                                 .foregroundStyle(titleColor(isUnread: unread))
-                            metadataRow(for: issue)
+                            metadataRow(for: issue, isUnread: unread)
                         }
                         .padding(.vertical, 4)
                         .textSelection(.enabled)
@@ -47,20 +51,24 @@ struct IssueListView: View {
                     .width(min: 220, ideal: 420)
                     if showAssigneeColumn {
                         TableColumn("Assignee", value: \IssueSummary.assigneeDisplayName) { issue in
+                            let unread = isIssueUnread(issue)
                             if let assignee = issue.assignee {
                                 Label(assignee.displayName, systemImage: "person.fill")
                                     .labelStyle(.titleAndIcon)
+                                    .fontWeight(unread ? .semibold : .regular)
                             } else {
                                 Text(issue.assigneeDisplayName)
                                     .foregroundStyle(.secondary)
+                                    .fontWeight(unread ? .semibold : .regular)
                             }
                         }
                         .width(min: 160, ideal: 200)
                     }
                     if showUpdatedColumn {
                         TableColumn("Updated") { issue in
+                            let unread = isIssueUnread(issue)
                             Text(issue.updatedAt.formatted(.relative(presentation: .named)))
-                                .font(.subheadline)
+                                .font(.subheadline.weight(unread ? .semibold : .regular))
                                 .textSelection(.enabled)
                         }
                         .width(140)
@@ -86,7 +94,7 @@ struct IssueListView: View {
         .animation(.default, value: issues)
     }
 
-    private func metadataRow(for issue: IssueSummary) -> some View {
+    private func metadataRow(for issue: IssueSummary, isUnread: Bool) -> some View {
         HStack(spacing: 8) {
             Text(issue.projectName)
                 .foregroundStyle(.secondary)
@@ -95,7 +103,7 @@ struct IssueListView: View {
             Text(issue.priority.displayName)
                 .foregroundStyle(issue.priority.tint)
         }
-        .font(.caption)
+        .font(.caption.weight(isUnread ? .medium : .regular))
         .lineLimit(1)
     }
 

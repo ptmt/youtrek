@@ -43,7 +43,7 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
     }
 
     private func fetchBoards(fields: String) async throws -> [IssueBoard] {
-        let pageSize = 42
+        let pageSize = 10
         var skip = 0
         var allBoards: [YouTrackAgileBoard] = []
 

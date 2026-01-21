@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct NetworkRequestFooterView: View {
@@ -67,10 +68,20 @@ private struct NetworkRequestRow: View {
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 60, alignment: .trailing)
         }
+        .contextMenu {
+            Button {
+                copyToPasteboard(entry.urlString)
+            } label: {
+                Label("Copy URL", systemImage: "doc.on.doc")
+            }
+        }
         .help(entry.errorDescription ?? "")
     }
 
     private var statusText: String {
+        if entry.isPending {
+            return "pending"
+        }
         if let statusCode = entry.statusCode {
             return String(statusCode)
         }
@@ -78,6 +89,9 @@ private struct NetworkRequestRow: View {
     }
 
     private var statusColor: Color {
+        if entry.isPending {
+            return .secondary
+        }
         if let statusCode = entry.statusCode {
             if statusCode >= 400 {
                 return .red
@@ -88,5 +102,11 @@ private struct NetworkRequestRow: View {
             return .secondary
         }
         return entry.errorDescription == nil ? .secondary : .red
+    }
+
+    private func copyToPasteboard(_ value: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(value, forType: .string)
     }
 }
