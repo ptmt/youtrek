@@ -52,13 +52,10 @@ struct IssueListView: View {
                     if showAssigneeColumn {
                         TableColumn("Assignee", value: \IssueSummary.assigneeDisplayName) { issue in
                             let unread = isIssueUnread(issue)
-                            if let assignee = issue.assignee {
-                                Label(assignee.displayName, systemImage: "person.fill")
-                                    .labelStyle(.titleAndIcon)
-                                    .fontWeight(unread ? .semibold : .regular)
-                            } else {
+                            HStack(spacing: 8) {
+                                UserAvatarView(person: issue.assignee, size: 20)
                                 Text(issue.assigneeDisplayName)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(issue.assignee == nil ? .secondary : .primary)
                                     .fontWeight(unread ? .semibold : .regular)
                             }
                         }
@@ -91,7 +88,6 @@ struct IssueListView: View {
             }
             selection = issue
         }
-        .animation(.default, value: issues)
     }
 
     private func metadataRow(for issue: IssueSummary, isUnread: Bool) -> some View {
@@ -100,15 +96,17 @@ struct IssueListView: View {
                 .foregroundStyle(.secondary)
             Text(issue.status.displayName)
                 .foregroundStyle(issue.status.tint)
-            Text(issue.priority.displayName)
-                .foregroundStyle(issue.priority.tint)
+            if issue.priority != .normal {
+                Text(issue.priority.displayName)
+                    .foregroundStyle(issue.priority.tint)
+            }
         }
         .font(.caption.weight(isUnread ? .medium : .regular))
         .lineLimit(1)
     }
 
     private func titleColor(isUnread: Bool) -> Color {
-        isUnread ? .primary : .primary.opacity(0.78)
+        isUnread ? .primary : .primary.opacity(0.74)
     }
 
     private func syncSelectionState() {

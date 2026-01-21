@@ -8,6 +8,7 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
     let projectName: String
     let updatedAt: Date
     let assignee: Person?
+    let reporter: Person?
     let priority: IssuePriority
     let status: IssueStatus
     let tags: [String]
@@ -20,6 +21,7 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
         projectName: String,
         updatedAt: Date = .now,
         assignee: Person? = nil,
+        reporter: Person? = nil,
         priority: IssuePriority = .normal,
         status: IssueStatus = .open,
         tags: [String] = [],
@@ -31,6 +33,7 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
         self.projectName = projectName
         self.updatedAt = updatedAt
         self.assignee = assignee
+        self.reporter = reporter
         self.priority = priority
         self.status = status
         self.tags = tags
@@ -39,6 +42,10 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
 
     var assigneeDisplayName: String {
         assignee?.displayName ?? "Unassigned"
+    }
+
+    var reporterDisplayName: String {
+        reporter?.displayName ?? "Unknown"
     }
 
     func fieldValues(named fieldName: String) -> [String] {

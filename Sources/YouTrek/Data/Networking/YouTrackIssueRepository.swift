@@ -100,6 +100,13 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
             return Person(id: makeStableIdentifier(for: identifier), displayName: displayName, avatarURL: avatarURL)
         }
 
+        let reporter = issue.reporter.flatMap { user -> Person? in
+            guard let displayName = user.displayName else { return nil }
+            let avatarURL = user.avatarUrl.flatMap(URL.init(string:))
+            let identifier = user.compositeIdentifier.isEmpty ? displayName : user.compositeIdentifier
+            return Person(id: makeStableIdentifier(for: identifier), displayName: displayName, avatarURL: avatarURL)
+        }
+
         let status = statusField?.value.firstValue?.name.flatMap(IssueStatus.init(apiName:)) ?? .open
         let priority = priorityField?.value.firstValue?.name.flatMap(IssuePriority.init(apiName:)) ?? .normal
         let tags = issue.tags?.compactMap { $0.name } ?? []
@@ -112,6 +119,7 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
             projectName: projectName,
             updatedAt: updatedDate,
             assignee: assignee,
+            reporter: reporter,
             priority: priority,
             status: status,
             tags: tags,
@@ -142,6 +150,7 @@ private extension YouTrackIssueRepository {
         "project(shortName,name)",
         "updated",
         "customFields($type,name,value(id,name,localizedName,fullName,login,avatarUrl))",
+        "reporter(id,login,fullName,avatarUrl)",
         "tags(name)"
     ].joined(separator: ",")
 
@@ -228,6 +237,7 @@ private struct YouTrackIssue: Decodable {
     let summary: String
     let project: Project?
     let updated: Int?
+    let reporter: User?
     let customFields: [CustomField]?
     let tags: [Tag]?
 
@@ -238,6 +248,21 @@ private struct YouTrackIssue: Decodable {
 
     struct Tag: Decodable {
         let name: String?
+    }
+
+    struct User: Decodable {
+        let id: String?
+        let login: String?
+        let fullName: String?
+        let avatarUrl: String?
+
+        var displayName: String? {
+            fullName ?? login ?? id
+        }
+
+        var compositeIdentifier: String {
+            [id, login, fullName].compactMap { $0 }.joined(separator: "|")
+        }
     }
 
     struct CustomField: Decodable {

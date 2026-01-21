@@ -418,6 +418,7 @@ private struct IssueBoardCard: View {
                 Label(issue.projectName, systemImage: "folder")
                     .labelStyle(.titleAndIcon)
                 Spacer()
+                UserAvatarView(person: issue.assignee, size: 18)
                 Image(systemName: issue.priority.iconName)
                     .foregroundStyle(issue.priority.tint)
             }

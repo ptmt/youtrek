@@ -38,8 +38,9 @@ struct IssueDetailView: View {
 
     private var metadata: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let assignee = issue.assignee {
-                Label("Assigned to \(assignee.displayName)", systemImage: "person.fill")
+            HStack(spacing: 8) {
+                UserAvatarView(person: issue.assignee, size: 22)
+                Text(issue.assigneeDisplayName)
             }
             Label("Updated \(issue.updatedAt.formatted(.relative(presentation: .named)))", systemImage: "clock")
             Label("Project: \(issue.projectName)", systemImage: "folder")
