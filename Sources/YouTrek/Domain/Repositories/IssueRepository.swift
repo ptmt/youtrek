@@ -2,6 +2,7 @@ import Foundation
 
 protocol IssueRepository: Sendable {
     func fetchIssues(query: IssueQuery) async throws -> [IssueSummary]
+    func fetchIssueDetail(issue: IssueSummary) async throws -> IssueDetail
     func createIssue(draft: IssueDraft) async throws -> IssueSummary
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary
 }
@@ -64,6 +65,7 @@ struct IssueDraft: Equatable, Codable {
     var module: String?
     var priority: IssuePriority
     var assigneeID: String?
+    var customFields: [IssueDraftField] = []
 }
 
 struct IssuePatch: Equatable, Codable {

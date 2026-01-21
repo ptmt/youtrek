@@ -16,6 +16,9 @@ actor IssueLocalStore {
     private let assigneeID = Expression<String?>("assignee_id")
     private let assigneeName = Expression<String?>("assignee_name")
     private let assigneeAvatarURL = Expression<String?>("assignee_avatar_url")
+    private let reporterID = Expression<String?>("reporter_id")
+    private let reporterName = Expression<String?>("reporter_name")
+    private let reporterAvatarURL = Expression<String?>("reporter_avatar_url")
     private let priority = Expression<String>("priority")
     private let priorityRank = Expression<Int>("priority_rank")
     private let status = Expression<String>("status")
@@ -252,6 +255,9 @@ actor IssueLocalStore {
             assigneeID <- issue.assignee?.id.uuidString,
             assigneeName <- issue.assignee?.displayName,
             assigneeAvatarURL <- issue.assignee?.avatarURL?.absoluteString,
+            reporterID <- issue.reporter?.id.uuidString,
+            reporterName <- issue.reporter?.displayName,
+            reporterAvatarURL <- issue.reporter?.avatarURL?.absoluteString,
             priority <- issue.priority.rawValue,
             priorityRank <- issue.priority.sortRank,
             status <- issue.status.rawValue,
@@ -271,6 +277,14 @@ actor IssueLocalStore {
         } else {
             assignee = nil
         }
+        let reporter: Person?
+        if let name = row[reporterName] {
+            let reporterUUID = UUID(uuidString: row[reporterID] ?? "") ?? UUID()
+            let avatar = row[reporterAvatarURL].flatMap(URL.init(string:))
+            reporter = Person(id: reporterUUID, displayName: name, avatarURL: avatar)
+        } else {
+            reporter = nil
+        }
         let priorityValue = IssuePriority(rawValue: row[priority]) ?? .normal
         let statusValue = IssueStatus(rawValue: row[status]) ?? .open
         let tags = decodeTags(row[tagsJSON])
@@ -282,6 +296,7 @@ actor IssueLocalStore {
             projectName: row[projectName],
             updatedAt: Date(timeIntervalSince1970: row[updatedAt]),
             assignee: assignee,
+            reporter: reporter,
             priority: priorityValue,
             status: statusValue,
             tags: tags,
@@ -319,6 +334,7 @@ actor IssueLocalStore {
             projectName: issue.projectName,
             updatedAt: Date(),
             assignee: issue.assignee,
+            reporter: issue.reporter,
             priority: patch.priority ?? issue.priority,
             status: patch.status ?? issue.status,
             tags: issue.tags
@@ -425,6 +441,9 @@ actor IssueLocalStore {
         let assigneeIDColumn = Expression<String?>("assignee_id")
         let assigneeNameColumn = Expression<String?>("assignee_name")
         let assigneeAvatarURLColumn = Expression<String?>("assignee_avatar_url")
+        let reporterIDColumn = Expression<String?>("reporter_id")
+        let reporterNameColumn = Expression<String?>("reporter_name")
+        let reporterAvatarURLColumn = Expression<String?>("reporter_avatar_url")
         let priorityColumn = Expression<String>("priority")
         let priorityRankColumn = Expression<Int>("priority_rank")
         let statusColumn = Expression<String>("status")
@@ -459,6 +478,9 @@ actor IssueLocalStore {
             table.column(assigneeIDColumn)
             table.column(assigneeNameColumn)
             table.column(assigneeAvatarURLColumn)
+            table.column(reporterIDColumn)
+            table.column(reporterNameColumn)
+            table.column(reporterAvatarURLColumn)
             table.column(priorityColumn)
             table.column(priorityRankColumn)
             table.column(statusColumn)
@@ -470,6 +492,9 @@ actor IssueLocalStore {
 
         try addColumnIfNeeded(db, table: "issues", column: "custom_fields_json", type: "TEXT")
         try addColumnIfNeeded(db, table: "issues", column: "last_seen_updated_at", type: "DOUBLE")
+        try addColumnIfNeeded(db, table: "issues", column: "reporter_id", type: "TEXT")
+        try addColumnIfNeeded(db, table: "issues", column: "reporter_name", type: "TEXT")
+        try addColumnIfNeeded(db, table: "issues", column: "reporter_avatar_url", type: "TEXT")
 
         try db.run(issueQueriesTable.create(ifNotExists: true) { table in
             table.column(queryKeyColumn)

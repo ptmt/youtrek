@@ -100,6 +100,23 @@ enum IssuePriority: String, CaseIterable, Hashable, Sendable, Codable {
     }
 }
 
+extension IssuePriority {
+    static func from(displayName: String) -> IssuePriority? {
+        let normalized = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalized {
+        case "show-stopper", "showstopper", "critical", "blocker": return .critical
+        case "major", "high", "important": return .high
+        case "normal", "medium", "default": return .normal
+        case "minor", "low", "trivial": return .low
+        default:
+            if let match = IssuePriority(rawValue: normalized) {
+                return match
+            }
+            return nil
+        }
+    }
+}
+
 enum IssueStatus: String, CaseIterable, Hashable, Sendable, Codable {
     case open
     case inProgress

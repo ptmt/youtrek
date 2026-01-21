@@ -76,6 +76,9 @@ private struct RootContentView: View {
         .onChange(of: appState.selectedIssue) { _, issue in
             guard let issue else { return }
             container.markIssueSeen(issue)
+            Task {
+                await container.loadIssueDetail(for: issue)
+            }
         }
         .onChange(of: appState.selectedSidebarItem) { _, selection in
             guard let selection else { return }
@@ -206,7 +209,11 @@ private struct RootContentView: View {
     private var inspectorContent: some View {
         Group {
             if let issue = appState.selectedIssue {
-                IssueDetailView(issue: issue)
+                IssueDetailView(
+                    issue: issue,
+                    detail: appState.issueDetail(for: issue),
+                    isLoadingDetail: appState.isIssueDetailLoading(issue.id)
+                )
             } else {
                 ContentUnavailableView(
                     "Select an issue",

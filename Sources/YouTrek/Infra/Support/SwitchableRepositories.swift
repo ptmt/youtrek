@@ -44,6 +44,10 @@ actor SwitchableIssueRepository: IssueRepository {
         try await current.fetchIssues(query: query)
     }
 
+    func fetchIssueDetail(issue: IssueSummary) async throws -> IssueDetail {
+        try await current.fetchIssueDetail(issue: issue)
+    }
+
     func createIssue(draft: IssueDraft) async throws -> IssueSummary {
         try await current.createIssue(draft: draft)
     }
@@ -86,5 +90,57 @@ actor SwitchableIssueBoardRepository: IssueBoardRepository {
 
     func fetchBoards() async throws -> [IssueBoard] {
         try await current.fetchBoards()
+    }
+}
+
+actor SwitchableProjectRepository: ProjectRepository {
+    private var current: ProjectRepository
+
+    init(initial: ProjectRepository) {
+        self.current = initial
+    }
+
+    func replace(with repository: ProjectRepository) {
+        current = repository
+    }
+
+    func fetchProjects() async throws -> [IssueProject] {
+        try await current.fetchProjects()
+    }
+}
+
+actor SwitchableIssueFieldRepository: IssueFieldRepository {
+    private var current: IssueFieldRepository
+
+    init(initial: IssueFieldRepository) {
+        self.current = initial
+    }
+
+    func replace(with repository: IssueFieldRepository) {
+        current = repository
+    }
+
+    func fetchFields(projectID: String) async throws -> [IssueField] {
+        try await current.fetchFields(projectID: projectID)
+    }
+
+    func fetchBundleOptions(bundleID: String, kind: IssueFieldKind) async throws -> [IssueFieldOption] {
+        try await current.fetchBundleOptions(bundleID: bundleID, kind: kind)
+    }
+}
+
+actor SwitchablePeopleRepository: PeopleRepository {
+    private var current: PeopleRepository
+
+    init(initial: PeopleRepository) {
+        self.current = initial
+    }
+
+    func replace(with repository: PeopleRepository) {
+        current = repository
+    }
+
+    func fetchPeople(query: String?, projectID: String?) async throws -> [IssueFieldOption] {
+        try await current.fetchPeople(query: query, projectID: projectID)
     }
 }

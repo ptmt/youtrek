@@ -19,6 +19,9 @@ final class AppContainer: ObservableObject {
     private let authRepositorySwitcher: SwitchableAuthRepository
     private let savedQueryRepositorySwitcher: SwitchableSavedQueryRepository
     private let boardRepositorySwitcher: SwitchableIssueBoardRepository
+    private let projectRepositorySwitcher: SwitchableProjectRepository
+    private let issueFieldRepositorySwitcher: SwitchableIssueFieldRepository
+    private let peopleRepositorySwitcher: SwitchablePeopleRepository
     private let boardLocalStore: IssueBoardLocalStore
     private var lastLoadedIssueQuery: IssueQuery?
     @Published private(set) var supportsBrowserAuth: Bool = false
@@ -38,6 +41,9 @@ final class AppContainer: ObservableObject {
         authRepositorySwitcher: SwitchableAuthRepository,
         savedQueryRepositorySwitcher: SwitchableSavedQueryRepository,
         boardRepositorySwitcher: SwitchableIssueBoardRepository,
+        projectRepositorySwitcher: SwitchableProjectRepository,
+        issueFieldRepositorySwitcher: SwitchableIssueFieldRepository,
+        peopleRepositorySwitcher: SwitchablePeopleRepository,
         boardLocalStore: IssueBoardLocalStore
     ) {
         self.appState = appState
@@ -53,6 +59,9 @@ final class AppContainer: ObservableObject {
         self.authRepositorySwitcher = authRepositorySwitcher
         self.savedQueryRepositorySwitcher = savedQueryRepositorySwitcher
         self.boardRepositorySwitcher = boardRepositorySwitcher
+        self.projectRepositorySwitcher = projectRepositorySwitcher
+        self.issueFieldRepositorySwitcher = issueFieldRepositorySwitcher
+        self.peopleRepositorySwitcher = peopleRepositorySwitcher
         self.boardLocalStore = boardLocalStore
     }
 
@@ -69,6 +78,9 @@ final class AppContainer: ObservableObject {
         let issueSwitcher = SwitchableIssueRepository(initial: EmptyIssueRepository())
         let savedQuerySwitcher = SwitchableSavedQueryRepository(initial: PreviewSavedQueryRepository())
         let boardSwitcher = SwitchableIssueBoardRepository(initial: PreviewIssueBoardRepository())
+        let projectSwitcher = SwitchableProjectRepository(initial: EmptyProjectRepository())
+        let fieldSwitcher = SwitchableIssueFieldRepository(initial: EmptyIssueFieldRepository())
+        let peopleSwitcher = SwitchablePeopleRepository(initial: EmptyPeopleRepository())
         let boardStore = IssueBoardLocalStore()
         let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
             await MainActor.run {
@@ -98,6 +110,9 @@ final class AppContainer: ObservableObject {
             authRepositorySwitcher: authSwitcher,
             savedQueryRepositorySwitcher: savedQuerySwitcher,
             boardRepositorySwitcher: boardSwitcher,
+            projectRepositorySwitcher: projectSwitcher,
+            issueFieldRepositorySwitcher: fieldSwitcher,
+            peopleRepositorySwitcher: peopleSwitcher,
             boardLocalStore: boardStore
         )
         container.requiresSetup = initialRequiresSetup
@@ -120,6 +135,9 @@ final class AppContainer: ObservableObject {
         let issueSwitcher = SwitchableIssueRepository(initial: issueRepository)
         let savedQuerySwitcher = SwitchableSavedQueryRepository(initial: PreviewSavedQueryRepository())
         let boardSwitcher = SwitchableIssueBoardRepository(initial: PreviewIssueBoardRepository())
+        let projectSwitcher = SwitchableProjectRepository(initial: PreviewProjectRepository())
+        let fieldSwitcher = SwitchableIssueFieldRepository(initial: PreviewIssueFieldRepository())
+        let peopleSwitcher = SwitchablePeopleRepository(initial: PreviewPeopleRepository())
         let boardStore = IssueBoardLocalStore()
         let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
             await MainActor.run {
@@ -149,6 +167,9 @@ final class AppContainer: ObservableObject {
             authRepositorySwitcher: authSwitcher,
             savedQueryRepositorySwitcher: savedQuerySwitcher,
             boardRepositorySwitcher: boardSwitcher,
+            projectRepositorySwitcher: projectSwitcher,
+            issueFieldRepositorySwitcher: fieldSwitcher,
+            peopleRepositorySwitcher: peopleSwitcher,
             boardLocalStore: boardStore
         )
     }()
@@ -207,6 +228,24 @@ final class AppContainer: ObservableObject {
         if selection.isBoard, let boardID = selection.boardID {
             appState.recordBoardSync(boardID: boardID)
         }
+    }
+
+    func loadIssueDetail(for issue: IssueSummary) async {
+        let issueID = issue.id
+        if appState.isIssueDetailLoading(issueID) {
+            return
+        }
+        if let detail = appState.issueDetail(for: issue), detail.updatedAt >= issue.updatedAt {
+            return
+        }
+        appState.setIssueDetailLoading(issueID, isLoading: true)
+        do {
+            let detail = try await syncCoordinator.fetchIssueDetail(for: issue)
+            appState.updateIssueDetail(detail)
+        } catch {
+            // Intentionally ignored; detail view will show a placeholder.
+        }
+        appState.setIssueDetailLoading(issueID, isLoading: false)
     }
 
     func refreshBoardIssues(for item: SidebarItem) async {
@@ -272,6 +311,7 @@ final class AppContainer: ObservableObject {
             await MainActor.run {
                 appState.replaceIssues(with: [])
                 appState.resetIssueSeenUpdates()
+                appState.resetIssueDetails()
                 appState.selectedIssue = nil
                 appState.setIssuesLoading(true)
                 self.lastLoadedIssueQuery = nil
@@ -390,9 +430,15 @@ final class AppContainer: ObservableObject {
         let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration, monitor: networkMonitor)
         let savedQueryRepository = YouTrackSavedQueryRepository(configuration: apiConfiguration, monitor: networkMonitor)
         let boardRepository = YouTrackIssueBoardRepository(configuration: apiConfiguration, monitor: networkMonitor)
+        let projectRepository = YouTrackProjectRepository(configuration: apiConfiguration, monitor: networkMonitor)
+        let fieldRepository = YouTrackIssueFieldRepository(configuration: apiConfiguration, monitor: networkMonitor)
+        let peopleRepository = YouTrackPeopleRepository(configuration: apiConfiguration, monitor: networkMonitor)
         await issueRepositorySwitcher.replace(with: issueRepository)
         await savedQueryRepositorySwitcher.replace(with: savedQueryRepository)
         await boardRepositorySwitcher.replace(with: boardRepository)
+        await projectRepositorySwitcher.replace(with: projectRepository)
+        await issueFieldRepositorySwitcher.replace(with: fieldRepository)
+        await peopleRepositorySwitcher.replace(with: peopleRepository)
 
         await MainActor.run {
             requiresSetup = false
@@ -441,9 +487,15 @@ final class AppContainer: ObservableObject {
         let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration, monitor: networkMonitor)
         let savedQueryRepository = YouTrackSavedQueryRepository(configuration: apiConfiguration, monitor: networkMonitor)
         let boardRepository = YouTrackIssueBoardRepository(configuration: apiConfiguration, monitor: networkMonitor)
+        let projectRepository = YouTrackProjectRepository(configuration: apiConfiguration, monitor: networkMonitor)
+        let fieldRepository = YouTrackIssueFieldRepository(configuration: apiConfiguration, monitor: networkMonitor)
+        let peopleRepository = YouTrackPeopleRepository(configuration: apiConfiguration, monitor: networkMonitor)
         await issueRepositorySwitcher.replace(with: issueRepository)
         await savedQueryRepositorySwitcher.replace(with: savedQueryRepository)
         await boardRepositorySwitcher.replace(with: boardRepository)
+        await projectRepositorySwitcher.replace(with: projectRepository)
+        await issueFieldRepositorySwitcher.replace(with: fieldRepository)
+        await peopleRepositorySwitcher.replace(with: peopleRepository)
         supportsBrowserAuth = true
         requiresSetup = false
     }
@@ -613,6 +665,41 @@ private extension AppContainer {
         let updates = await syncCoordinator.loadIssueSeenUpdates(for: issues.map(\.id))
         appState.updateIssueSeenUpdates(updates)
     }
+
+}
+
+extension AppContainer {
+    func loadProjects() async -> [IssueProject] {
+        do {
+            return try await projectRepositorySwitcher.fetchProjects()
+        } catch {
+            return []
+        }
+    }
+
+    func loadFields(for projectID: String) async -> [IssueField] {
+        do {
+            return try await issueFieldRepositorySwitcher.fetchFields(projectID: projectID)
+        } catch {
+            return []
+        }
+    }
+
+    func loadBundleOptions(bundleID: String, kind: IssueFieldKind) async -> [IssueFieldOption] {
+        do {
+            return try await issueFieldRepositorySwitcher.fetchBundleOptions(bundleID: bundleID, kind: kind)
+        } catch {
+            return []
+        }
+    }
+
+    func searchPeople(query: String?, projectID: String?) async -> [IssueFieldOption] {
+        do {
+            return try await peopleRepositorySwitcher.fetchPeople(query: query, projectID: projectID)
+        } catch {
+            return []
+        }
+    }
 }
 
 @MainActor
@@ -641,6 +728,7 @@ final class IssueComposer: ObservableObject {
     @Published var draftModule: String = ""
     @Published var draftAssigneeID: String = ""
     @Published var draftPriority: IssuePriority = .normal
+    @Published var draftFields: [IssueDraftField] = []
 
     var canSubmit: Bool {
         !draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
@@ -654,6 +742,7 @@ final class IssueComposer: ObservableObject {
         draftModule = ""
         draftAssigneeID = ""
         draftPriority = .normal
+        draftFields = []
     }
 
     func applyDefaults(from draft: IssueDraft) {
@@ -669,6 +758,7 @@ final class IssueComposer: ObservableObject {
         if draftPriority == .normal {
             draftPriority = draft.priority
         }
+        applyDefaultFields(draft.customFields)
     }
 
     func makeDraft() -> IssueDraft? {
@@ -686,7 +776,8 @@ final class IssueComposer: ObservableObject {
             projectID: trimmedProject,
             module: trimmedModule.isEmpty ? nil : trimmedModule,
             priority: draftPriority,
-            assigneeID: trimmedAssignee.isEmpty ? nil : trimmedAssignee
+            assigneeID: trimmedAssignee.isEmpty ? nil : trimmedAssignee,
+            customFields: normalizedDraftFields(excluding: ["priority", "assignee", "subsystem", "module"])
         )
     }
 
@@ -697,6 +788,94 @@ final class IssueComposer: ObservableObject {
         draftModule = ""
         draftAssigneeID = ""
         draftPriority = .normal
+        draftFields = []
+    }
+
+    func updateDraftFields(using fields: [IssueField]) {
+        let existingByName = Dictionary(uniqueKeysWithValues: draftFields.map { ($0.normalizedName, $0) })
+        var updated: [IssueDraftField] = []
+        updated.reserveCapacity(fields.count)
+
+        for field in fields {
+            if let existing = existingByName[field.normalizedName] {
+                updated.append(IssueDraftField(name: field.name, kind: field.kind, allowsMultiple: field.allowsMultiple, value: existing.value))
+            } else {
+                updated.append(IssueDraftField(name: field.name, kind: field.kind, allowsMultiple: field.allowsMultiple, value: .none))
+            }
+        }
+        draftFields = updated
+    }
+
+    func value(for field: IssueField) -> IssueDraftFieldValue {
+        if let existing = draftFields.first(where: { $0.normalizedName == field.normalizedName }) {
+            return existing.value
+        }
+        if field.normalizedName == "priority" {
+            return .string(draftPriority.displayName)
+        }
+        if field.normalizedName == "assignee" {
+            let trimmed = draftAssigneeID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return .string(trimmed)
+            }
+        }
+        if field.normalizedName == "subsystem" || field.normalizedName == "module" {
+            let trimmed = draftModule.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return .string(trimmed)
+            }
+        }
+        return .none
+    }
+
+    func setValue(_ value: IssueDraftFieldValue, for field: IssueField) {
+        if field.normalizedName == "priority" {
+            if case let .option(option) = value {
+                draftPriority = IssuePriority.from(displayName: option.displayName) ?? draftPriority
+            } else if case let .string(raw) = value {
+                draftPriority = IssuePriority.from(displayName: raw) ?? draftPriority
+            }
+        }
+        if field.normalizedName == "assignee" {
+            if case let .option(option) = value {
+                draftAssigneeID = option.login ?? option.name
+            } else if case let .string(raw) = value {
+                draftAssigneeID = raw
+            }
+        }
+        if field.normalizedName == "subsystem" || field.normalizedName == "module" {
+            if case let .string(raw) = value {
+                draftModule = raw
+            } else if case let .option(option) = value {
+                draftModule = option.displayName
+            }
+        }
+
+        if let index = draftFields.firstIndex(where: { $0.normalizedName == field.normalizedName }) {
+            draftFields[index] = IssueDraftField(name: field.name, kind: field.kind, allowsMultiple: field.allowsMultiple, value: value)
+        } else {
+            draftFields.append(IssueDraftField(name: field.name, kind: field.kind, allowsMultiple: field.allowsMultiple, value: value))
+        }
+    }
+
+    private func applyDefaultFields(_ fields: [IssueDraftField]) {
+        guard !fields.isEmpty else { return }
+        var current = draftFields
+        for field in fields {
+            if let index = current.firstIndex(where: { $0.normalizedName == field.normalizedName }) {
+                if current[index].value.isEmpty {
+                    current[index] = field
+                }
+            } else {
+                current.append(field)
+            }
+        }
+        draftFields = current
+    }
+
+    private func normalizedDraftFields(excluding excludedNames: [String]) -> [IssueDraftField] {
+        let excluded = Set(excludedNames.map { $0.lowercased() })
+        return draftFields.filter { !excluded.contains($0.normalizedName) && !$0.value.isEmpty }
     }
 }
 
@@ -735,6 +914,25 @@ private struct PreviewIssueRepository: IssueRepository {
         AppStatePlaceholder.sampleIssues()
     }
 
+    func fetchIssueDetail(issue: IssueSummary) async throws -> IssueDetail {
+        let comment = IssueComment(
+            id: "preview-comment-1",
+            author: issue.reporter,
+            createdAt: issue.updatedAt.addingTimeInterval(-1800),
+            text: "Preview comment for **\(issue.readableID)**."
+        )
+        return IssueDetail(
+            id: issue.id,
+            readableID: issue.readableID,
+            title: issue.title,
+            description: "This is a _preview_ description rendered as markdown.",
+            reporter: issue.reporter,
+            createdAt: issue.updatedAt.addingTimeInterval(-7200),
+            updatedAt: issue.updatedAt,
+            comments: [comment]
+        )
+    }
+
     func createIssue(draft: IssueDraft) async throws -> IssueSummary {
         throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support mutations")
     }
@@ -749,12 +947,137 @@ private struct EmptyIssueRepository: IssueRepository {
         []
     }
 
+    func fetchIssueDetail(issue: IssueSummary) async throws -> IssueDetail {
+        throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
+    }
+
     func createIssue(draft: IssueDraft) async throws -> IssueSummary {
         throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
     }
 
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {
         throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
+    }
+}
+
+private struct EmptyProjectRepository: ProjectRepository {
+    func fetchProjects() async throws -> [IssueProject] {
+        []
+    }
+}
+
+private struct EmptyIssueFieldRepository: IssueFieldRepository {
+    func fetchFields(projectID: String) async throws -> [IssueField] {
+        []
+    }
+
+    func fetchBundleOptions(bundleID: String, kind: IssueFieldKind) async throws -> [IssueFieldOption] {
+        []
+    }
+}
+
+private struct EmptyPeopleRepository: PeopleRepository {
+    func fetchPeople(query: String?, projectID: String?) async throws -> [IssueFieldOption] {
+        []
+    }
+}
+
+private struct PreviewProjectRepository: ProjectRepository {
+    func fetchProjects() async throws -> [IssueProject] {
+        [
+            IssueProject(id: "0-0", name: "YouTrek", shortName: "YT", isArchived: false),
+            IssueProject(id: "0-1", name: "Mobile App", shortName: "MOB", isArchived: false)
+        ]
+    }
+}
+
+private struct PreviewIssueFieldRepository: IssueFieldRepository {
+    func fetchFields(projectID: String) async throws -> [IssueField] {
+        [
+            IssueField(
+                id: "priority",
+                name: "Priority",
+                localizedName: nil,
+                kind: .enumeration,
+                isRequired: true,
+                allowsMultiple: false,
+                bundleID: nil,
+                options: [
+                    IssueFieldOption(id: "p1", name: "Critical"),
+                    IssueFieldOption(id: "p2", name: "High"),
+                    IssueFieldOption(id: "p3", name: "Normal"),
+                    IssueFieldOption(id: "p4", name: "Low")
+                ],
+                ordinal: 1
+            ),
+            IssueField(
+                id: "assignee",
+                name: "Assignee",
+                localizedName: nil,
+                kind: .user,
+                isRequired: false,
+                allowsMultiple: false,
+                bundleID: nil,
+                options: [
+                    IssueFieldOption(id: "u1", name: "taylor", displayName: "Taylor Atkins"),
+                    IssueFieldOption(id: "u2", name: "morgan", displayName: "Morgan Chan"),
+                    IssueFieldOption(id: "u3", name: "ola", displayName: "Ola Svensson")
+                ],
+                ordinal: 2
+            ),
+            IssueField(
+                id: "type",
+                name: "Type",
+                localizedName: nil,
+                kind: .enumeration,
+                isRequired: true,
+                allowsMultiple: false,
+                bundleID: nil,
+                options: [
+                    IssueFieldOption(id: "t1", name: "Bug"),
+                    IssueFieldOption(id: "t2", name: "Task"),
+                    IssueFieldOption(id: "t3", name: "Feature")
+                ],
+                ordinal: 3
+            ),
+            IssueField(
+                id: "estimate",
+                name: "Story Points",
+                localizedName: nil,
+                kind: .integer,
+                isRequired: false,
+                allowsMultiple: false,
+                bundleID: nil,
+                options: [],
+                ordinal: 4
+            ),
+            IssueField(
+                id: "due",
+                name: "Due Date",
+                localizedName: nil,
+                kind: .date,
+                isRequired: false,
+                allowsMultiple: false,
+                bundleID: nil,
+                options: [],
+                ordinal: 5
+            )
+        ]
+    }
+
+    func fetchBundleOptions(bundleID: String, kind: IssueFieldKind) async throws -> [IssueFieldOption] {
+        []
+    }
+}
+
+private struct PreviewPeopleRepository: PeopleRepository {
+    func fetchPeople(query: String?, projectID: String?) async throws -> [IssueFieldOption] {
+        [
+            IssueFieldOption(id: "u1", name: "taylor", displayName: "Taylor Atkins"),
+            IssueFieldOption(id: "u2", name: "morgan", displayName: "Morgan Chan"),
+            IssueFieldOption(id: "u3", name: "ola", displayName: "Ola Svensson"),
+            IssueFieldOption(id: "u4", name: "priya", displayName: "Priya Desai")
+        ]
     }
 }
 

@@ -1,6 +1,8 @@
+import AppKit
 import SwiftUI
 
 struct IssueListView: View {
+    @Environment(\.colorScheme) private var colorScheme
     let issues: [IssueSummary]
     @Binding var selection: IssueSummary?
     let showAssigneeColumn: Bool
@@ -39,11 +41,14 @@ struct IssueListView: View {
                 Table(issues, selection: $selectedIDs, sortOrder: $sortOrder) {
                     TableColumn("Title", value: \IssueSummary.title) { issue in
                         let unread = isIssueUnread(issue)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(issue.title)
-                                .font(.headline.weight(unread ? .semibold : .regular))
-                                .foregroundStyle(titleColor(isUnread: unread))
-                            metadataRow(for: issue, isUnread: unread)
+                        HStack(alignment: .top, spacing: 10) {
+                            UserAvatarView(person: issue.assignee, size: 24)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(issue.title)
+                                    .font(.headline.weight(unread ? .semibold : .regular))
+                                    .foregroundStyle(titleColor(isUnread: unread))
+                                metadataRow(for: issue, isUnread: unread)
+                            }
                         }
                         .padding(.vertical, 4)
                         .textSelection(.enabled)
@@ -52,12 +57,9 @@ struct IssueListView: View {
                     if showAssigneeColumn {
                         TableColumn("Assignee", value: \IssueSummary.assigneeDisplayName) { issue in
                             let unread = isIssueUnread(issue)
-                            HStack(spacing: 8) {
-                                UserAvatarView(person: issue.assignee, size: 20)
-                                Text(issue.assigneeDisplayName)
-                                    .foregroundStyle(issue.assignee == nil ? .secondary : .primary)
-                                    .fontWeight(unread ? .semibold : .regular)
-                            }
+                            Text(issue.assigneeDisplayName)
+                                .foregroundStyle(issue.assignee == nil ? .secondary : .primary)
+                                .fontWeight(unread ? .semibold : .regular)
                         }
                         .width(min: 160, ideal: 200)
                     }
@@ -72,6 +74,9 @@ struct IssueListView: View {
                     }
                 }
                 .tableStyle(.inset)
+                .tableRowBackground { issue in
+                    rowBackground(for: issue)
+                }
                 .onAppear {
                     onIssuesRendered?(issues.count)
                 }
@@ -107,6 +112,16 @@ struct IssueListView: View {
 
     private func titleColor(isUnread: Bool) -> Color {
         isUnread ? .primary : .primary.opacity(0.74)
+    }
+
+    private func rowBackground(for issue: IssueSummary) -> Color {
+        let isUnread = isIssueUnread(issue)
+        if isUnread {
+            return Color(nsColor: .textBackgroundColor)
+        }
+
+        let background = NSColor.windowBackgroundColor.withAlphaComponent(colorScheme == .light ? 0.85 : 0.75)
+        return Color(nsColor: background)
     }
 
     private func syncSelectionState() {

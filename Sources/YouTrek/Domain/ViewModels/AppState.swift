@@ -10,6 +10,8 @@ final class AppState: ObservableObject {
     @Published var selectedIssue: IssueSummary?
     @Published private(set) var issues: [IssueSummary]
     @Published private(set) var issueSeenUpdates: [IssueSummary.ID: Date] = [:]
+    @Published private(set) var issueDetails: [IssueSummary.ID: IssueDetail] = [:]
+    @Published private(set) var issueDetailLoadingIDs: Set<IssueSummary.ID> = []
     @Published private var searchQuery: String = ""
     @Published private(set) var isInspectorVisible: Bool = true
     @Published private(set) var isSidebarVisible: Bool = true
@@ -56,6 +58,31 @@ final class AppState: ObservableObject {
 
     func resetIssueSeenUpdates() {
         issueSeenUpdates = [:]
+    }
+
+    func issueDetail(for issue: IssueSummary) -> IssueDetail? {
+        issueDetails[issue.id]
+    }
+
+    func isIssueDetailLoading(_ id: IssueSummary.ID) -> Bool {
+        issueDetailLoadingIDs.contains(id)
+    }
+
+    func updateIssueDetail(_ detail: IssueDetail) {
+        issueDetails[detail.id] = detail
+    }
+
+    func setIssueDetailLoading(_ id: IssueSummary.ID, isLoading: Bool) {
+        if isLoading {
+            issueDetailLoadingIDs.insert(id)
+        } else {
+            issueDetailLoadingIDs.remove(id)
+        }
+    }
+
+    func resetIssueDetails() {
+        issueDetails = [:]
+        issueDetailLoadingIDs = []
     }
 
     func isIssueUnread(_ issue: IssueSummary) -> Bool {
@@ -245,6 +272,7 @@ enum AppStatePlaceholder {
                 projectName: "YouTrek",
                 updatedAt: Date().addingTimeInterval(-3600),
                 assignee: people[0],
+                reporter: people[1],
                 priority: .high,
                 status: .inProgress,
                 tags: ["sync", "networking"]
@@ -255,6 +283,7 @@ enum AppStatePlaceholder {
                 projectName: "YouTrek",
                 updatedAt: Date().addingTimeInterval(-7200),
                 assignee: people[1],
+                reporter: people[2],
                 priority: .critical,
                 status: .blocked,
                 tags: ["auth"]
@@ -265,6 +294,7 @@ enum AppStatePlaceholder {
                 projectName: "YouTrek",
                 updatedAt: Date().addingTimeInterval(-10800),
                 assignee: people[2],
+                reporter: people[3],
                 priority: .normal,
                 status: .inReview,
                 tags: ["ux"]
@@ -275,6 +305,7 @@ enum AppStatePlaceholder {
                 projectName: "YouTrek",
                 updatedAt: Date().addingTimeInterval(-86400),
                 assignee: people[3],
+                reporter: people[0],
                 priority: .low,
                 status: .done,
                 tags: ["macOS", "polish"]

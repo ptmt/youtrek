@@ -38,6 +38,15 @@ actor SyncCoordinator {
         await localStore.loadIssues(for: query)
     }
 
+    func fetchIssueDetail(for issue: IssueSummary) async throws -> IssueDetail {
+        if AppDebugSettings.disableSyncing {
+            throw YouTrackAPIError.http(statusCode: 503, body: "Syncing disabled")
+        }
+        return try await enqueue(label: "Sync issue details") {
+            try await self.issueRepository.fetchIssueDetail(issue: issue)
+        }
+    }
+
     func clearCachedIssues() async {
         await localStore.clearCache()
     }

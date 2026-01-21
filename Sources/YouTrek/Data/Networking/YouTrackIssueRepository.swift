@@ -33,6 +33,16 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         return issues.map(mapIssue(_:))
     }
 
+    func fetchIssueDetail(issue: IssueSummary) async throws -> IssueDetail {
+        let identifier = issue.readableID
+        let data = try await client.get(
+            path: "issues/\(identifier)",
+            queryItems: [URLQueryItem(name: "fields", value: Self.issueDetailFields)]
+        )
+        let detail = try decoder.decode(YouTrackIssue.self, from: data)
+        return mapIssueDetail(detail, fallback: issue)
+    }
+
     func createIssue(draft: IssueDraft) async throws -> IssueSummary {
         let trimmedTitle = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedProject = draft.projectID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -44,15 +54,21 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         let project = IssueCreatePayload.ProjectReference.from(identifier: trimmedProject)
 
         var customFields: [IssueCreatePayload.CustomField] = []
-        customFields.append(.priority(draft.priority))
+        let draftFields = draft.customFields
+        let draftFieldNames = Set(draftFields.map { $0.normalizedName })
+        customFields.append(contentsOf: draftFields.compactMap { IssueCreatePayload.CustomField.from(draftField: $0) })
+
+        if !draftFieldNames.contains("priority") {
+            customFields.append(.priority(draft.priority))
+        }
 
         let moduleValue = draft.module?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let moduleValue, !moduleValue.isEmpty {
+        if let moduleValue, !moduleValue.isEmpty, !draftFieldNames.contains("subsystem"), !draftFieldNames.contains("module") {
             customFields.append(.module(moduleValue))
         }
 
         let assigneeValue = draft.assigneeID?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let assigneeValue, !assigneeValue.isEmpty {
+        if let assigneeValue, !assigneeValue.isEmpty, !draftFieldNames.contains("assignee") {
             customFields.append(.assignee(assigneeValue))
         }
 
@@ -127,6 +143,44 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         )
     }
 
+    private func mapIssueDetail(_ issue: YouTrackIssue, fallback: IssueSummary) -> IssueDetail {
+        let updatedDate = issue.updated.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) } ?? fallback.updatedAt
+        let createdDate = issue.created.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) }
+        let reporter = issue.reporter.flatMap { user -> Person? in
+            guard let displayName = user.displayName else { return nil }
+            let avatarURL = user.avatarUrl.flatMap(URL.init(string:))
+            let identifier = user.compositeIdentifier.isEmpty ? displayName : user.compositeIdentifier
+            return Person(id: makeStableIdentifier(for: identifier), displayName: displayName, avatarURL: avatarURL)
+        }
+        let comments = issue.comments?.compactMap { comment -> IssueComment? in
+            guard let id = comment.id else { return nil }
+            let createdAt = comment.created.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) } ?? updatedDate
+            let author = comment.author.flatMap { user -> Person? in
+                guard let displayName = user.displayName else { return nil }
+                let avatarURL = user.avatarUrl.flatMap(URL.init(string:))
+                let identifier = user.compositeIdentifier.isEmpty ? displayName : user.compositeIdentifier
+                return Person(id: makeStableIdentifier(for: identifier), displayName: displayName, avatarURL: avatarURL)
+            }
+            return IssueComment(
+                id: id,
+                author: author,
+                createdAt: createdAt,
+                text: comment.text ?? ""
+            )
+        } ?? []
+
+        return IssueDetail(
+            id: fallback.id,
+            readableID: issue.idReadable,
+            title: issue.summary,
+            description: issue.description,
+            reporter: reporter ?? fallback.reporter,
+            createdAt: createdDate,
+            updatedAt: updatedDate,
+            comments: comments
+        )
+    }
+
     private func makeStableIdentifier(for source: String) -> UUID {
         var hashBytes = [UInt8](repeating: 0, count: 16)
         let data = Array(source.utf8)
@@ -152,6 +206,17 @@ private extension YouTrackIssueRepository {
         "customFields($type,name,value(id,name,localizedName,fullName,login,avatarUrl))",
         "reporter(id,login,fullName,avatarUrl)",
         "tags(name)"
+    ].joined(separator: ",")
+
+    static let issueDetailFields = [
+        "id",
+        "idReadable",
+        "summary",
+        "description",
+        "created",
+        "updated",
+        "reporter(id,login,fullName,avatarUrl)",
+        "comments(id,text,created,author(id,login,fullName,avatarUrl))"
     ].joined(separator: ",")
 
     func buildQueryString(from query: IssueQuery) -> String? {
@@ -236,8 +301,11 @@ private struct YouTrackIssue: Decodable {
     let idReadable: String
     let summary: String
     let project: Project?
+    let description: String?
+    let created: Int?
     let updated: Int?
     let reporter: User?
+    let comments: [Comment]?
     let customFields: [CustomField]?
     let tags: [Tag]?
 
@@ -248,6 +316,13 @@ private struct YouTrackIssue: Decodable {
 
     struct Tag: Decodable {
         let name: String?
+    }
+
+    struct Comment: Decodable {
+        let id: String?
+        let text: String?
+        let created: Int?
+        let author: User?
     }
 
     struct User: Decodable {
@@ -375,7 +450,7 @@ private struct IssueCreatePayload: Encodable {
             CustomField(
                 typeName: "SingleEnumIssueCustomField",
                 name: "Priority",
-                value: CustomFieldValue(name: priority.displayName)
+                value: .option(OptionPayload(name: priority.displayName))
             )
         }
 
@@ -383,7 +458,7 @@ private struct IssueCreatePayload: Encodable {
             CustomField(
                 typeName: "SingleUserIssueCustomField",
                 name: "Assignee",
-                value: CustomFieldValue(userIdentifier: identifier)
+                value: .option(OptionPayload(identifier: identifier))
             )
         }
 
@@ -391,12 +466,112 @@ private struct IssueCreatePayload: Encodable {
             CustomField(
                 typeName: "SingleOwnedIssueCustomField",
                 name: "Subsystem",
-                value: CustomFieldValue(name: module)
+                value: .option(OptionPayload(name: module))
+            )
+        }
+
+        static func from(draftField: IssueDraftField) -> CustomField? {
+            guard let value = CustomFieldValue.from(draftField: draftField) else { return nil }
+            return CustomField(
+                typeName: draftField.kind.issueCustomFieldTypeName(allowsMultiple: draftField.allowsMultiple),
+                name: draftField.name,
+                value: value
             )
         }
     }
 
-    struct CustomFieldValue: Encodable {
+    enum CustomFieldValue: Encodable {
+        case option(OptionPayload)
+        case options([OptionPayload])
+        case string(String)
+        case text(String)
+        case integer(Int)
+        case float(Double)
+        case bool(Bool)
+        case date(Date)
+        case period(minutes: Int)
+
+        static func from(draftField: IssueDraftField) -> CustomFieldValue? {
+            let value = draftField.value
+            guard !value.isEmpty else { return nil }
+
+            switch draftField.kind {
+            case .enumeration, .state, .version, .build, .ownedField:
+                if draftField.allowsMultiple {
+                    let options = value.optionValues.map(OptionPayload.init(option:))
+                    return options.isEmpty ? nil : .options(options)
+                } else if let option = value.optionValue {
+                    return .option(OptionPayload(option: option))
+                } else if let string = value.stringValue {
+                    return .option(OptionPayload(name: string))
+                }
+                return nil
+            case .user:
+                if draftField.allowsMultiple {
+                    let options = value.optionValues.map(OptionPayload.init(option:))
+                    return options.isEmpty ? nil : .options(options)
+                } else if let option = value.optionValue {
+                    return .option(OptionPayload(option: option))
+                } else if let string = value.stringValue {
+                    return .option(OptionPayload(identifier: string))
+                }
+                return nil
+            case .string:
+                guard let string = value.stringValue else { return nil }
+                return .string(string)
+            case .text:
+                guard let string = value.stringValue else { return nil }
+                return .text(string)
+            case .integer:
+                guard let number = value.intValue else { return nil }
+                return .integer(number)
+            case .float:
+                guard let number = value.doubleValue else { return nil }
+                return .float(number)
+            case .boolean:
+                guard let flag = value.boolValue else { return nil }
+                return .bool(flag)
+            case .date, .dateTime:
+                guard let date = value.dateValue else { return nil }
+                return .date(date)
+            case .period:
+                guard let minutes = value.intValue else { return nil }
+                return .period(minutes: minutes)
+            case .unknown:
+                guard let string = value.stringValue else { return nil }
+                return .string(string)
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            switch self {
+            case .option(let payload):
+                try payload.encode(to: encoder)
+            case .options(let payloads):
+                try payloads.encode(to: encoder)
+            case .string(let value), .text(let value):
+                var container = encoder.singleValueContainer()
+                try container.encode(value)
+            case .integer(let value):
+                var container = encoder.singleValueContainer()
+                try container.encode(value)
+            case .float(let value):
+                var container = encoder.singleValueContainer()
+                try container.encode(value)
+            case .bool(let value):
+                var container = encoder.singleValueContainer()
+                try container.encode(value)
+            case .date(let value):
+                var container = encoder.singleValueContainer()
+                let milliseconds = Int64(value.timeIntervalSince1970 * 1000.0)
+                try container.encode(milliseconds)
+            case .period(let minutes):
+                try PeriodPayload(minutes: minutes).encode(to: encoder)
+            }
+        }
+    }
+
+    struct OptionPayload: Encodable {
         let id: String?
         let name: String?
         let login: String?
@@ -407,13 +582,30 @@ private struct IssueCreatePayload: Encodable {
             self.login = login
         }
 
-        init(userIdentifier: String) {
-            if userIdentifier.isLikelyYouTrackID {
-                self.init(id: userIdentifier)
+        init(name: String) {
+            self.init(id: nil, name: name, login: nil)
+        }
+
+        init(identifier: String) {
+            if identifier.isLikelyYouTrackID {
+                self.init(id: identifier, name: nil, login: nil)
             } else {
-                self.init(login: userIdentifier)
+                self.init(id: nil, name: nil, login: identifier)
             }
         }
+
+        init(option: IssueFieldOption) {
+            let trimmedName = option.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.init(
+                id: option.id.isEmpty ? nil : option.id,
+                name: trimmedName.isEmpty ? option.displayName : trimmedName,
+                login: option.login
+            )
+        }
+    }
+
+    struct PeriodPayload: Encodable {
+        let minutes: Int
     }
 }
 
