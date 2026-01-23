@@ -331,12 +331,12 @@ final class NewIssueViewModel: ObservableObject {
                 guard field.kind.usesOptions, let bundleID = field.bundleID else { continue }
                 group.addTask {
                     let options = await container.loadBundleOptions(bundleID: bundleID, kind: field.kind)
-                    return (field.id, self.sortedOptions(options))
+                    return (field.id, options)
                 }
             }
 
             for await (fieldID, options) in group {
-                results[fieldID] = options
+                results[fieldID] = sortedOptions(options)
             }
         }
         return results

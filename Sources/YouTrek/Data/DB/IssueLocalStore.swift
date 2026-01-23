@@ -16,6 +16,8 @@ actor IssueLocalStore {
     private let assigneeID = Expression<String?>("assignee_id")
     private let assigneeName = Expression<String?>("assignee_name")
     private let assigneeAvatarURL = Expression<String?>("assignee_avatar_url")
+    private let assigneeLogin = Expression<String?>("assignee_login")
+    private let assigneeRemoteID = Expression<String?>("assignee_remote_id")
     private let reporterID = Expression<String?>("reporter_id")
     private let reporterName = Expression<String?>("reporter_name")
     private let reporterAvatarURL = Expression<String?>("reporter_avatar_url")
@@ -255,6 +257,8 @@ actor IssueLocalStore {
             assigneeID <- issue.assignee?.id.uuidString,
             assigneeName <- issue.assignee?.displayName,
             assigneeAvatarURL <- issue.assignee?.avatarURL?.absoluteString,
+            assigneeLogin <- issue.assignee?.login,
+            assigneeRemoteID <- issue.assignee?.remoteID,
             reporterID <- issue.reporter?.id.uuidString,
             reporterName <- issue.reporter?.displayName,
             reporterAvatarURL <- issue.reporter?.avatarURL?.absoluteString,
@@ -273,7 +277,9 @@ actor IssueLocalStore {
         if let name = row[assigneeName] {
             let assigneeUUID = UUID(uuidString: row[assigneeID] ?? "") ?? UUID()
             let avatar = row[assigneeAvatarURL].flatMap(URL.init(string:))
-            assignee = Person(id: assigneeUUID, displayName: name, avatarURL: avatar)
+            let login = row[assigneeLogin]
+            let remoteID = row[assigneeRemoteID]
+            assignee = Person(id: assigneeUUID, displayName: name, avatarURL: avatar, login: login, remoteID: remoteID)
         } else {
             assignee = nil
         }
@@ -327,13 +333,23 @@ actor IssueLocalStore {
     }
 
     private func applyPatch(_ patch: IssuePatch, to issue: IssueSummary) -> IssueSummary {
-        IssueSummary(
+        let resolvedAssignee: Person?
+        switch patch.assignee {
+        case .clear:
+            resolvedAssignee = nil
+        case .set(let option):
+            resolvedAssignee = Person.from(option: option)
+        case .none:
+            resolvedAssignee = issue.assignee
+        }
+
+        return IssueSummary(
             id: issue.id,
             readableID: issue.readableID,
             title: patch.title ?? issue.title,
             projectName: issue.projectName,
             updatedAt: Date(),
-            assignee: issue.assignee,
+            assignee: resolvedAssignee,
             reporter: issue.reporter,
             priority: patch.priority ?? issue.priority,
             status: patch.status ?? issue.status,
@@ -441,6 +457,8 @@ actor IssueLocalStore {
         let assigneeIDColumn = Expression<String?>("assignee_id")
         let assigneeNameColumn = Expression<String?>("assignee_name")
         let assigneeAvatarURLColumn = Expression<String?>("assignee_avatar_url")
+        let assigneeLoginColumn = Expression<String?>("assignee_login")
+        let assigneeRemoteIDColumn = Expression<String?>("assignee_remote_id")
         let reporterIDColumn = Expression<String?>("reporter_id")
         let reporterNameColumn = Expression<String?>("reporter_name")
         let reporterAvatarURLColumn = Expression<String?>("reporter_avatar_url")
@@ -478,6 +496,8 @@ actor IssueLocalStore {
             table.column(assigneeIDColumn)
             table.column(assigneeNameColumn)
             table.column(assigneeAvatarURLColumn)
+            table.column(assigneeLoginColumn)
+            table.column(assigneeRemoteIDColumn)
             table.column(reporterIDColumn)
             table.column(reporterNameColumn)
             table.column(reporterAvatarURLColumn)
@@ -495,6 +515,8 @@ actor IssueLocalStore {
         try addColumnIfNeeded(db, table: "issues", column: "reporter_id", type: "TEXT")
         try addColumnIfNeeded(db, table: "issues", column: "reporter_name", type: "TEXT")
         try addColumnIfNeeded(db, table: "issues", column: "reporter_avatar_url", type: "TEXT")
+        try addColumnIfNeeded(db, table: "issues", column: "assignee_login", type: "TEXT")
+        try addColumnIfNeeded(db, table: "issues", column: "assignee_remote_id", type: "TEXT")
 
         try db.run(issueQueriesTable.create(ifNotExists: true) { table in
             table.column(queryKeyColumn)

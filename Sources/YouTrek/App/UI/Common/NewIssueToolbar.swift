@@ -10,12 +10,16 @@ struct NewIssueToolbar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            TextField("New issue title", text: $draftTitle, onCommit: createDraft)
+            TextField("New issue title", text: $draftTitle)
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
                 .frame(minWidth: 200)
+                .submitLabel(.done)
+                .onSubmit {
+                    createDraft()
+                }
             Button(action: createDraft) {
                 Image(systemName: "plus.circle.fill")
             }

@@ -650,7 +650,11 @@ private extension AppContainer {
             appState.updateSprintFilter(resolved, for: board.id)
         }
         let sprintName = board.sprintName(for: resolved)
-        let rawQuery = IssueQuery.boardQuery(boardName: board.name, sprintName: sprintName)
+        let rawQuery = IssueQuery.boardQuery(
+            boardName: board.name,
+            sprintName: sprintName,
+            sprintFieldName: board.sprintFieldName
+        )
         return IssueQuery(
             rawQuery: rawQuery,
             search: "",

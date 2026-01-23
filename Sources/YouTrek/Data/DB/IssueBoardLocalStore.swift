@@ -13,6 +13,7 @@ actor IssueBoardLocalStore {
     private let projectNamesJSON = Expression<String>("project_names_json")
     private let sprintsJSON = Expression<String?>("sprints_json")
     private let currentSprintID = Expression<String?>("current_sprint_id")
+    private let sprintFieldName = Expression<String?>("sprint_field_name")
     private let columnFieldName = Expression<String?>("column_field_name")
     private let columnsJSON = Expression<String?>("columns_json")
     private let swimlaneJSON = Expression<String?>("swimlane_json")
@@ -69,6 +70,7 @@ actor IssueBoardLocalStore {
                     projectNamesJSON <- encodeProjects(board.projectNames),
                     sprintsJSON <- encodeSprints(board.sprints),
                     currentSprintID <- board.currentSprintID,
+                    sprintFieldName <- board.sprintFieldName,
                     columnFieldName <- board.columnFieldName,
                     columnsJSON <- encodeColumns(board.columns),
                     swimlaneJSON <- encodeSwimlane(board.swimlaneSettings),
@@ -102,6 +104,7 @@ actor IssueBoardLocalStore {
             projectNames: decodeProjects(row[projectNamesJSON]),
             sprints: decodeSprints(row[sprintsJSON]),
             currentSprintID: row[currentSprintID],
+            sprintFieldName: row[sprintFieldName],
             columnFieldName: row[columnFieldName],
             columns: decodeColumns(row[columnsJSON]),
             swimlaneSettings: decodeSwimlane(row[swimlaneJSON]),
@@ -181,6 +184,7 @@ actor IssueBoardLocalStore {
         let projectNamesJSONColumn = Expression<String>("project_names_json")
         let sprintsJSONColumn = Expression<String?>("sprints_json")
         let currentSprintIDColumn = Expression<String?>("current_sprint_id")
+        let sprintFieldNameColumn = Expression<String?>("sprint_field_name")
         let columnFieldNameColumn = Expression<String?>("column_field_name")
         let columnsJSONColumn = Expression<String?>("columns_json")
         let swimlaneJSONColumn = Expression<String?>("swimlane_json")
@@ -195,6 +199,7 @@ actor IssueBoardLocalStore {
             table.column(projectNamesJSONColumn)
             table.column(sprintsJSONColumn)
             table.column(currentSprintIDColumn)
+            table.column(sprintFieldNameColumn)
             table.column(columnFieldNameColumn)
             table.column(columnsJSONColumn)
             table.column(swimlaneJSONColumn)
@@ -210,6 +215,7 @@ actor IssueBoardLocalStore {
         try addColumnIfNeeded(db, table: "issue_boards", column: "hide_orphans_swimlane", type: "INTEGER")
         try addColumnIfNeeded(db, table: "issue_boards", column: "sprints_json", type: "TEXT")
         try addColumnIfNeeded(db, table: "issue_boards", column: "current_sprint_id", type: "TEXT")
+        try addColumnIfNeeded(db, table: "issue_boards", column: "sprint_field_name", type: "TEXT")
     }
 
     private static func addColumnIfNeeded(_ db: Connection, table: String, column: String, type: String) throws {

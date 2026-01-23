@@ -31,18 +31,21 @@ struct IssueQuery: Equatable, Hashable, Sendable {
 }
 
 extension IssueQuery {
-    static func boardQuery(boardName: String, sprintName: String?) -> String {
+    static func boardQuery(boardName: String, sprintName: String?, sprintFieldName: String? = nil) -> String {
         let trimmedBoard = boardName.trimmingCharacters(in: .whitespacesAndNewlines)
         let escapedBoard = escapeQueryValue(trimmedBoard)
-        var query = "board: {\(escapedBoard)}"
-        if let sprintName {
-            let trimmedSprint = sprintName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedSprint.isEmpty {
-                let escapedSprint = escapeQueryValue(trimmedSprint)
-                query += " Sprint: {\(escapedSprint)}"
-            }
+        guard let sprintName else {
+            return "has: {Board \(escapedBoard)}"
         }
-        return query
+
+        let trimmedSprint = sprintName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSprint.isEmpty else {
+            return "has: {Board \(escapedBoard)}"
+        }
+
+        let escapedSprint = escapeQueryValue(trimmedSprint)
+        let boardAttributeName = trimmedBoard.isEmpty ? "Board" : "Board \(escapedBoard)"
+        return "\(boardAttributeName): {\(escapedSprint)}"
     }
 
     private static func escapeQueryValue(_ value: String) -> String {
@@ -73,6 +76,46 @@ struct IssuePatch: Equatable, Codable {
     var description: String?
     var status: IssueStatus?
     var priority: IssuePriority?
+    var assignee: AssigneeChange? = nil
+    var issueReadableID: String? = nil
+}
+
+enum AssigneeChange: Equatable, Codable {
+    case clear
+    case set(IssueFieldOption)
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case option
+    }
+
+    private enum ChangeType: String, Codable {
+        case clear
+        case set
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(ChangeType.self, forKey: .type)
+        switch type {
+        case .clear:
+            self = .clear
+        case .set:
+            let option = try container.decode(IssueFieldOption.self, forKey: .option)
+            self = .set(option)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .clear:
+            try container.encode(ChangeType.clear, forKey: .type)
+        case .set(let option):
+            try container.encode(ChangeType.set, forKey: .type)
+            try container.encode(option, forKey: .option)
+        }
+    }
 }
 
 extension IssuePatch {
@@ -89,6 +132,14 @@ extension IssuePatch {
         }
         if let priority {
             parts.append("Priority: \(priority.displayName)")
+        }
+        if let assignee {
+            switch assignee {
+            case .clear:
+                parts.append("Assignee: Unassigned")
+            case .set(let option):
+                parts.append("Assignee: \(option.displayName)")
+            }
         }
         return parts.isEmpty ? "No local changes captured." : parts.joined(separator: "\n")
     }

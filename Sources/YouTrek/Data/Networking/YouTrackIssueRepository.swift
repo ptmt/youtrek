@@ -91,7 +91,43 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
     }
 
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {
-        throw YouTrackAPIError.http(statusCode: 501, body: "Issue update not yet implemented")
+        let readableID = patch.issueReadableID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !readableID.isEmpty else {
+            throw YouTrackAPIError.http(statusCode: 400, body: "Missing issue identifier for update")
+        }
+
+        var customFields: [IssueUpdatePayload.CustomField] = []
+        if let status = patch.status {
+            customFields.append(.status(status))
+        }
+        if let priority = patch.priority {
+            customFields.append(.priority(priority))
+        }
+        if let assignee = patch.assignee {
+            switch assignee {
+            case .clear:
+                customFields.append(.clearAssignee())
+            case .set(let option):
+                customFields.append(.assignee(option))
+            }
+        }
+
+        let trimmedTitle = patch.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDescription = patch.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let payload = IssueUpdatePayload(
+            summary: trimmedTitle?.isEmpty == false ? trimmedTitle : nil,
+            description: trimmedDescription?.isEmpty == false ? trimmedDescription : nil,
+            customFields: customFields.isEmpty ? nil : customFields
+        )
+        let encoder = JSONEncoder()
+        let body = try encoder.encode(payload)
+        let response = try await client.post(
+            path: "issues/\(readableID)",
+            queryItems: [URLQueryItem(name: "fields", value: Self.issueListFields)],
+            body: body
+        )
+        let issue = try decoder.decode(YouTrackIssue.self, from: response)
+        return mapIssue(issue)
     }
 
     private static func makeDecoder() -> JSONDecoder {
@@ -110,17 +146,29 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         let priorityField = customFields.first { $0.name.caseInsensitiveCompare("Priority") == .orderedSame }
 
         let assignee = assigneeField?.value.firstValue.flatMap { value -> Person? in
-            guard let displayName = value.displayName else { return nil }
+            guard let displayName = value.displayName ?? value.fullName ?? value.login ?? value.id else { return nil }
             let avatarURL = value.avatarUrl.flatMap(URL.init(string:))
             let identifier = value.compositeIdentifier.isEmpty ? displayName : value.compositeIdentifier
-            return Person(id: makeStableIdentifier(for: identifier), displayName: displayName, avatarURL: avatarURL)
+            return Person(
+                id: Person.stableID(for: identifier),
+                displayName: displayName,
+                avatarURL: avatarURL,
+                login: value.login,
+                remoteID: value.id
+            )
         }
 
         let reporter = issue.reporter.flatMap { user -> Person? in
             guard let displayName = user.displayName else { return nil }
             let avatarURL = user.avatarUrl.flatMap(URL.init(string:))
             let identifier = user.compositeIdentifier.isEmpty ? displayName : user.compositeIdentifier
-            return Person(id: makeStableIdentifier(for: identifier), displayName: displayName, avatarURL: avatarURL)
+            return Person(
+                id: Person.stableID(for: identifier),
+                displayName: displayName,
+                avatarURL: avatarURL,
+                login: user.login,
+                remoteID: user.id
+            )
         }
 
         let status = statusField?.value.firstValue?.name.flatMap(IssueStatus.init(apiName:)) ?? .open
@@ -129,7 +177,7 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         let customFieldValues = extractCustomFieldValues(from: customFields)
 
         return IssueSummary(
-            id: makeStableIdentifier(for: issue.idReadable),
+            id: Person.stableID(for: issue.idReadable),
             readableID: issue.idReadable,
             title: issue.summary,
             projectName: projectName,
@@ -150,7 +198,13 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
             guard let displayName = user.displayName else { return nil }
             let avatarURL = user.avatarUrl.flatMap(URL.init(string:))
             let identifier = user.compositeIdentifier.isEmpty ? displayName : user.compositeIdentifier
-            return Person(id: makeStableIdentifier(for: identifier), displayName: displayName, avatarURL: avatarURL)
+            return Person(
+                id: Person.stableID(for: identifier),
+                displayName: displayName,
+                avatarURL: avatarURL,
+                login: user.login,
+                remoteID: user.id
+            )
         }
         let comments = issue.comments?.compactMap { comment -> IssueComment? in
             guard let id = comment.id else { return nil }
@@ -159,7 +213,13 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
                 guard let displayName = user.displayName else { return nil }
                 let avatarURL = user.avatarUrl.flatMap(URL.init(string:))
                 let identifier = user.compositeIdentifier.isEmpty ? displayName : user.compositeIdentifier
-                return Person(id: makeStableIdentifier(for: identifier), displayName: displayName, avatarURL: avatarURL)
+                return Person(
+                    id: Person.stableID(for: identifier),
+                    displayName: displayName,
+                    avatarURL: avatarURL,
+                    login: user.login,
+                    remoteID: user.id
+                )
             }
             return IssueComment(
                 id: id,
@@ -181,19 +241,6 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         )
     }
 
-    private func makeStableIdentifier(for source: String) -> UUID {
-        var hashBytes = [UInt8](repeating: 0, count: 16)
-        let data = Array(source.utf8)
-        for (index, byte) in data.enumerated() {
-            hashBytes[index % 16] = hashBytes[index % 16] &+ byte &+ UInt8(index % 7)
-        }
-        return UUID(uuid: (
-            hashBytes[0], hashBytes[1], hashBytes[2], hashBytes[3],
-            hashBytes[4], hashBytes[5], hashBytes[6], hashBytes[7],
-            hashBytes[8], hashBytes[9], hashBytes[10], hashBytes[11],
-            hashBytes[12], hashBytes[13], hashBytes[14], hashBytes[15]
-        ))
-    }
 }
 
 private extension YouTrackIssueRepository {
@@ -606,6 +653,104 @@ private struct IssueCreatePayload: Encodable {
 
     struct PeriodPayload: Encodable {
         let minutes: Int
+    }
+}
+
+private struct IssueUpdatePayload: Encodable {
+    let summary: String?
+    let description: String?
+    let customFields: [CustomField]?
+
+    struct CustomField: Encodable {
+        let typeName: String
+        let name: String
+        let value: CustomFieldValue
+
+        enum CodingKeys: String, CodingKey {
+            case typeName = "$type"
+            case name
+            case value
+        }
+
+        static func status(_ status: IssueStatus) -> CustomField {
+            CustomField(
+                typeName: "StateIssueCustomField",
+                name: "State",
+                value: .option(OptionPayload(name: status.displayName))
+            )
+        }
+
+        static func priority(_ priority: IssuePriority) -> CustomField {
+            CustomField(
+                typeName: "SingleEnumIssueCustomField",
+                name: "Priority",
+                value: .option(OptionPayload(name: priority.displayName))
+            )
+        }
+
+        static func assignee(_ option: IssueFieldOption) -> CustomField {
+            CustomField(
+                typeName: "SingleUserIssueCustomField",
+                name: "Assignee",
+                value: .option(OptionPayload(option: option))
+            )
+        }
+
+        static func clearAssignee() -> CustomField {
+            CustomField(
+                typeName: "SingleUserIssueCustomField",
+                name: "Assignee",
+                value: .clear
+            )
+        }
+    }
+
+    enum CustomFieldValue: Encodable {
+        case option(OptionPayload)
+        case clear
+
+        func encode(to encoder: Encoder) throws {
+            switch self {
+            case .option(let payload):
+                try payload.encode(to: encoder)
+            case .clear:
+                var container = encoder.singleValueContainer()
+                try container.encodeNil()
+            }
+        }
+    }
+
+    struct OptionPayload: Encodable {
+        let id: String?
+        let name: String?
+        let login: String?
+
+        init(id: String? = nil, name: String? = nil, login: String? = nil) {
+            self.id = id
+            self.name = name
+            self.login = login
+        }
+
+        init(name: String) {
+            self.init(id: nil, name: name, login: nil)
+        }
+
+        init(identifier: String) {
+            if identifier.isLikelyYouTrackID {
+                self.init(id: identifier, name: nil, login: nil)
+            } else {
+                self.init(id: nil, name: nil, login: identifier)
+            }
+        }
+
+        init(option: IssueFieldOption) {
+            let trimmedName = option.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.init(
+                id: option.id.isEmpty ? nil : option.id,
+                name: trimmedName.isEmpty ? option.displayName : trimmedName,
+                login: option.login
+            )
+        }
     }
 }
 

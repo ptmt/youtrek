@@ -5,11 +5,17 @@ struct AppMenus: Commands {
     @ObservedObject var container: AppContainer
 
     var body: some Commands {
-        CommandMenu("Issues") {
+        CommandGroup(replacing: .newItem) {
             Button("New Issue") {
-                container.beginNewIssue(withTitle: "Untitled Issue")
+                container.beginNewIssue(withTitle: "")
             }
             .keyboardShortcut("n", modifiers: [.command])
+        }
+
+        CommandMenu("Issues") {
+            Button("New Issue") {
+                container.beginNewIssue(withTitle: "")
+            }
 
             Button("Command Palette…") {
                 container.commandPalette.open()

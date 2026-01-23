@@ -250,7 +250,7 @@ private enum CLIRunner {
             let parsed = try parseOptions(
                 remaining,
                 valueOptions: ["--base-url", "--token"],
-                flagOptions: ["--json", "--offline"]
+                flagOptions: ["--json", "--offline", "--favorites"]
             )
             if parsed.flags.contains("--help") {
                 CLIOutput.printAgileBoardsHelp()
@@ -260,11 +260,12 @@ private enum CLIRunner {
             if parsed.flags.contains("--offline") {
                 let store = IssueBoardLocalStore()
                 let boards = await store.loadBoards()
+                let filtered = parsed.flags.contains("--favorites") ? boards.filter(\.isFavorite) : boards
                 if parsed.flags.contains("--json") {
-                    let output = boards.map(AgileBoardOutput.init)
+                    let output = filtered.map(AgileBoardOutput.init)
                     CLIOutput.printJSON(output)
                 } else {
-                    CLIOutput.printAgileBoards(boards)
+                    CLIOutput.printAgileBoards(filtered)
                 }
                 return 0
             }
@@ -275,12 +276,72 @@ private enum CLIRunner {
             let store = IssueBoardLocalStore()
             await store.saveRemoteBoards(boards)
 
+            let filtered = parsed.flags.contains("--favorites") ? boards.filter(\.isFavorite) : boards
             if parsed.flags.contains("--json") {
-                let output = boards.map(AgileBoardOutput.init)
+                let output = filtered.map(AgileBoardOutput.init)
                 CLIOutput.printJSON(output)
             } else {
-                CLIOutput.printAgileBoards(boards)
+                CLIOutput.printAgileBoards(filtered)
             }
+            return 0
+        case "show":
+            let parsed = try parseOptions(
+                remaining,
+                valueOptions: ["--base-url", "--token", "--id", "--name", "--sprint", "--top"],
+                flagOptions: ["--backlog"]
+            )
+            if parsed.flags.contains("--help") {
+                CLIOutput.printAgileBoardsHelp()
+                return 0
+            }
+
+            let boardID = parsed.options["--id"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let boardName = parsed.options["--name"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if boardID == nil && (boardName == nil || boardName?.isEmpty == true) {
+                throw CLIError.missingArgument("--id or --name")
+            }
+
+            if parsed.flags.contains("--backlog"), parsed.options["--sprint"] != nil {
+                throw CLIError.invalidValue(option: "--sprint", value: "cannot be used with --backlog")
+            }
+
+            let topValue = parsed.options["--top"] ?? "200"
+            guard let pageSize = Int(topValue), pageSize > 0 else {
+                throw CLIError.invalidValue(option: "--top", value: topValue)
+            }
+
+            let connection = try resolveConnection(options: parsed)
+            let boardRepository = YouTrackIssueBoardRepository(configuration: connection.configuration)
+            let issueRepository = YouTrackIssueRepository(configuration: connection.configuration)
+
+            let resolvedID: String
+            if let boardID, !boardID.isEmpty {
+                resolvedID = boardID
+            } else if let name = boardName, !name.isEmpty {
+                let summaries = try await boardRepository.fetchBoardSummaries()
+                guard let match = summaries.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else {
+                    throw CLIError.invalidValue(option: "--name", value: name)
+                }
+                resolvedID = match.id
+            } else {
+                throw CLIError.missingArgument("--id or --name")
+            }
+
+            let board = try await boardRepository.fetchBoard(id: resolvedID)
+            let sprintSelection = try resolveSprintSelection(parsed, board: board)
+            let query = IssueQuery(
+                rawQuery: IssueQuery.boardQuery(
+                    boardName: board.name,
+                    sprintName: sprintSelection.sprintName,
+                    sprintFieldName: board.sprintFieldName
+                ),
+                search: "",
+                filters: [],
+                sort: nil,
+                page: IssueQuery.Page(size: pageSize, offset: 0)
+            )
+            let issues = try await issueRepository.fetchIssues(query: query)
+            CLIOutput.printBoard(board, issues: issues, sprintLabel: sprintSelection.label)
             return 0
         default:
             throw CLIError.invalidCommand("agile-boards \(subcommand)")
@@ -303,6 +364,36 @@ private enum CLIRunner {
         let message = try CLIInstaller.installSymlink(at: installURL, force: parsed.flags.contains("--force"))
         CLIOutput.printInfo(message)
         return 0
+    }
+
+    private struct CLISprintSelection {
+        let sprintName: String?
+        let label: String
+    }
+
+    private static func resolveSprintSelection(
+        _ parsed: CLIParsedOptions,
+        board: IssueBoard
+    ) throws -> CLISprintSelection {
+        if parsed.flags.contains("--backlog") {
+            return CLISprintSelection(sprintName: nil, label: "Backlog")
+        }
+
+        if let rawSprint = parsed.options["--sprint"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rawSprint.isEmpty {
+            guard let sprint = board.sprints.first(where: { $0.name.caseInsensitiveCompare(rawSprint) == .orderedSame }) else {
+                throw CLIError.invalidValue(option: "--sprint", value: rawSprint)
+            }
+            return CLISprintSelection(sprintName: sprint.name, label: sprint.name)
+        }
+
+        let fallback = board.defaultSprintFilter
+        if fallback.isBacklog {
+            return CLISprintSelection(sprintName: nil, label: "Backlog")
+        }
+
+        let name = board.sprintName(for: fallback)
+        return CLISprintSelection(sprintName: name, label: name ?? "Sprint")
     }
 
     private static func parseOptions(
@@ -424,7 +515,9 @@ private struct CLIOutput {
               auth status
               auth login --base-url <url> --token <pat>
               issues list [--query <ytql>] [--saved <name>] [--top <n>] [--offline] [--json]
-              agile-boards list [--offline] [--json]
+              agile-boards list [--favorites] [--offline] [--json]
+              agile-boards show --id <id> [--sprint <name> | --backlog] [--top <n>]
+              agile-boards show --name <name> [--sprint <name> | --backlog] [--top <n>]
               saved-queries list [--json]
               install-cli [--path <path>] [--force]
 
@@ -467,7 +560,9 @@ private struct CLIOutput {
         print(
             """
             Agile boards commands:
-              youtrek agile-boards list [--offline] [--json]
+              youtrek agile-boards list [--favorites] [--offline] [--json]
+              youtrek agile-boards show --id <id> [--sprint <name> | --backlog] [--top <n>]
+              youtrek agile-boards show --name <name> [--sprint <name> | --backlog] [--top <n>]
             """
         )
     }
@@ -548,6 +643,36 @@ private struct CLIOutput {
         printTable(headers: ["Name", "Favorite", "Projects", "ID"], rows: rows)
     }
 
+    static func printBoard(_ board: IssueBoard, issues: [IssueSummary], sprintLabel: String) {
+        print("Board: \(board.name)")
+        print("ID: \(board.id)")
+        print("Sprint: \(sprintLabel)")
+        print("")
+
+        guard !issues.isEmpty else {
+            print("No cards on this board.")
+            return
+        }
+
+        let columns = makeBoardColumns(board)
+        let groups = makeBoardGroups(board, issues: issues)
+
+        for (index, group) in groups.enumerated() {
+            print("\(group.title) (\(group.issues.count) cards)")
+            for column in columns {
+                let columnIssues = group.issues.filter(column.match)
+                print("  \(column.title) (\(columnIssues.count))")
+                for issue in columnIssues {
+                    let title = truncate(issue.title, limit: 80)
+                    print("    \(issue.readableID) \(title)")
+                }
+            }
+            if index < groups.count - 1 {
+                print("")
+            }
+        }
+    }
+
     static func printJSON<T: Encodable>(_ value: T) {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -599,6 +724,114 @@ private struct CLIOutput {
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
+    }
+
+    private static func makeBoardColumns(_ board: IssueBoard) -> [BoardColumnDescriptor] {
+        if let fieldName = board.columnFieldName, !board.columns.isEmpty {
+            let normalizedField = fieldName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let columns = board.columns.sorted { (left, right) in
+                let leftOrdinal = left.ordinal ?? Int.max
+                let rightOrdinal = right.ordinal ?? Int.max
+                if leftOrdinal != rightOrdinal { return leftOrdinal < rightOrdinal }
+                return left.title.localizedCaseInsensitiveCompare(right.title) == .orderedAscending
+            }
+            return columns.map { column in
+                let matchValues = column.valueNames.map { $0.lowercased() }
+                return BoardColumnDescriptor(
+                    title: column.title,
+                    match: { issue in
+                        let values = issue.fieldValues(named: normalizedField).map { $0.lowercased() }
+                        if matchValues.isEmpty {
+                            let title = column.title.lowercased()
+                            return values.contains(title)
+                        }
+                        return values.contains(where: { matchValues.contains($0) })
+                    }
+                )
+            }
+        }
+
+        let fallback: [IssueStatus] = [.open, .blocked, .inProgress, .inReview, .done]
+        return fallback.map { status in
+            BoardColumnDescriptor(
+                title: status.displayName,
+                match: { issue in issue.status == status }
+            )
+        }
+    }
+
+    private static func makeBoardGroups(_ board: IssueBoard, issues: [IssueSummary]) -> [BoardGroup] {
+        guard board.swimlaneSettings.isEnabled, let fieldName = board.swimlaneSettings.fieldName else {
+            return [BoardGroup(title: "All cards", issues: issues, isUnassigned: false, sortIndex: 0)]
+        }
+
+        let normalizedField = fieldName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let isAssignee = normalizedField == "assignee"
+        let explicitValues = board.swimlaneSettings.values
+        let lookup = Dictionary(uniqueKeysWithValues: explicitValues.map { ($0.lowercased(), $0) })
+
+        var buckets: [String: [IssueSummary]] = [:]
+        var unassigned: [IssueSummary] = []
+
+        for issue in issues {
+            let values = swimlaneValues(for: issue, fieldName: normalizedField, isAssignee: isAssignee)
+            if values.isEmpty {
+                unassigned.append(issue)
+                continue
+            }
+
+            var matched = false
+            for value in values {
+                let key = value.lowercased()
+                if let canonical = lookup[key] {
+                    buckets[canonical, default: []].append(issue)
+                    matched = true
+                } else if explicitValues.isEmpty {
+                    buckets[value, default: []].append(issue)
+                    matched = true
+                }
+            }
+            if !matched {
+                unassigned.append(issue)
+            }
+        }
+
+        var groups: [BoardGroup] = []
+        if !explicitValues.isEmpty {
+            for (index, value) in explicitValues.enumerated() {
+                let groupIssues = buckets[value] ?? []
+                groups.append(BoardGroup(title: value, issues: groupIssues, isUnassigned: false, sortIndex: index))
+            }
+        } else {
+            let sortedKeys = buckets.keys.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            for (index, key) in sortedKeys.enumerated() {
+                groups.append(BoardGroup(title: key, issues: buckets[key] ?? [], isUnassigned: false, sortIndex: index))
+            }
+        }
+
+        if !unassigned.isEmpty, !board.hideOrphansSwimlane {
+            let title = isAssignee ? "Unassigned" : "Other"
+            let sortIndex = board.orphansAtTheTop ? -1 : (groups.last?.sortIndex ?? 0) + 1
+            let orphanGroup = BoardGroup(title: title, issues: unassigned, isUnassigned: true, sortIndex: sortIndex)
+            if board.orphansAtTheTop {
+                groups.insert(orphanGroup, at: 0)
+            } else {
+                groups.append(orphanGroup)
+            }
+        }
+
+        if groups.isEmpty {
+            return [BoardGroup(title: "All cards", issues: issues, isUnassigned: false, sortIndex: 0)]
+        }
+
+        return groups
+    }
+
+    private static func swimlaneValues(for issue: IssueSummary, fieldName: String, isAssignee: Bool) -> [String] {
+        if isAssignee {
+            return issue.assignee.map { [$0.displayName] } ?? []
+        }
+        return issue.fieldValues(named: fieldName)
     }
 }
 
@@ -662,4 +895,16 @@ private struct AgileBoardOutput: Encodable {
         self.isFavorite = board.isFavorite
         self.projects = board.projectNames
     }
+}
+
+private struct BoardColumnDescriptor {
+    let title: String
+    let match: (IssueSummary) -> Bool
+}
+
+private struct BoardGroup {
+    let title: String
+    let issues: [IssueSummary]
+    let isUnassigned: Bool
+    let sortIndex: Int
 }

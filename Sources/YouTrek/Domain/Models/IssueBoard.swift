@@ -7,6 +7,7 @@ struct IssueBoard: Identifiable, Hashable, Sendable {
     let projectNames: [String]
     let sprints: [IssueBoardSprint]
     let currentSprintID: String?
+    let sprintFieldName: String?
     let columnFieldName: String?
     let columns: [IssueBoardColumn]
     let swimlaneSettings: IssueBoardSwimlaneSettings
@@ -20,6 +21,7 @@ struct IssueBoard: Identifiable, Hashable, Sendable {
         projectNames: [String],
         sprints: [IssueBoardSprint] = [],
         currentSprintID: String? = nil,
+        sprintFieldName: String? = nil,
         columnFieldName: String? = nil,
         columns: [IssueBoardColumn] = [],
         swimlaneSettings: IssueBoardSwimlaneSettings = .disabled,
@@ -32,6 +34,7 @@ struct IssueBoard: Identifiable, Hashable, Sendable {
         self.projectNames = projectNames
         self.sprints = sprints
         self.currentSprintID = currentSprintID
+        self.sprintFieldName = sprintFieldName
         self.columnFieldName = columnFieldName
         self.columns = columns
         self.swimlaneSettings = swimlaneSettings

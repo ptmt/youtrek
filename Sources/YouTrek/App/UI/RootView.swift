@@ -20,6 +20,9 @@ private struct RootContentView: View {
     @State private var simulateSlowResponses: Bool = AppDebugSettings.simulateSlowResponses
     @State private var showNetworkFooter: Bool = AppDebugSettings.showNetworkFooter
     @State private var disableSyncing: Bool = AppDebugSettings.disableSyncing
+    private var selectedIssues: [IssueSummary] {
+        appState.issues.filter { appState.selectedIssueIDs.contains($0.id) }
+    }
 
     var body: some View {
         rootSplitView
@@ -75,6 +78,9 @@ private struct RootContentView: View {
         }
         .onChange(of: appState.selectedIssue) { _, issue in
             guard let issue else { return }
+            if appState.selectedIssueIDs != [issue.id] {
+                appState.selectedIssueIDs = [issue.id]
+            }
             container.markIssueSeen(issue)
             Task {
                 await container.loadIssueDetail(for: issue)
@@ -134,6 +140,7 @@ private struct RootContentView: View {
             IssueListView(
                 issues: appState.filteredIssues(searchQuery: searchQuery),
                 selection: $appState.selectedIssue,
+                selectedIDs: $appState.selectedIssueIDs,
                 showAssigneeColumn: showAssigneeColumn,
                 showUpdatedColumn: showUpdatedColumn,
                 isLoading: appState.isLoadingIssues,
@@ -208,7 +215,9 @@ private struct RootContentView: View {
 
     private var inspectorContent: some View {
         Group {
-            if let issue = appState.selectedIssue {
+            if selectedIssues.count > 1 {
+                MultiIssueSelectionView(issues: selectedIssues)
+            } else if let issue = appState.selectedIssue ?? selectedIssues.first {
                 IssueDetailView(
                     issue: issue,
                     detail: appState.issueDetail(for: issue),
@@ -253,6 +262,123 @@ private struct BoardContentView: View {
                 }
             }
         )
+    }
+}
+
+private struct MultiIssueSelectionView: View {
+    @EnvironmentObject private var container: AppContainer
+    let issues: [IssueSummary]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                Divider()
+                actionSection
+                Divider()
+                selectionList
+                Spacer(minLength: 24)
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
+        }
+        .background(.ultraThinMaterial)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Multiple issues selected")
+                .font(.title3.weight(.semibold))
+            Text(selectionSummary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var actionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Bulk actions")
+                .font(.headline)
+            HStack(spacing: 12) {
+                Menu {
+                    ForEach(IssueStatus.allCases, id: \.self) { status in
+                        Button(status.displayName) {
+                            applyStatus(status)
+                        }
+                    }
+                } label: {
+                    Label("Set Status", systemImage: "flag")
+                }
+                Menu {
+                    ForEach(IssuePriority.allCases, id: \.self) { priority in
+                        Button(priority.displayName) {
+                            applyPriority(priority)
+                        }
+                    }
+                } label: {
+                    Label("Set Priority", systemImage: "exclamationmark.triangle")
+                }
+            }
+        }
+    }
+
+    private var selectionList: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Selected issues")
+                .font(.headline)
+            ForEach(issues) { issue in
+                HStack(alignment: .top, spacing: 10) {
+                    UserAvatarView(person: issue.assignee, size: 20)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Text(issue.readableID)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(issue.title)
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        HStack(spacing: 8) {
+                            Text(issue.projectName)
+                                .foregroundStyle(.secondary)
+                            Text(issue.assigneeDisplayName)
+                                .foregroundStyle(issue.assignee == nil ? .secondary : .primary)
+                        }
+                        .font(.caption)
+                    }
+                    Spacer()
+                }
+                .padding(10)
+                .background(.quaternary.opacity(0.4))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+    }
+
+    private var selectionSummary: String {
+        let issueCount = issues.count
+        let projectCount = Set(issues.map(\.projectName)).count
+        let peopleCount = Set(issues.compactMap(\.assignee?.id)).count
+        return "\(issueCount) \(issueCount == 1 ? "issue" : "issues") in \(projectCount) \(projectCount == 1 ? "project" : "projects") for \(peopleCount) \(peopleCount == 1 ? "person" : "people") selected"
+    }
+
+    private func applyStatus(_ status: IssueStatus) {
+        applyPatch(IssuePatch(title: nil, description: nil, status: status, priority: nil))
+    }
+
+    private func applyPriority(_ priority: IssuePriority) {
+        applyPatch(IssuePatch(title: nil, description: nil, status: nil, priority: priority))
+    }
+
+    private func applyPatch(_ patch: IssuePatch) {
+        let selectedIssues = issues
+        Task {
+            for issue in selectedIssues {
+                var issuePatch = patch
+                issuePatch.issueReadableID = issue.readableID
+                await container.updateIssue(id: issue.id, patch: issuePatch)
+            }
+        }
     }
 }
 

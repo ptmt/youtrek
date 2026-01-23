@@ -8,6 +8,14 @@
 
 /* Begin PBXBuildFile section */
 		00FEB9220801E5364D578CD8 /* IssueRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413164C575D17B66BEBD006E /* IssueRepository.swift */; };
+		40CFE17D5D0249E263CCDE90 /* IssueProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837E26CF86C45D20765721F4 /* IssueProject.swift */; };
+		9655E060C50B90B629C560AD /* IssueField.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */; };
+		9ABF8CA24DA93B1795EDF5E7 /* ProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22474C986C8B156AE420F86D /* ProjectRepository.swift */; };
+		711FBBDF964284FEE9060EA9 /* IssueFieldRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF2DFD58E618AA42ED5A0EBF /* IssueFieldRepository.swift */; };
+		5FF6DD8ABD04D24EB1CB3B43 /* PeopleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE25293D0B475678E0E9AAD /* PeopleRepository.swift */; };
+		E503D754E49097AD959569AD /* YouTrackProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */; };
+		F058AB58B54E3B5254042C54 /* YouTrackIssueFieldRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */; };
+		98C448F02392A199D2C15637 /* YouTrackPeopleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */; };
 		03C386F12EEB26CD00BF8B68 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 03C386EF2EEB26BC00BF8B68 /* Assets.xcassets */; };
 		08C5D4B53937B5F198D5F1A4 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D3751AABB25A233B2008788 /* AppState.swift */; };
 		0B7E05DB1C0B6E4858EB9AB6 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 640A2F928E349C7C5BAB8CB3 /* Dependencies */; };
@@ -89,11 +97,19 @@
 		2E4FEE5B968D4FFFBC1197E1 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		3E846A3202CA8FD93450D72F /* LoggingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingService.swift; sourceTree = "<group>"; };
 		413164C575D17B66BEBD006E /* IssueRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueRepository.swift; sourceTree = "<group>"; };
+		22474C986C8B156AE420F86D /* ProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRepository.swift; sourceTree = "<group>"; };
+		FF2DFD58E618AA42ED5A0EBF /* IssueFieldRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueFieldRepository.swift; sourceTree = "<group>"; };
+		4EE25293D0B475678E0E9AAD /* PeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeopleRepository.swift; sourceTree = "<group>"; };
 		41A20A5EA468A3FDD6C766F3 /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 		4A7250E3A5DD409013899A4B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		4AB6E61C64224428A2A41938 /* YouTrackIssueRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueRepository.swift; sourceTree = "<group>"; };
+		17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackProjectRepository.swift; sourceTree = "<group>"; };
+		EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueFieldRepository.swift; sourceTree = "<group>"; };
+		DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackPeopleRepository.swift; sourceTree = "<group>"; };
 		5127E6BFCB6228BCCACF3248 /* AppMenus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMenus.swift; sourceTree = "<group>"; };
 		603472AD6E49B166DD1EAE1E /* Issue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Issue.swift; sourceTree = "<group>"; };
+		837E26CF86C45D20765721F4 /* IssueProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueProject.swift; sourceTree = "<group>"; };
+		DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueField.swift; sourceTree = "<group>"; };
 		67EE0549798C5BB97F80099A /* YouTrekTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrekTests.swift; sourceTree = "<group>"; };
 		6A2BB972C688C970A43F8706 /* AuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepository.swift; sourceTree = "<group>"; };
 		6F838F96136D2FC3F66D4B91 /* SidebarItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarItem.swift; sourceTree = "<group>"; };
@@ -230,6 +246,9 @@
 			children = (
 				F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */,
 				4AB6E61C64224428A2A41938 /* YouTrackIssueRepository.swift */,
+				17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */,
+				EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */,
+				DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */,
 				A44B55C66D77E88F99AABBCC /* YouTrackIssueBoardRepository.swift */,
 				1A2B3C4D5E6F708192A3B4C7 /* YouTrackSavedQueryRepository.swift */,
 			);
@@ -253,6 +272,8 @@
 			isa = PBXGroup;
 			children = (
 				603472AD6E49B166DD1EAE1E /* Issue.swift */,
+				837E26CF86C45D20765721F4 /* IssueProject.swift */,
+				DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */,
 				F0D1C2B3A4E5968778695A4E /* IssueDetail.swift */,
 				A11B22C33D44E55F66778899 /* IssueBoard.swift */,
 				1A2B3C4D5E6F708192A3B4C5 /* SavedQuery.swift */,
@@ -327,6 +348,9 @@
 			children = (
 				6A2BB972C688C970A43F8706 /* AuthRepository.swift */,
 				413164C575D17B66BEBD006E /* IssueRepository.swift */,
+				22474C986C8B156AE420F86D /* ProjectRepository.swift */,
+				FF2DFD58E618AA42ED5A0EBF /* IssueFieldRepository.swift */,
+				4EE25293D0B475678E0E9AAD /* PeopleRepository.swift */,
 				A22B33C44D55E66F778899AA /* IssueBoardRepository.swift */,
 				1A2B3C4D5E6F708192A3B4C6 /* SavedQueryRepository.swift */,
 			);
@@ -578,6 +602,8 @@
 				2C2E2C2E2C2E2C2E2C2E2C2E /* CLIEntrypoint.swift in Sources */,
 				2D2E2D2E2D2E2D2E2D2E2D2E /* CLIInstaller.swift in Sources */,
 				6B9DC658B0707436F4A51EB7 /* Issue.swift in Sources */,
+				40CFE17D5D0249E263CCDE90 /* IssueProject.swift in Sources */,
+				9655E060C50B90B629C560AD /* IssueField.swift in Sources */,
 				F0D1C2B3A4E5968778695A4D /* IssueDetail.swift in Sources */,
 				B11B22C33D44E55F66778899 /* IssueBoard.swift in Sources */,
 				BB9383DD8D6501FAF39C122F /* IssueDetailView.swift in Sources */,
@@ -587,6 +613,9 @@
 				17484CD88BC62E1E13CF6D9D /* IssueLocalStore.swift in Sources */,
 				B33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift in Sources */,
 				00FEB9220801E5364D578CD8 /* IssueRepository.swift in Sources */,
+				9ABF8CA24DA93B1795EDF5E7 /* ProjectRepository.swift in Sources */,
+				711FBBDF964284FEE9060EA9 /* IssueFieldRepository.swift in Sources */,
+				5FF6DD8ABD04D24EB1CB3B43 /* PeopleRepository.swift in Sources */,
 				B22B33C44D55E66F778899AA /* IssueBoardRepository.swift in Sources */,
 				DBAD2E130516EF0E97DA9505 /* IssueWindows.swift in Sources */,
 				2AEC69A4C7052D80523516F2 /* KeychainStorage.swift in Sources */,
@@ -609,6 +638,9 @@
 				B1F0E1B28F16D4C39B3F8A07 /* SetupWindow.swift in Sources */,
 				E830DA0BDF2A88981E76A320 /* YouTrackAPIClient.swift in Sources */,
 				CCB6FC4CB76C79D60B3D8268 /* YouTrackIssueRepository.swift in Sources */,
+				E503D754E49097AD959569AD /* YouTrackProjectRepository.swift in Sources */,
+				F058AB58B54E3B5254042C54 /* YouTrackIssueFieldRepository.swift in Sources */,
+				98C448F02392A199D2C15637 /* YouTrackPeopleRepository.swift in Sources */,
 				B44B55C66D77E88F99AABBCC /* YouTrackIssueBoardRepository.swift in Sources */,
 				2A3B4C5D6E7F8091A2B3C4D7 /* YouTrackSavedQueryRepository.swift in Sources */,
 				5E2253FC639018566A8117DC /* YouTrackOAuthConfiguration.swift in Sources */,

@@ -8,6 +8,7 @@ final class AppState: ObservableObject {
     @Published var selectedSidebarItem: SidebarItem?
     @Published private(set) var sidebarSections: [SidebarSection] = []
     @Published var selectedIssue: IssueSummary?
+    @Published var selectedIssueIDs: Set<IssueSummary.ID> = []
     @Published private(set) var issues: [IssueSummary]
     @Published private(set) var issueSeenUpdates: [IssueSummary.ID: Date] = [:]
     @Published private(set) var issueDetails: [IssueSummary.ID: IssueDetail] = [:]
@@ -34,6 +35,9 @@ final class AppState: ObservableObject {
         issues = newIssues
         if let first = newIssues.first {
             selectedIssue = first
+            selectedIssueIDs = [first.id]
+        } else {
+            selectedIssueIDs.removeAll()
         }
     }
 

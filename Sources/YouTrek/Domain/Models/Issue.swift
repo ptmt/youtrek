@@ -58,11 +58,70 @@ struct Person: Identifiable, Hashable, Sendable, Codable {
     let id: UUID
     let displayName: String
     let avatarURL: URL?
+    let login: String?
+    let remoteID: String?
 
-    init(id: UUID = UUID(), displayName: String, avatarURL: URL? = nil) {
+    init(
+        id: UUID = UUID(),
+        displayName: String,
+        avatarURL: URL? = nil,
+        login: String? = nil,
+        remoteID: String? = nil
+    ) {
         self.id = id
         self.displayName = displayName
         self.avatarURL = avatarURL
+        self.login = login
+        self.remoteID = remoteID
+    }
+}
+
+extension Person {
+    static func stableID(for source: String) -> UUID {
+        var hashBytes = [UInt8](repeating: 0, count: 16)
+        let data = Array(source.utf8)
+        for (index, byte) in data.enumerated() {
+            hashBytes[index % 16] = hashBytes[index % 16] &+ byte &+ UInt8(index % 7)
+        }
+        return UUID(uuid: (
+            hashBytes[0], hashBytes[1], hashBytes[2], hashBytes[3],
+            hashBytes[4], hashBytes[5], hashBytes[6], hashBytes[7],
+            hashBytes[8], hashBytes[9], hashBytes[10], hashBytes[11],
+            hashBytes[12], hashBytes[13], hashBytes[14], hashBytes[15]
+        ))
+    }
+
+    var issueFieldOption: IssueFieldOption? {
+        let trimmedID = remoteID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let resolvedID = trimmedID.isEmpty ? "" : trimmedID
+        let name = login ?? displayName
+        let identifier = resolvedID.isEmpty ? name : resolvedID
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return IssueFieldOption(
+            id: resolvedID,
+            name: name,
+            displayName: displayName,
+            login: login,
+            avatarURL: avatarURL,
+            ordinal: nil
+        )
+    }
+
+    static func from(option: IssueFieldOption) -> Person {
+        let seedParts = [option.id, option.login, option.displayName]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let seed = seedParts.isEmpty ? option.displayName : seedParts.joined(separator: "|")
+        let trimmedRemoteID = option.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let remoteID = trimmedRemoteID.isEmpty ? nil : trimmedRemoteID
+        return Person(
+            id: Person.stableID(for: seed),
+            displayName: option.displayName,
+            avatarURL: option.avatarURL,
+            login: option.login,
+            remoteID: remoteID
+        )
     }
 }
 

@@ -18,16 +18,25 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
     }
 
     func fetchBoards() async throws -> [IssueBoard] {
-        let baseFields = Self.agileFieldsBase
-        let fieldCandidates = [
-            "\(baseFields),favorite"
-        ]
+        let summaries = try await fetchBoardSummaries()
+        let favorites = summaries.filter(\.isFavorite)
+        guard !favorites.isEmpty else { return summaries }
 
+        let detailedByID = await fetchFavoriteBoardDetails(for: favorites)
+        guard !detailedByID.isEmpty else { return summaries }
+
+        return summaries.map { board in
+            guard let detail = detailedByID[board.id] else { return board }
+            return applyingFavorite(board.isFavorite, to: detail)
+        }
+    }
+
+    func fetchBoardSummaries() async throws -> [IssueBoard] {
         var lastError: Error?
-
-        for fields in fieldCandidates {
+        for fields in Self.agileSummaryFieldCandidates {
             do {
-                return try await fetchBoards(fields: fields)
+                let boards = try await fetchBoards(fields: fields, pageSize: 100)
+                return mapBoards(boards)
             } catch let error as YouTrackAPIError {
                 if case .http(let statusCode, _) = error, statusCode == 400 {
                     lastError = error
@@ -42,8 +51,35 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
         throw lastError ?? YouTrackAPIError.invalidResponse
     }
 
-    private func fetchBoards(fields: String) async throws -> [IssueBoard] {
-        let pageSize = 10
+    func fetchBoard(id: String) async throws -> IssueBoard {
+        let trimmedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedID.isEmpty else {
+            throw YouTrackAPIError.invalidResponse
+        }
+
+        var lastError: Error?
+        for fields in Self.agileDetailFieldCandidates {
+            do {
+                let detail = try await fetchBoardDetails(id: trimmedID, fields: fields)
+                guard let mapped = mapBoards([detail]).first else {
+                    throw YouTrackAPIError.invalidResponse
+                }
+                return mapped
+            } catch let error as YouTrackAPIError {
+                if case .http(let statusCode, _) = error, statusCode == 400 {
+                    lastError = error
+                    continue
+                }
+                throw error
+            } catch {
+                throw error
+            }
+        }
+
+        throw lastError ?? YouTrackAPIError.invalidResponse
+    }
+
+    private func fetchBoards(fields: String, pageSize: Int = 10) async throws -> [YouTrackAgileBoard] {
         var skip = 0
         var allBoards: [YouTrackAgileBoard] = []
 
@@ -64,8 +100,7 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
             skip += pageSize
         }
 
-        let mapped = mapBoards(allBoards)
-        return await hydrateFavoriteBoardsIfNeeded(mapped, fields: fields)
+        return allBoards
     }
 
     private func mapBoards(_ boards: [YouTrackAgileBoard]) -> [IssueBoard] {
@@ -75,6 +110,7 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
                 let projectNames = board.projects?.compactMap { $0.shortName ?? $0.name } ?? []
                 let mappedSprints = mapSprints(board.sprints, current: board.currentSprint)
                 let currentSprintID = board.currentSprint?.id
+                let sprintFieldName = board.sprintsSettings?.sprintSyncField?.resolvedName
                 let columnFieldName = board.columnSettings?.field?.resolvedName
                 let columns = mapColumns(from: board.columnSettings)
                 let swimlaneSettings = mapSwimlaneSettings(from: board.swimlaneSettings)
@@ -85,6 +121,7 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
                     projectNames: projectNames,
                     sprints: mappedSprints,
                     currentSprintID: currentSprintID,
+                    sprintFieldName: sprintFieldName,
                     columnFieldName: columnFieldName,
                     columns: columns,
                     swimlaneSettings: swimlaneSettings,
@@ -95,21 +132,23 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    private func hydrateFavoriteBoardsIfNeeded(_ boards: [IssueBoard], fields: String) async -> [IssueBoard] {
-        let favoritesNeedingDetails = boards.filter { board in
-            board.isFavorite && board.columns.isEmpty && board.columnFieldName == nil
-        }
-        guard !favoritesNeedingDetails.isEmpty else { return boards }
+    private func fetchFavoriteBoardDetails(for favorites: [IssueBoard]) async -> [String: IssueBoard] {
+        guard let seed = favorites.first else { return [:] }
+        guard let (fields, seedDetail) = await fetchDetailCandidate(for: seed) else { return [:] }
 
-        var detailedByID: [String: IssueBoard] = [:]
+        var detailedByID: [String: IssueBoard] = [seed.id: seedDetail]
+        let remaining = favorites.dropFirst()
+        guard !remaining.isEmpty else { return detailedByID }
+
         await withTaskGroup(of: (String, IssueBoard?).self) { group in
-            for board in favoritesNeedingDetails {
+            for board in remaining {
                 group.addTask { [weak self] in
                     guard let self else { return (board.id, nil) }
                     do {
                         let detail = try await self.fetchBoardDetails(id: board.id, fields: fields)
-                        let mappedDetail = self.mapBoards([detail]).first
-                        return (board.id, mappedDetail)
+                        guard let mappedDetail = self.mapBoards([detail]).first else { return (board.id, nil) }
+                        let adjusted = self.applyingFavorite(board.isFavorite, to: mappedDetail)
+                        return (board.id, adjusted)
                     } catch {
                         return (board.id, nil)
                     }
@@ -123,14 +162,49 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
             }
         }
 
-        guard !detailedByID.isEmpty else { return boards }
-        return boards.map { detailedByID[$0.id] ?? $0 }
+        return detailedByID
+    }
+
+    private func fetchDetailCandidate(for board: IssueBoard) async -> (String, IssueBoard)? {
+        for fields in Self.agileDetailFieldCandidates {
+            do {
+                let detail = try await fetchBoardDetails(id: board.id, fields: fields)
+                guard let mappedDetail = mapBoards([detail]).first else { return nil }
+                return (fields, applyingFavorite(board.isFavorite, to: mappedDetail))
+            } catch let error as YouTrackAPIError {
+                if case .http(let statusCode, _) = error, statusCode == 400 {
+                    continue
+                }
+                return nil
+            } catch {
+                return nil
+            }
+        }
+        return nil
     }
 
     private func fetchBoardDetails(id: String, fields: String) async throws -> YouTrackAgileBoard {
         let queryItems = [URLQueryItem(name: "fields", value: fields)]
         let data = try await client.get(path: "agiles/\(id)", queryItems: queryItems)
         return try decoder.decode(YouTrackAgileBoard.self, from: data)
+    }
+
+    private func applyingFavorite(_ favorite: Bool, to board: IssueBoard) -> IssueBoard {
+        guard board.isFavorite != favorite else { return board }
+        return IssueBoard(
+            id: board.id,
+            name: board.name,
+            isFavorite: favorite,
+            projectNames: board.projectNames,
+            sprints: board.sprints,
+            currentSprintID: board.currentSprintID,
+            sprintFieldName: board.sprintFieldName,
+            columnFieldName: board.columnFieldName,
+            columns: board.columns,
+            swimlaneSettings: board.swimlaneSettings,
+            orphansAtTheTop: board.orphansAtTheTop,
+            hideOrphansSwimlane: board.hideOrphansSwimlane
+        )
     }
 
     private func mapColumns(from settings: YouTrackAgileBoard.ColumnSettings?) -> [IssueBoardColumn] {
@@ -217,6 +291,7 @@ private struct YouTrackAgileBoard: Decodable {
     let hideOrphansSwimlane: Bool?
     let columnSettings: ColumnSettings?
     let swimlaneSettings: SwimlaneSettings?
+    let sprintsSettings: SprintsSettings?
 
     struct Project: Decodable {
         let name: String?
@@ -267,6 +342,10 @@ private struct YouTrackAgileBoard: Decodable {
         let id: String?
     }
 
+    struct SprintsSettings: Decodable {
+        let sprintSyncField: Field?
+    }
+
     struct SwimlaneSettings: Decodable {
         let typeName: String?
         let enabled: Bool?
@@ -302,7 +381,17 @@ private struct YouTrackAgileBoard: Decodable {
 }
 
 private extension YouTrackIssueBoardRepository {
-    static let agileFieldsBase: String = [
+    static let agileSummaryFieldCandidates: [String] = [
+        "id,name,favorite",
+        "id,name,isFavorite",
+        "id,name,isStarred"
+    ]
+
+    static let agileDetailFieldCandidates: [String] = [
+        agileDetailFields
+    ]
+
+    static let agileDetailFields: String = [
         "id",
         "name",
         "owner(id,login,fullName,avatarUrl)",
