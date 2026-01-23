@@ -58,10 +58,12 @@ actor IssueDraftStore {
         return record
     }
 
+    @discardableResult
     func markDraftSubmitted(id: UUID) -> IssueDraftRecord? {
         updateRecord(id: id, status: .submitted, error: nil)
     }
 
+    @discardableResult
     func markDraftFailed(id: UUID, errorDescription: String?) -> IssueDraftRecord? {
         updateRecord(id: id, status: .failed, error: errorDescription)
     }

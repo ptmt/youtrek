@@ -109,7 +109,7 @@ extension Person {
     }
 
     static func from(option: IssueFieldOption) -> Person {
-        let seedParts = [option.id, option.login, option.displayName]
+        let seedParts = [option.id, option.login ?? "", option.displayName]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         let seed = seedParts.isEmpty ? option.displayName : seedParts.joined(separator: "|")
