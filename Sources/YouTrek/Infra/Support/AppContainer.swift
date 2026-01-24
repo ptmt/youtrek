@@ -489,14 +489,18 @@ final class AppContainer: ObservableObject {
         }
     }
 
+    func validateManualToken(baseURL: URL, token: String) async throws {
+        let apiBaseURL = Self.apiBaseURL(from: baseURL)
+        let tokenProvider = YouTrackAPITokenProvider.constant(token)
+        let configuration = YouTrackAPIConfiguration(baseURL: apiBaseURL, tokenProvider: tokenProvider)
+        let client = YouTrackAPIClient(configuration: configuration, session: .shared, monitor: networkMonitor)
+        let queryItems = [URLQueryItem(name: "fields", value: "id,login,name,fullName")]
+        let data = try await client.get(path: "users/me", queryItems: queryItems)
+        _ = try JSONDecoder().decode(YouTrackTokenValidationUser.self, from: data)
+    }
+
     func completeManualSetup(baseURL: URL, token: String) async {
-        // Ensure /api suffix for API calls
-        let apiBaseURL: URL
-        if baseURL.lastPathComponent.lowercased() == "api" {
-            apiBaseURL = baseURL
-        } else {
-            apiBaseURL = baseURL.appendingPathComponent("api")
-        }
+        let apiBaseURL = Self.apiBaseURL(from: baseURL)
 
         configurationStore.save(baseURL: apiBaseURL)
         let manualAuth = ManualTokenAuthRepository(configurationStore: configurationStore)
@@ -586,7 +590,21 @@ final class AppContainer: ObservableObject {
     }
 }
 
+private struct YouTrackTokenValidationUser: Decodable {
+    let id: String?
+    let login: String?
+    let name: String?
+    let fullName: String?
+}
+
 private extension AppContainer {
+    static func apiBaseURL(from baseURL: URL) -> URL {
+        if baseURL.lastPathComponent.lowercased() == "api" {
+            return baseURL
+        }
+        return baseURL.appendingPathComponent("api")
+    }
+
     static func requiresSetupOnLaunch(configurationStore: AppConfigurationStore) -> Bool {
         if (try? YouTrackOAuthConfiguration.loadFromEnvironment()) != nil {
             return false

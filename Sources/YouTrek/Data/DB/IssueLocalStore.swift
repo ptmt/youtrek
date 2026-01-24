@@ -377,6 +377,11 @@ actor IssueLocalStore {
             }
         }
 
+        let hasRawQuery = query.rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        if hasRawQuery, query.sort != nil {
+            return filtered
+        }
+
         switch query.sort {
         case .updated(let descending):
             return filtered.sorted {

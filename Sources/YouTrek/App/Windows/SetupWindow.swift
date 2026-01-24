@@ -20,6 +20,7 @@ struct SetupWindow: View {
     @State private var token: String = ""
     @State private var mode: SignInMode = .token
     @State private var errorMessage: String?
+    @State private var isValidatingToken = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -53,7 +54,7 @@ struct SetupWindow: View {
                     TextField("Permanent token", text: $token, prompt: Text("Paste your YouTrack token"))
                         .textFieldStyle(.roundedBorder)
                     if let tokenPortalURL {
-                        Link("Create a personal token", destination: tokenPortalURL)
+                        Link("How to create a personal token", destination: tokenPortalURL)
                             .font(.callout)
                             .underline()
                     }
@@ -64,9 +65,17 @@ struct SetupWindow: View {
                         .textSelection(.enabled)
                 }
             }
-            .padding(12)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            if isValidatingToken {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Validating token...")
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            }
 
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
@@ -82,7 +91,7 @@ struct SetupWindow: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.return, modifiers: [.command])
-                .disabled(!canSubmit)
+                .disabled(!canSubmit || isValidatingToken)
             }
         }
         .padding(24)
@@ -174,9 +183,31 @@ struct SetupWindow: View {
                 return
             }
             Task { @MainActor in
-                await container.completeManualSetup(baseURL: url, token: trimmedToken)
+                isValidatingToken = true
+                defer { isValidatingToken = false }
+                do {
+                    try await container.validateManualToken(baseURL: url, token: trimmedToken)
+                    await container.completeManualSetup(baseURL: url, token: trimmedToken)
+                } catch {
+                    errorMessage = validationErrorMessage(for: error)
+                }
             }
         }
+    }
+
+    private func validationErrorMessage(for error: Error) -> String {
+        if let apiError = error as? YouTrackAPIError {
+            switch apiError {
+            case .http(let statusCode, _):
+                if statusCode == 401 || statusCode == 403 {
+                    return "Token was rejected by YouTrack. Make sure it is a permanent token with access to this instance."
+                }
+            default:
+                break
+            }
+            return apiError.localizedDescription
+        }
+        return "Token validation failed: \(error.localizedDescription)"
     }
 }
 

@@ -217,9 +217,27 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
                 return (left.presentation ?? "").localizedCaseInsensitiveCompare(right.presentation ?? "") == .orderedAscending
             }
             .compactMap { column in
-                let valueNames = column.fieldValues?.compactMap { $0.resolvedName } ?? []
                 let presentation = column.presentation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 let fallbackName = column.resolvedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                var valueNames = column.fieldValues?.compactMap { $0.resolvedName } ?? []
+                if valueNames.isEmpty, !presentation.isEmpty {
+                    let splitValues = presentation
+                        .split(separator: ",")
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    if !splitValues.isEmpty {
+                        valueNames = splitValues
+                    }
+                }
+                if valueNames.isEmpty, !fallbackName.isEmpty {
+                    let splitValues = fallbackName
+                        .split(separator: ",")
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    if !splitValues.isEmpty {
+                        valueNames = splitValues
+                    }
+                }
                 let title: String
                 if !presentation.isEmpty {
                     title = presentation

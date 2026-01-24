@@ -409,7 +409,7 @@ private enum CLIRunner {
                 rawQuery: IssueQuery.boardQuery(boardName: board.name, sprintName: nil),
                 search: "",
                 filters: [],
-                sort: nil,
+                sort: .updated(descending: true),
                 page: IssueQuery.Page(size: pageSize, offset: 0)
             )
             let issues = try await issueRepository.fetchIssues(query: query)
@@ -859,6 +859,11 @@ private struct CLIOutput {
     private static func makeBoardColumns(_ board: IssueBoard, issues: [IssueSummary]) -> [BoardColumnDescriptor] {
         if let fieldName = board.columnFieldName, !board.columns.isEmpty {
             let normalizedField = fieldName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let useStatusFallback = shouldUseStatusForColumns(
+                fieldName: normalizedField,
+                columns: board.columns,
+                issues: issues
+            )
             let columns = board.columns.sorted { (left, right) in
                 let leftOrdinal = left.ordinal ?? Int.max
                 let rightOrdinal = right.ordinal ?? Int.max
@@ -870,7 +875,11 @@ private struct CLIOutput {
                 return BoardColumnDescriptor(
                     title: column.title,
                     match: { issue in
-                        let values = issue.fieldValues(named: normalizedField).map { $0.lowercased() }
+                        var values = issue.fieldValues(named: normalizedField).map { $0.lowercased() }
+                        if useStatusFallback, values.isEmpty {
+                            let statusName = issue.status.displayName.lowercased()
+                            values = [statusName, issue.status.rawValue.lowercased()]
+                        }
                         if matchValues.isEmpty {
                             let title = column.title.lowercased()
                             return values.contains(title)
@@ -889,6 +898,38 @@ private struct CLIOutput {
                 match: { issue in issue.status == status }
             )
         }
+    }
+
+    private static func shouldUseStatusForColumns(
+        fieldName: String,
+        columns: [IssueBoardColumn],
+        issues: [IssueSummary]
+    ) -> Bool {
+        if fieldName == "state" || fieldName == "status" {
+            return true
+        }
+
+        let hasFieldValues = issues.contains { issue in
+            !issue.fieldValues(named: fieldName).isEmpty
+        }
+        if hasFieldValues {
+            return false
+        }
+
+        let statusNames = Set(issues.map { $0.status.displayName.lowercased() })
+        if statusNames.isEmpty {
+            return false
+        }
+
+        let columnValues = columns.flatMap { column in
+            column.valueNames.isEmpty ? [column.title] : column.valueNames
+        }
+        let columnSet = Set(columnValues.map { $0.lowercased() })
+        if columnSet.isEmpty {
+            return false
+        }
+
+        return !statusNames.isDisjoint(with: columnSet)
     }
 
     private static func makeBoardGroups(_ board: IssueBoard, issues: [IssueSummary]) -> [BoardGroup] {

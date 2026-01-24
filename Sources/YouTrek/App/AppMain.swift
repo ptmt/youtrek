@@ -108,7 +108,7 @@ private final class WindowAccessorView: NSView {
 
         if isSetup {
             if needsReconfigure {
-                window.styleMask = [.titled, .fullSizeContentView]
+                window.styleMask = [.borderless, .fullSizeContentView]
                 window.titlebarAppearsTransparent = true
                 window.titleVisibility = .hidden
                 window.standardWindowButton(.closeButton)?.isHidden = true
@@ -118,6 +118,16 @@ private final class WindowAccessorView: NSView {
                 window.isOpaque = false
                 window.backgroundColor = .clear
                 window.hasShadow = true
+                if let contentView = window.contentView {
+                    contentView.wantsLayer = true
+                    if let layer = contentView.layer {
+                        layer.cornerRadius = 12
+                        if #available(macOS 10.13, *) {
+                            layer.cornerCurve = .continuous
+                        }
+                        layer.masksToBounds = true
+                    }
+                }
                 hasAppliedSetupPresentation = false
             }
             if !hasAppliedSetupPresentation {
@@ -133,6 +143,13 @@ private final class WindowAccessorView: NSView {
             window.isMovableByWindowBackground = false
             window.isOpaque = true
             window.backgroundColor = .windowBackgroundColor
+            if let contentView = window.contentView, let layer = contentView.layer {
+                layer.cornerRadius = 0
+                if #available(macOS 10.13, *) {
+                    layer.cornerCurve = .continuous
+                }
+                layer.masksToBounds = false
+            }
             window.setContentSize(NSSize(width: 1280, height: 800))
             window.center()
             hasAppliedSetupPresentation = false

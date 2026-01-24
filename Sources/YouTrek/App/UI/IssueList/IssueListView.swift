@@ -52,12 +52,11 @@ struct IssueListView: View {
     }
 
     private var emptyView: some View {
-        ContentUnavailableView(
-            "No issues",
+        EmptyStateView(
+            title: "No issues",
             systemImage: "tray",
-            description: Text("Refine your filters or sync to pull the latest issues.")
+            description: "Refine your filters or sync to pull the latest issues."
         )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var issueTable: some View {
@@ -118,9 +117,13 @@ struct IssueListView: View {
         return HStack(spacing: 8) {
             Text(issue.projectName)
                 .foregroundStyle(.secondary)
-            IssueMetaPill(text: issue.status.displayName, colors: issue.status.badgeColors)
+            IssueMetaDotLabel(text: issue.status.displayName, colors: issue.status.badgeColors)
             if !issue.priority.isNormalSemantic {
-                IssueMetaPill(text: issue.priority.displayName, colors: issue.priority.badgeColors)
+                IssueMetaDotLabel(
+                    text: issue.priority.displayName,
+                    colors: issue.priority.badgeColors,
+                    textOpacity: 0.78
+                )
             }
         }
         .font(.caption.weight(isUnread ? .medium : .regular))
@@ -157,20 +160,47 @@ struct IssueListView: View {
     }
 }
 
-private struct IssueMetaPill: View {
+private struct IssueMetaDotLabel: View {
     let text: String
     let colors: IssueBadgeColors
+    let textOpacity: Double
+
+    init(text: String, colors: IssueBadgeColors, textOpacity: Double = 0.86) {
+        self.text = text
+        self.colors = colors
+        self.textOpacity = textOpacity
+    }
 
     var body: some View {
-        Text(text)
-            .font(.caption2.weight(.medium))
-            .padding(.vertical, 3)
-            .padding(.horizontal, 7)
-            .foregroundStyle(colors.foreground)
-            .background(colors.background, in: Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(colors.border, lineWidth: 1)
-            )
+        HStack(spacing: 5) {
+            Circle()
+                .fill(colors.foreground)
+                .frame(width: 6, height: 6)
+            Text(text)
+                .foregroundStyle(Color.primary.opacity(textOpacity))
+        }
+    }
+}
+
+private struct EmptyStateView: View {
+    let title: String
+    let systemImage: String
+    let description: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 32, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.headline)
+            Text(description)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

@@ -404,7 +404,17 @@ private extension YouTrackIssueRepository {
     func buildQueryString(from query: IssueQuery) -> String? {
         if let raw = query.rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
            !raw.isEmpty {
-            return raw
+            var parts: [String] = [raw]
+            if let sort = query.sort,
+               raw.range(of: "sort by:", options: [.caseInsensitive, .diacriticInsensitive]) == nil {
+                switch sort {
+                case .updated(let descending):
+                    parts.append("sort by: updated \(descending ? "desc" : "asc")")
+                case .priority(let descending):
+                    parts.append("sort by: priority \(descending ? "desc" : "asc")")
+                }
+            }
+            return parts.joined(separator: " ")
         }
 
         var parts: [String] = []

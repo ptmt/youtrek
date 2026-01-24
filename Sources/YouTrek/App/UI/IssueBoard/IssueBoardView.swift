@@ -6,6 +6,7 @@ struct IssueBoardView: View {
     @Binding var selection: IssueSummary?
     let isLoading: Bool
     let sprintFilter: BoardSprintFilter
+    let showDiagnostics: Bool
     let onSelectSprint: (BoardSprintFilter) -> Void
 
     @State private var collapsedGroups: Set<String> = []
@@ -27,15 +28,19 @@ struct IssueBoardView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if issues.isEmpty {
-                    ContentUnavailableView(
-                        "No cards on this board",
+                    EmptyStateView(
+                        title: "No cards on this board",
                         systemImage: "rectangle.3.group",
-                        description: Text("Sync or adjust your filters to pull the latest cards.")
+                        description: "Sync or adjust your filters to pull the latest cards."
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     boardContent
                 }
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if showDiagnostics {
+                diagnosticsOverlay
             }
         }
     }
@@ -148,8 +153,29 @@ struct IssueBoardView: View {
     }
 
     private var columnDescriptors: [IssueBoardColumnDescriptor] {
+        var columns = baseColumnDescriptors
+        if showDiagnostics {
+            columns.append(
+                IssueBoardColumnDescriptor(
+                    id: "diagnostics-unmatched",
+                    title: "Unmatched",
+                    match: { issue in
+                        !baseColumnDescriptors.contains { $0.match(issue) }
+                    }
+                )
+            )
+        }
+        return columns
+    }
+
+    private var baseColumnDescriptors: [IssueBoardColumnDescriptor] {
         if let fieldName = board.columnFieldName, !board.columns.isEmpty {
             let normalizedField = fieldName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let useStatusFallback = shouldUseStatusForColumns(
+                fieldName: normalizedField,
+                columns: board.columns,
+                issues: issues
+            )
             let columns = board.columns.sorted { (left, right) in
                 let leftOrdinal = left.ordinal ?? Int.max
                 let rightOrdinal = right.ordinal ?? Int.max
@@ -162,7 +188,11 @@ struct IssueBoardView: View {
                     id: column.id,
                     title: column.title,
                     match: { issue in
-                        let values = issue.fieldValues(named: normalizedField).map { $0.lowercased() }
+                        var values = issue.fieldValues(named: normalizedField).map { $0.lowercased() }
+                        if useStatusFallback, values.isEmpty {
+                            let statusName = issue.status.displayName.lowercased()
+                            values = [statusName, issue.status.rawValue.lowercased()]
+                        }
                         if matchValues.isEmpty {
                             let title = column.title.lowercased()
                             return values.contains(title)
@@ -182,6 +212,79 @@ struct IssueBoardView: View {
                 match: { issue in issue.status == status }
             )
         }
+    }
+
+    private func shouldUseStatusForColumns(
+        fieldName: String,
+        columns: [IssueBoardColumn],
+        issues: [IssueSummary]
+    ) -> Bool {
+        if fieldName == "state" || fieldName == "status" {
+            return true
+        }
+
+        let hasFieldValues = issues.contains { issue in
+            !issue.fieldValues(named: fieldName).isEmpty
+        }
+        if hasFieldValues {
+            return false
+        }
+
+        let statusNames = Set(issues.map { $0.status.displayName.lowercased() })
+        if statusNames.isEmpty {
+            return false
+        }
+
+        let columnValues = columns.flatMap { column in
+            column.valueNames.isEmpty ? [column.title] : column.valueNames
+        }
+        let columnSet = Set(columnValues.map { $0.lowercased() })
+        if columnSet.isEmpty {
+            return false
+        }
+
+        return !statusNames.isDisjoint(with: columnSet)
+    }
+
+    private var diagnosticsOverlay: some View {
+        let matched = matchedIssueCount
+        let unmatched = max(0, issues.count - matched)
+        let fieldName = board.columnFieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "—"
+        let swimlaneField = board.swimlaneSettings.fieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "—"
+        let issuesWithColumnValues = issuesWithColumnFieldValues
+
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Board diagnostics")
+                .font(.caption.weight(.semibold))
+            Text("Issues: \(issues.count)  Matched: \(matched)  Unmatched: \(unmatched)")
+            Text("Column field: \(fieldName)")
+            Text("Issues w/ column values: \(issuesWithColumnValues)")
+            Text("Columns: \(baseColumnDescriptors.count)  Swimlanes: \(swimlaneField)")
+        }
+        .font(.caption2)
+        .padding(8)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.trailing, 12)
+        .padding(.top, 8)
+    }
+
+    private var matchedIssueCount: Int {
+        issues.filter { issue in
+            baseColumnDescriptors.contains { $0.match(issue) }
+        }.count
+    }
+
+    private var issuesWithColumnFieldValues: Int {
+        guard let fieldName = board.columnFieldName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !fieldName.isEmpty
+        else {
+            return 0
+        }
+        let normalized = fieldName.lowercased()
+        return issues.filter { issue in
+            !issue.fieldValues(named: normalized).isEmpty
+        }.count
     }
 
     private var groupModels: [IssueBoardGroup] {
@@ -356,6 +459,29 @@ struct IssueBoardView: View {
             return
         }
         values.append(trimmed)
+    }
+}
+
+private struct EmptyStateView: View {
+    let title: String
+    let systemImage: String
+    let description: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 32, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.headline)
+            Text(description)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

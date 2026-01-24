@@ -20,6 +20,7 @@ private struct RootContentView: View {
     @State private var simulateSlowResponses: Bool = AppDebugSettings.simulateSlowResponses
     @State private var showNetworkFooter: Bool = AppDebugSettings.showNetworkFooter
     @State private var disableSyncing: Bool = AppDebugSettings.disableSyncing
+    @State private var showBoardDiagnostics: Bool = AppDebugSettings.showBoardDiagnostics
     private var selectedIssues: [IssueSummary] {
         appState.issues.filter { appState.selectedIssueIDs.contains($0.id) }
     }
@@ -67,6 +68,9 @@ private struct RootContentView: View {
         }
         .onChange(of: disableSyncing) { _, newValue in
             AppDebugSettings.setDisableSyncing(newValue)
+        }
+        .onChange(of: showBoardDiagnostics) { _, newValue in
+            AppDebugSettings.setShowBoardDiagnostics(newValue)
         }
         .onChange(of: searchQuery) { _, query in
             appState.updateSearch(query: query)
@@ -130,11 +134,12 @@ private struct RootContentView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        if let selection = appState.selectedSidebarItem, selection.isBoard {
+                if let selection = appState.selectedSidebarItem, selection.isBoard {
             BoardContentView(
                 appState: appState,
                 selection: selection,
-                searchQuery: searchQuery
+                searchQuery: searchQuery,
+                showDiagnostics: showBoardDiagnostics
             )
         } else {
             IssueListView(
@@ -197,6 +202,7 @@ private struct RootContentView: View {
                         Toggle("Simulate slow responses", isOn: $simulateSlowResponses)
                         Toggle("Show network footer", isOn: $showNetworkFooter)
                         Toggle("Disable syncing", isOn: $disableSyncing)
+                        Toggle("Show board diagnostics", isOn: $showBoardDiagnostics)
                         Divider()
                         Button("Clear cache and refetch") {
                             container.clearCacheAndRefetch()
@@ -237,6 +243,7 @@ private struct BoardContentView: View {
     @ObservedObject var appState: AppState
     let selection: SidebarItem
     let searchQuery: String
+    let showDiagnostics: Bool
 
     var body: some View {
         let board = selection.board ?? IssueBoard(
@@ -252,6 +259,7 @@ private struct BoardContentView: View {
             selection: $appState.selectedIssue,
             isLoading: appState.isLoadingIssues,
             sprintFilter: sprintFilter,
+            showDiagnostics: showDiagnostics,
             onSelectSprint: { filter in
                 Task {
                     await container.updateSprintFilter(filter, for: board)
