@@ -4,8 +4,6 @@ struct IssueListView: View {
     let issues: [IssueSummary]
     @Binding var selection: IssueSummary?
     @Binding var selectedIDs: Set<IssueSummary.ID>
-    let statusColors: [String: IssueFieldColor]
-    let priorityColors: [IssuePriority: IssueFieldColor]
     let showAssigneeColumn: Bool
     let showUpdatedColumn: Bool
     let isLoading: Bool
@@ -117,17 +115,12 @@ struct IssueListView: View {
     }
 
     private func metadataRow(for issue: IssueSummary, isUnread: Bool) -> some View {
-        let statusColor = statusColors[issue.status.normalizedKey]
-        let statusTint = statusColor?.foregroundColor ?? issue.status.tint
-        let priorityColor = priorityColors[issue.priority]?.foregroundColor ?? issue.priority.tint
         return HStack(spacing: 8) {
             Text(issue.projectName)
                 .foregroundStyle(.secondary)
-            Text(issue.status.displayName)
-                .foregroundStyle(statusTint)
-            if issue.priority != .normal {
-                Text(issue.priority.displayName)
-                    .foregroundStyle(priorityColor)
+            IssueMetaPill(text: issue.status.displayName, colors: issue.status.badgeColors)
+            if !issue.priority.isNormalSemantic {
+                IssueMetaPill(text: issue.priority.displayName, colors: issue.priority.badgeColors)
             }
         }
         .font(.caption.weight(isUnread ? .medium : .regular))
@@ -141,18 +134,43 @@ struct IssueListView: View {
     private func syncSelectionState() {
         Task { @MainActor in
             if let selectedIssue = selection {
-                selectedIDs = [selectedIssue.id]
-            } else if selectedIDs.count <= 1 {
+                let nextIDs: Set<IssueSummary.ID> = [selectedIssue.id]
+                guard selectedIDs != nextIDs else { return }
+                selectedIDs = nextIDs
+            } else if selectedIDs.count <= 1, !selectedIDs.isEmpty {
                 selectedIDs.removeAll()
             }
         }
     }
 
     private func updateSelection(from newIDs: Set<IssueSummary.ID>) {
-        guard newIDs.count == 1, let firstID = newIDs.first, let issue = issues.first(where: { $0.id == firstID }) else {
-            selection = nil
-            return
+        let nextSelection: IssueSummary?
+        if newIDs.count == 1, let firstID = newIDs.first, let issue = issues.first(where: { $0.id == firstID }) {
+            nextSelection = issue
+        } else {
+            nextSelection = nil
         }
-        selection = issue
+        guard nextSelection?.id != selection?.id else { return }
+        Task { @MainActor in
+            selection = nextSelection
+        }
+    }
+}
+
+private struct IssueMetaPill: View {
+    let text: String
+    let colors: IssueBadgeColors
+
+    var body: some View {
+        Text(text)
+            .font(.caption.weight(.bold))
+            .padding(.vertical, 2)
+            .padding(.horizontal, 6)
+            .foregroundStyle(colors.foreground)
+            .background(colors.background, in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(colors.border, lineWidth: 1)
+            )
     }
 }

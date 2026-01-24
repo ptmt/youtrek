@@ -20,8 +20,6 @@ private struct RootContentView: View {
     @State private var simulateSlowResponses: Bool = AppDebugSettings.simulateSlowResponses
     @State private var showNetworkFooter: Bool = AppDebugSettings.showNetworkFooter
     @State private var disableSyncing: Bool = AppDebugSettings.disableSyncing
-    @State private var statusOptions: [IssueFieldOption] = []
-    @State private var priorityOptions: [IssueFieldOption] = []
     private var selectedIssues: [IssueSummary] {
         appState.issues.filter { appState.selectedIssueIDs.contains($0.id) }
     }
@@ -42,17 +40,15 @@ private struct RootContentView: View {
     private var rootSplitView: some View {
         NavigationSplitView(columnVisibility: columnVisibilityBinding) {
             sidebarContent
-        } content: {
+        } detail: {
             mainContent
                 .toolbar { mainToolbar }
-        } detail: {
-            detailContent
         }
         .inspector(isPresented: $isInspectorVisible) {
             inspectorContent
         }
         .searchable(text: $searchQuery, placement: .toolbar, prompt: Text("Search issues"))
-        .navigationSplitViewStyle(.balanced)
+        .navigationSplitViewStyle(.prominentDetail)
         #if DEBUG
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if showNetworkFooter {
@@ -80,8 +76,10 @@ private struct RootContentView: View {
         }
         .onChange(of: appState.selectedIssue) { _, issue in
             guard let issue else { return }
-            if appState.selectedIssueIDs != [issue.id] {
-                appState.selectedIssueIDs = [issue.id]
+            Task { @MainActor in
+                if appState.selectedIssueIDs != [issue.id] {
+                    appState.selectedIssueIDs = [issue.id]
+                }
             }
             container.markIssueSeen(issue)
             Task {
@@ -139,13 +137,10 @@ private struct RootContentView: View {
                 searchQuery: searchQuery
             )
         } else {
-            let filteredIssues = appState.filteredIssues(searchQuery: searchQuery)
             IssueListView(
-                issues: filteredIssues,
+                issues: appState.filteredIssues(searchQuery: searchQuery),
                 selection: $appState.selectedIssue,
                 selectedIDs: $appState.selectedIssueIDs,
-                statusColors: statusColorLookup,
-                priorityColors: priorityColorLookup,
                 showAssigneeColumn: showAssigneeColumn,
                 showUpdatedColumn: showUpdatedColumn,
                 isLoading: appState.isLoadingIssues,
@@ -157,10 +152,6 @@ private struct RootContentView: View {
                     appState.recordIssueListRendered(issueCount: count)
                 }
             )
-            .task(id: filteredIssues.map(\.id)) {
-                statusOptions = await container.loadStatusOptions(for: filteredIssues)
-                priorityOptions = await container.loadPriorityOptions(for: filteredIssues)
-            }
         }
     }
 
@@ -217,11 +208,6 @@ private struct RootContentView: View {
         #endif
     }
 
-    private var detailContent: some View {
-        Text("Select an issue")
-            .foregroundStyle(.secondary)
-    }
-
     private var inspectorContent: some View {
         Group {
             if selectedIssues.count > 1 {
@@ -244,29 +230,6 @@ private struct RootContentView: View {
         .background(.ultraThinMaterial)
     }
 
-    private var statusColorLookup: [String: IssueFieldColor] {
-        var result: [String: IssueFieldColor] = [:]
-        for option in statusOptions {
-            guard let color = option.color else { continue }
-            let key = IssueStatus(option: option).normalizedKey
-            if result[key] == nil {
-                result[key] = color
-            }
-        }
-        return result
-    }
-
-    private var priorityColorLookup: [IssuePriority: IssueFieldColor] {
-        var result: [IssuePriority: IssueFieldColor] = [:]
-        for option in priorityOptions {
-            guard let priority = IssuePriority(option: option),
-                  let color = option.color else { continue }
-            if result[priority] == nil {
-                result[priority] = color
-            }
-        }
-        return result
-    }
 }
 
 private struct BoardContentView: View {
@@ -302,6 +265,7 @@ private struct MultiIssueSelectionView: View {
     @EnvironmentObject private var container: AppContainer
     let issues: [IssueSummary]
     @State private var statusOptions: [IssueFieldOption] = []
+    @State private var priorityOptions: [IssueFieldOption] = []
 
     var body: some View {
         ScrollView {
@@ -320,7 +284,9 @@ private struct MultiIssueSelectionView: View {
         .background(.ultraThinMaterial)
         .task(id: issues.map(\.id)) {
             statusOptions = []
+            priorityOptions = []
             statusOptions = await container.loadStatusOptions(for: issues)
+            priorityOptions = await container.loadPriorityOptions(for: issues)
         }
     }
 
@@ -341,17 +307,21 @@ private struct MultiIssueSelectionView: View {
             HStack(spacing: 12) {
                 Menu {
                     ForEach(statusMenuOptions, id: \.self) { status in
-                        Button(status.displayName) {
+                        Button {
                             applyStatus(status)
+                        } label: {
+                            menuRow(title: status.displayName, colors: status.badgeColors)
                         }
                     }
                 } label: {
                     Label("Set Status", systemImage: "flag")
                 }
                 Menu {
-                    ForEach(IssuePriority.allCases, id: \.self) { priority in
-                        Button(priority.displayName) {
+                    ForEach(priorityMenuOptions, id: \.self) { priority in
+                        Button {
                             applyPriority(priority)
+                        } label: {
+                            menuRow(title: priority.displayName, colors: priority.badgeColors)
                         }
                     }
                 } label: {
@@ -405,6 +375,22 @@ private struct MultiIssueSelectionView: View {
             ? IssueStatus.fallbackCases
             : statusOptions.map(IssueStatus.init(option:))
         return IssueStatus.deduplicated(base)
+    }
+
+    private var priorityMenuOptions: [IssuePriority] {
+        let base = priorityOptions.isEmpty
+            ? IssuePriority.fallbackCases
+            : priorityOptions.map(IssuePriority.init(option:))
+        return IssuePriority.deduplicated(base)
+    }
+
+    private func menuRow(title: String, colors: IssueBadgeColors) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(colors.foreground)
+                .frame(width: 8, height: 8)
+            Text(title)
+        }
     }
 
     private func applyStatus(_ status: IssueStatus) {

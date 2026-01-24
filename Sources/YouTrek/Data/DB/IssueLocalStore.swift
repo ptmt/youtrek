@@ -33,6 +33,7 @@ actor IssueLocalStore {
     private let queryKey = Expression<String>("query_key")
     private let issueQueryIssueID = Expression<String>("issue_id")
     private let lastSeenAt = Expression<Double>("last_seen_at")
+    private let sortIndex = Expression<Int>("sort_index")
 
     private let mutations = Table("issue_mutations")
     private let mutationID = Expression<String>("id")
@@ -63,6 +64,7 @@ actor IssueLocalStore {
         let key = queryKey(for: query)
         let joined = issues.join(issueQueries, on: issues[issueID] == issueQueries[issueQueryIssueID])
             .filter(issueQueries[queryKey] == key)
+            .order(issueQueries[sortIndex].asc, issueQueries[issueQueryIssueID].asc)
 
         do {
             var results = try db.prepare(joined).compactMap { row in
@@ -83,7 +85,7 @@ actor IssueLocalStore {
             let existing = issueQueries.filter(queryKey == key)
             try db.run(existing.delete())
 
-            for issue in remoteIssues {
+            for (index, issue) in remoteIssues.enumerated() {
                 let idString = issue.id.uuidString
                 let existingRow = try db.pluck(issues.filter(issueID == idString))
                 let isLocalDirty = existingRow?[isDirty] ?? false
@@ -94,7 +96,8 @@ actor IssueLocalStore {
                 let insert = issueQueries.insert(or: .replace,
                                                  queryKey <- key,
                                                  issueQueryIssueID <- idString,
-                                                 lastSeenAt <- seenAt)
+                                                 lastSeenAt <- seenAt,
+                                                 sortIndex <- index)
                 try db.run(insert)
             }
 
@@ -373,12 +376,33 @@ actor IssueLocalStore {
 
         switch query.sort {
         case .updated(let descending):
-            return filtered.sorted { descending ? $0.updatedAt > $1.updatedAt : $0.updatedAt < $1.updatedAt }
+            return filtered.sorted {
+                if $0.updatedAt != $1.updatedAt {
+                    return descending ? $0.updatedAt > $1.updatedAt : $0.updatedAt < $1.updatedAt
+                }
+                return stableIssueOrder($0, $1)
+            }
         case .priority(let descending):
-            return filtered.sorted { descending ? $0.priority.sortRank > $1.priority.sortRank : $0.priority.sortRank < $1.priority.sortRank }
+            return filtered.sorted {
+                if $0.priority.sortRank != $1.priority.sortRank {
+                    return descending ? $0.priority.sortRank > $1.priority.sortRank : $0.priority.sortRank < $1.priority.sortRank
+                }
+                if $0.updatedAt != $1.updatedAt {
+                    return $0.updatedAt > $1.updatedAt
+                }
+                return stableIssueOrder($0, $1)
+            }
         case .none:
             return filtered
         }
+    }
+
+    private func stableIssueOrder(_ lhs: IssueSummary, _ rhs: IssueSummary) -> Bool {
+        let readableOrder = lhs.readableID.localizedCaseInsensitiveCompare(rhs.readableID)
+        if readableOrder != .orderedSame {
+            return readableOrder == .orderedAscending
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 
     private func applyPaging(_ issues: [IssueSummary], page: IssueQuery.Page) -> [IssueSummary] {
@@ -474,6 +498,7 @@ actor IssueLocalStore {
         let queryKeyColumn = Expression<String>("query_key")
         let issueQueryIssueIDColumn = Expression<String>("issue_id")
         let lastSeenAtColumn = Expression<Double>("last_seen_at")
+        let sortIndexColumn = Expression<Int>("sort_index")
 
         let mutationsTable = Table("issue_mutations")
         let mutationIDColumn = Expression<String>("id")
@@ -522,8 +547,11 @@ actor IssueLocalStore {
             table.column(queryKeyColumn)
             table.column(issueQueryIssueIDColumn)
             table.column(lastSeenAtColumn)
+            table.column(sortIndexColumn)
             table.primaryKey(queryKeyColumn, issueQueryIssueIDColumn)
         })
+
+        try addColumnIfNeeded(db, table: "issue_queries", column: "sort_index", type: "INTEGER")
 
         try db.run(mutationsTable.create(ifNotExists: true) { table in
             table.column(mutationIDColumn, primaryKey: true)
@@ -588,16 +616,5 @@ struct PendingIssueMutation: Identifiable, Sendable {
         self.createdAt = createdAt
         self.lastAttemptAt = lastAttemptAt
         self.retryCount = retryCount
-    }
-}
-
-private extension IssuePriority {
-    var sortRank: Int {
-        switch self {
-        case .critical: return 4
-        case .high: return 3
-        case .normal: return 2
-        case .low: return 1
-        }
     }
 }

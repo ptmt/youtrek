@@ -21,7 +21,7 @@ struct UserAvatarView: View {
     @ViewBuilder
     private var avatarContent: some View {
         if let url = person?.avatarURL {
-            AsyncImage(url: url, transaction: Transaction(animation: .default)) { phase in
+            AsyncImage(url: url, transaction: Transaction(animation: nil)) { phase in
                 switch phase {
                 case .success(let image):
                     image

@@ -73,7 +73,7 @@ private struct WindowAccessor: NSViewRepresentable {
 
     func updateNSView(_ nsView: WindowAccessorView, context: Context) {
         nsView.isSetup = isSetup
-        nsView.configureWindowIfNeeded()
+        nsView.scheduleWindowConfiguration()
     }
 }
 
@@ -81,16 +81,30 @@ private struct WindowAccessor: NSViewRepresentable {
 private final class WindowAccessorView: NSView {
     var isSetup = false
     private var lastConfiguredForSetup: Bool?
+    private var pendingConfiguration = false
+    private var hasAppliedSetupPresentation = false
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        configureWindowIfNeeded()
+        scheduleWindowConfiguration()
+    }
+
+    func scheduleWindowConfiguration() {
+        guard !pendingConfiguration else { return }
+        pendingConfiguration = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.pendingConfiguration = false
+            self.configureWindowIfNeeded()
+        }
     }
 
     func configureWindowIfNeeded() {
         guard let window else { return }
         let needsReconfigure = lastConfiguredForSetup != isSetup
-        lastConfiguredForSetup = isSetup
+        if needsReconfigure {
+            lastConfiguredForSetup = isSetup
+        }
 
         if isSetup {
             if needsReconfigure {
@@ -104,10 +118,14 @@ private final class WindowAccessorView: NSView {
                 window.isOpaque = false
                 window.backgroundColor = .clear
                 window.hasShadow = true
+                hasAppliedSetupPresentation = false
             }
-            window.setContentSize(NSSize(width: 480, height: 340))
-            window.center()
-            window.makeKeyAndOrderFront(nil)
+            if !hasAppliedSetupPresentation {
+                window.setContentSize(NSSize(width: 480, height: 340))
+                window.center()
+                window.makeKeyAndOrderFront(nil)
+                hasAppliedSetupPresentation = true
+            }
         } else if needsReconfigure {
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             window.titlebarAppearsTransparent = false
@@ -117,6 +135,7 @@ private final class WindowAccessorView: NSView {
             window.backgroundColor = .windowBackgroundColor
             window.setContentSize(NSSize(width: 1280, height: 800))
             window.center()
+            hasAppliedSetupPresentation = false
         }
     }
 }

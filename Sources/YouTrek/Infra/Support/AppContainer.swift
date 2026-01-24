@@ -206,12 +206,32 @@ final class AppContainer: ObservableObject {
     }
 
     func loadIssues(for selection: SidebarItem) async {
-        let query = issueQuery(for: selection)
+        let resolvedBoard = await resolveBoardDetailsIfNeeded(for: selection)
+        let query: IssueQuery
+        if selection.isBoard {
+            let page = selection.query.page
+            let boardForQuery = resolvedBoard ?? boardForSelection(selection) ?? IssueBoard(
+                id: selection.boardID ?? selection.id,
+                name: selection.title,
+                isFavorite: true,
+                projectNames: []
+            )
+            query = boardIssueQuery(for: boardForQuery, page: page)
+        } else {
+            query = selection.query
+        }
+        if selection.isBoard,
+           let resolvedBoard,
+           appState.selectedSidebarItem?.id == selection.id,
+           selection.board != resolvedBoard {
+            appState.selectedSidebarItem = SidebarItem.board(resolvedBoard, page: selection.query.page)
+        }
+
         guard query != lastLoadedIssueQuery else { return }
         lastLoadedIssueQuery = query
         appState.setIssuesLoading(true)
 
-        let board = boardForSelection(selection)
+        let board = selection.isBoard ? (resolvedBoard ?? boardForSelection(selection)) : nil
         let sprintFilter = board.map { appState.sprintFilter(for: $0) }
         let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(board: board, filter: sprintFilter)
 
@@ -223,7 +243,9 @@ final class AppContainer: ObservableObject {
                 filter: sprintFilter,
                 sprintIssueIDs: sprintIssueIDs
             )
-            appState.replaceIssues(with: filtered)
+            if filtered != appState.issues {
+                appState.replaceIssues(with: filtered)
+            }
             appState.setIssuesLoading(false)
             await refreshIssueSeenUpdates(for: filtered)
         }
@@ -237,11 +259,15 @@ final class AppContainer: ObservableObject {
                 filter: sprintFilter,
                 sprintIssueIDs: sprintIssueIDs
             )
-            appState.replaceIssues(with: filtered)
+            if filtered != appState.issues {
+                appState.replaceIssues(with: filtered)
+            }
             appState.setIssuesLoading(false)
             await refreshIssueSeenUpdates(for: filtered)
         } catch {
-            appState.replaceIssues(with: [])
+            if appState.issues.isEmpty {
+                appState.replaceIssues(with: [])
+            }
             appState.setIssuesLoading(false)
         }
         if selection.isBoard, let boardID = selection.boardID {
@@ -273,8 +299,21 @@ final class AppContainer: ObservableObject {
         if isSelected {
             appState.setIssuesLoading(true)
         }
-        let query = issueQuery(for: item)
-        let board = boardForSelection(item)
+        let resolvedBoard = await resolveBoardDetailsIfNeeded(for: item)
+        let boardForQuery = resolvedBoard ?? boardForSelection(item) ?? IssueBoard(
+            id: item.boardID ?? item.id,
+            name: item.title,
+            isFavorite: true,
+            projectNames: []
+        )
+        let query = boardIssueQuery(for: boardForQuery, page: item.query.page)
+        if isSelected,
+           let resolvedBoard,
+           item.board != resolvedBoard {
+            appState.selectedSidebarItem = SidebarItem.board(resolvedBoard, page: item.query.page)
+        }
+
+        let board = resolvedBoard ?? boardForSelection(item)
         let sprintFilter = board.map { appState.sprintFilter(for: $0) }
         let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(board: board, filter: sprintFilter)
         do {
@@ -287,13 +326,17 @@ final class AppContainer: ObservableObject {
                     filter: sprintFilter,
                     sprintIssueIDs: sprintIssueIDs
                 )
-                appState.replaceIssues(with: filtered)
+                if filtered != appState.issues {
+                    appState.replaceIssues(with: filtered)
+                }
                 appState.setIssuesLoading(false)
                 await refreshIssueSeenUpdates(for: filtered)
             }
         } catch {
             if isSelected {
-                appState.replaceIssues(with: [])
+                if appState.issues.isEmpty {
+                    appState.replaceIssues(with: [])
+                }
                 appState.setIssuesLoading(false)
             }
         }
@@ -685,6 +728,50 @@ private extension AppContainer {
         return boardIssueQuery(for: board, page: page)
     }
 
+    private func boardNeedsDetail(_ board: IssueBoard?) -> Bool {
+        guard let board else { return true }
+        let columnField = board.columnFieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let needsColumns = board.columns.isEmpty || columnField.isEmpty
+        let needsProjects = board.projectNames.isEmpty
+        let needsSwimlaneField = board.swimlaneSettings.isEnabled &&
+            (board.swimlaneSettings.fieldName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        return needsColumns || needsProjects || needsSwimlaneField
+    }
+
+    private func applyingFavorite(_ isFavorite: Bool?, to board: IssueBoard) -> IssueBoard {
+        guard let isFavorite, isFavorite != board.isFavorite else { return board }
+        return IssueBoard(
+            id: board.id,
+            name: board.name,
+            isFavorite: isFavorite,
+            projectNames: board.projectNames,
+            sprints: board.sprints,
+            currentSprintID: board.currentSprintID,
+            sprintFieldName: board.sprintFieldName,
+            columnFieldName: board.columnFieldName,
+            columns: board.columns,
+            swimlaneSettings: board.swimlaneSettings,
+            orphansAtTheTop: board.orphansAtTheTop,
+            hideOrphansSwimlane: board.hideOrphansSwimlane
+        )
+    }
+
+    private func resolveBoardDetailsIfNeeded(for selection: SidebarItem) async -> IssueBoard? {
+        guard selection.isBoard else { return selection.board }
+        let current = selection.board
+        guard boardNeedsDetail(current) else { return current }
+        guard let boardID = selection.boardID ?? current?.id else { return current }
+
+        do {
+            let detail = try await boardRepositorySwitcher.fetchBoard(id: boardID)
+            let resolved = applyingFavorite(current?.isFavorite, to: detail)
+            await boardLocalStore.saveBoard(resolved)
+            return resolved
+        } catch {
+            return current
+        }
+    }
+
     private func boardForSelection(_ selection: SidebarItem) -> IssueBoard? {
         guard selection.isBoard else { return nil }
         if let board = selection.board {
@@ -834,6 +921,7 @@ extension AppContainer {
         }
         return combined
     }
+
 }
 
 private extension AppContainer {
@@ -1393,5 +1481,13 @@ private struct PreviewIssueBoardRepository: IssueBoardRepository {
                 hideOrphansSwimlane: false
             )
         ]
+    }
+
+    func fetchBoard(id: String) async throws -> IssueBoard {
+        let boards = try await fetchBoards()
+        if let match = boards.first(where: { $0.id == id }) {
+            return match
+        }
+        throw YouTrackAPIError.invalidResponse
     }
 }

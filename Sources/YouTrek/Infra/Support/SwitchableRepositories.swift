@@ -99,6 +99,10 @@ actor SwitchableIssueBoardRepository: IssueBoardRepository {
     func fetchBoards() async throws -> [IssueBoard] {
         try await current.fetchBoards()
     }
+
+    func fetchBoard(id: String) async throws -> IssueBoard {
+        try await current.fetchBoard(id: id)
+    }
 }
 
 actor SwitchableProjectRepository: ProjectRepository {

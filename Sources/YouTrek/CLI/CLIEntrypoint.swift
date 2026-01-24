@@ -903,6 +903,8 @@ private struct CLIOutput {
 
         var buckets: [String: [IssueSummary]] = [:]
         var unassigned: [IssueSummary] = []
+        var orderedKeys: [String] = []
+        var orderedKeySet: Set<String> = []
 
         for issue in issues {
             let values = swimlaneValues(for: issue, fieldName: normalizedField, isAssignee: isAssignee)
@@ -919,6 +921,10 @@ private struct CLIOutput {
                     matched = true
                 } else if explicitValues.isEmpty {
                     buckets[value, default: []].append(issue)
+                    let normalized = value.lowercased()
+                    if orderedKeySet.insert(normalized).inserted {
+                        orderedKeys.append(value)
+                    }
                     matched = true
                 }
             }
@@ -934,8 +940,7 @@ private struct CLIOutput {
                 groups.append(BoardGroup(title: value, issues: groupIssues, isUnassigned: false, sortIndex: index))
             }
         } else {
-            let sortedKeys = buckets.keys.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-            for (index, key) in sortedKeys.enumerated() {
+            for (index, key) in orderedKeys.enumerated() {
                 groups.append(BoardGroup(title: key, issues: buckets[key] ?? [], isUnassigned: false, sortIndex: index))
             }
         }
@@ -960,7 +965,19 @@ private struct CLIOutput {
 
     private static func swimlaneValues(for issue: IssueSummary, fieldName: String, isAssignee: Bool) -> [String] {
         if isAssignee {
-            return issue.assignee.map { [$0.displayName] } ?? []
+            var values: [String] = []
+            if let assignee = issue.assignee {
+                values.append(assignee.displayName)
+                if let login = assignee.login?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !login.isEmpty,
+                   login.caseInsensitiveCompare(assignee.displayName) != .orderedSame {
+                    values.append(login)
+                }
+            }
+            if values.isEmpty {
+                values = issue.fieldValues(named: fieldName)
+            }
+            return values
         }
         return issue.fieldValues(named: fieldName)
     }

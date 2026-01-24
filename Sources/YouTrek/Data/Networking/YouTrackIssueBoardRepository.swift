@@ -312,9 +312,11 @@ private struct YouTrackAgileBoard: Decodable {
         let name: String?
         let localizedName: String?
         let isResolved: Bool?
+        let fullName: String?
+        let login: String?
 
         var resolvedName: String? {
-            name ?? localizedName
+            name ?? localizedName ?? fullName ?? login
         }
     }
 
@@ -388,10 +390,11 @@ private extension YouTrackIssueBoardRepository {
     ]
 
     static let agileDetailFieldCandidates: [String] = [
-        agileDetailFields
+        agileDetailFieldsWithUsers,
+        agileDetailFieldsBase
     ]
 
-    static let agileDetailFields: String = [
+    static let agileDetailFieldsBase: String = [
         "id",
         "name",
         "owner(id,login,fullName,avatarUrl)",
@@ -410,6 +413,30 @@ private extension YouTrackIssueBoardRepository {
         "currentSprint(id,name,goal,start,finish,archived,isDefault,unresolvedIssuesCount)",
         "columnSettings(id,field(id,name,localizedName),columns(id,name,localizedName,presentation,isResolved,ordinal,wipLimit(id,min,max),parent(id),fieldValues(id,name,localizedName,isResolved)))",
         "swimlaneSettings($type,id,enabled,field(id,name,localizedName),values(id,name,localizedName))",
+        "sprintsSettings(id,isExplicit,cardOnSeveralSprints,defaultSprint(id,name),disableSprints,explicitQuery,sprintSyncField(id,name,localizedName),hideSubtasksOfCards)",
+        "colorCoding(id)",
+        "status(id,valid,hasJobs,errors,warnings)"
+    ].joined(separator: ",")
+
+    static let agileDetailFieldsWithUsers: String = [
+        "id",
+        "name",
+        "owner(id,login,fullName,avatarUrl)",
+        "visibleFor(id,name)",
+        "visibleForProjectBased",
+        "updateableBy(id,name)",
+        "updateableByProjectBased",
+        "readSharingSettings(id,permittedGroups(id,name),permittedUsers(id,login,fullName,avatarUrl))",
+        "updateSharingSettings(id,permittedGroups(id,name),permittedUsers(id,login,fullName,avatarUrl))",
+        "orphansAtTheTop",
+        "hideOrphansSwimlane",
+        "estimationField(id,name,localizedName)",
+        "originalEstimationField(id,name,localizedName)",
+        "projects(id,name,shortName,archived)",
+        "sprints(id,name,goal,start,finish,archived,isDefault,unresolvedIssuesCount)",
+        "currentSprint(id,name,goal,start,finish,archived,isDefault,unresolvedIssuesCount)",
+        "columnSettings(id,field(id,name,localizedName),columns(id,name,localizedName,presentation,isResolved,ordinal,wipLimit(id,min,max),parent(id),fieldValues(id,name,localizedName,fullName,login,isResolved)))",
+        "swimlaneSettings($type,id,enabled,field(id,name,localizedName),values(id,name,localizedName,fullName,login))",
         "sprintsSettings(id,isExplicit,cardOnSeveralSprints,defaultSprint(id,name),disableSprints,explicitQuery,sprintSyncField(id,name,localizedName),hideSubtasksOfCards)",
         "colorCoding(id)",
         "status(id,valid,hasJobs,errors,warnings)"

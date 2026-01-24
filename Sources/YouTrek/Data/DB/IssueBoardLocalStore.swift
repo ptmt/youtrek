@@ -87,6 +87,32 @@ actor IssueBoardLocalStore {
         }
     }
 
+    func saveBoard(_ board: IssueBoard) async {
+        guard let db else { return }
+        do {
+            let now = Date().timeIntervalSince1970
+            let insert = boards.insert(
+                or: .replace,
+                boardID <- board.id,
+                name <- board.name,
+                isFavorite <- board.isFavorite,
+                projectNamesJSON <- encodeProjects(board.projectNames),
+                sprintsJSON <- encodeSprints(board.sprints),
+                currentSprintID <- board.currentSprintID,
+                sprintFieldName <- board.sprintFieldName,
+                columnFieldName <- board.columnFieldName,
+                columnsJSON <- encodeColumns(board.columns),
+                swimlaneJSON <- encodeSwimlane(board.swimlaneSettings),
+                orphansAtTop <- board.orphansAtTheTop,
+                hideOrphansSwimlane <- board.hideOrphansSwimlane,
+                updatedAt <- now
+            )
+            try db.run(insert)
+        } catch {
+            print("IssueBoardLocalStore failed to save board: \(error.localizedDescription)")
+        }
+    }
+
     func clearCache() async {
         guard let db else { return }
         do {

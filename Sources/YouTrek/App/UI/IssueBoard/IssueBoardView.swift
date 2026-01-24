@@ -14,24 +14,28 @@ struct IssueBoardView: View {
     private let columnSpacing: CGFloat = 12
 
     var body: some View {
-        Group {
-            if isLoading && issues.isEmpty {
-                VStack(spacing: 12) {
-                    ProgressView()
-                    Text("Loading board…")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            boardHeader
+            Divider()
+            Group {
+                if isLoading && issues.isEmpty {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Loading board…")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if issues.isEmpty {
+                    ContentUnavailableView(
+                        "No cards on this board",
+                        systemImage: "rectangle.3.group",
+                        description: Text("Sync or adjust your filters to pull the latest cards.")
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    boardContent
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if issues.isEmpty {
-                ContentUnavailableView(
-                    "No cards on this board",
-                    systemImage: "rectangle.3.group",
-                    description: Text("Sync or adjust your filters to pull the latest cards.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                boardContent
             }
         }
     }
@@ -39,7 +43,6 @@ struct IssueBoardView: View {
     private var boardContent: some View {
         ScrollView([.horizontal, .vertical]) {
             LazyVStack(alignment: .leading, spacing: 16) {
-                boardHeader
                 IssueBoardColumnHeaderRow(
                     columns: columnDescriptors,
                     issues: issues,
@@ -60,9 +63,19 @@ struct IssueBoardView: View {
                     }
                 }
             }
-            .padding(16)
+            .frame(minWidth: boardContentWidth, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
         }
         .scrollIndicators(.visible)
+    }
+
+    private var boardContentWidth: CGFloat {
+        let count = max(columnDescriptors.count, 1)
+        let columnsWidth = CGFloat(count) * columnWidth
+        let spacingWidth = CGFloat(max(0, count - 1)) * columnSpacing
+        return columnsWidth + spacingWidth
     }
 
     private var boardHeader: some View {
@@ -78,8 +91,21 @@ struct IssueBoardView: View {
             if showsSprintControls {
                 sprintControls
             }
+            if !groupModels.isEmpty {
+                Button {
+                    toggleCollapseAll()
+                } label: {
+                    Label(isAllCollapsed ? "Expand all" : "Collapse all", systemImage: "rectangle.compress.vertical")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+            }
             Spacer()
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 
     private var showsSprintControls: Bool {
@@ -177,6 +203,8 @@ struct IssueBoardView: View {
 
         var buckets: [String: [IssueSummary]] = [:]
         var unassigned: [IssueSummary] = []
+        var orderedKeys: [String] = []
+        var orderedKeySet: Set<String> = []
 
         for issue in issues {
             let values = swimlaneValues(for: issue, fieldName: normalizedField, isAssignee: isAssignee)
@@ -193,6 +221,10 @@ struct IssueBoardView: View {
                     matched = true
                 } else if explicitValues.isEmpty {
                     buckets[value, default: []].append(issue)
+                    let normalized = value.lowercased()
+                    if orderedKeySet.insert(normalized).inserted {
+                        orderedKeys.append(value)
+                    }
                     matched = true
                 }
             }
@@ -215,8 +247,7 @@ struct IssueBoardView: View {
                 ))
             }
         } else {
-            let sortedKeys = buckets.keys.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-            for (index, key) in sortedKeys.enumerated() {
+            for (index, key) in orderedKeys.enumerated() {
                 groups.append(IssueBoardGroup(
                     id: key,
                     title: key,
@@ -271,9 +302,37 @@ struct IssueBoardView: View {
         )
     }
 
+    private var isAllCollapsed: Bool {
+        let groupIDs = Set(groupModels.map(\.id))
+        guard !groupIDs.isEmpty else { return false }
+        return groupIDs.isSubset(of: collapsedGroups)
+    }
+
+    private func toggleCollapseAll() {
+        let groupIDs = Set(groupModels.map(\.id))
+        guard !groupIDs.isEmpty else { return }
+        if groupIDs.isSubset(of: collapsedGroups) {
+            collapsedGroups.subtract(groupIDs)
+        } else {
+            collapsedGroups.formUnion(groupIDs)
+        }
+    }
+
     private func swimlaneValues(for issue: IssueSummary, fieldName: String, isAssignee: Bool) -> [String] {
         if isAssignee {
-            return issue.assignee.map { [$0.displayName] } ?? []
+            var values: [String] = []
+            if let assignee = issue.assignee {
+                values.append(assignee.displayName)
+                if let login = assignee.login?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !login.isEmpty,
+                   login.caseInsensitiveCompare(assignee.displayName) != .orderedSame {
+                    values.append(login)
+                }
+            }
+            if values.isEmpty {
+                values = issue.fieldValues(named: fieldName)
+            }
+            return values
         }
         return issue.fieldValues(named: fieldName)
     }
@@ -309,6 +368,7 @@ private struct IssueBoardGroupHeader: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

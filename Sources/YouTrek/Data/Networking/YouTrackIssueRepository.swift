@@ -232,7 +232,7 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
             ?? statusField?.value.firstValue?.localizedName
             ?? statusField?.value.firstValue?.resolvedName
         let status = IssueStatus.from(apiName: statusName)
-        let priority = priorityField?.value.firstValue?.name.flatMap(IssuePriority.init(apiName:)) ?? .normal
+        let priority = IssuePriority.from(apiName: priorityField?.value.firstValue?.name)
         let tags = issue.tags?.compactMap { $0.name } ?? []
         var customFieldValues = extractCustomFieldValues(from: customFields)
         if let sprintValues = issue.sprints?
@@ -435,20 +435,6 @@ private extension YouTrackIssueRepository {
             }
         }
         return result
-    }
-}
-
-private extension IssuePriority {
-    init?(apiName: String) {
-        let normalized = apiName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        switch normalized {
-        case "show-stopper", "showstopper", "critical", "blocker": self = .critical
-        case "major", "high", "important": self = .high
-        case "normal", "medium", "default": self = .normal
-        case "minor", "low", "trivial": self = .low
-        default:
-            return nil
-        }
     }
 }
 

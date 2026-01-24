@@ -32,6 +32,7 @@ final class AppState: ObservableObject {
     }
 
     func replaceIssues(with newIssues: [IssueSummary]) {
+        guard issues != newIssues else { return }
         issues = newIssues
         if let first = newIssues.first {
             selectedIssue = first

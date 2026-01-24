@@ -143,11 +143,54 @@ extension Person {
     }
 }
 
-enum IssuePriority: String, CaseIterable, Hashable, Sendable, Codable {
+enum IssuePriority: Hashable, Sendable, Codable, RawRepresentable {
     case critical
     case high
     case normal
     case low
+    case custom(String)
+
+    static var allCases: [IssuePriority] {
+        [.critical, .high, .normal, .low]
+    }
+
+    static var fallbackCases: [IssuePriority] {
+        allCases
+    }
+
+    init?(rawValue: String) {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let key = IssuePriority.normalizedKey(trimmed)
+        if let exact = IssuePriority.exactCategory(for: key) {
+            self = exact
+        } else {
+            self = .custom(trimmed)
+        }
+    }
+
+    var rawValue: String {
+        switch self {
+        case .critical:
+            return "critical"
+        case .high:
+            return "high"
+        case .normal:
+            return "normal"
+        case .low:
+            return "low"
+        case .custom(let value):
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "custom" : trimmed
+        }
+    }
+
+    static func from(apiName: String?) -> IssuePriority {
+        guard let apiName, let priority = IssuePriority(rawValue: apiName) else {
+            return .normal
+        }
+        return priority
+    }
 
     var displayName: String {
         switch self {
@@ -155,54 +198,151 @@ enum IssuePriority: String, CaseIterable, Hashable, Sendable, Codable {
         case .high: return "High"
         case .normal: return "Normal"
         case .low: return "Low"
+        case .custom(let value):
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "Unknown" : trimmed
         }
     }
 
     var iconName: String {
-        switch self {
+        switch semantic {
         case .critical: return "exclamationmark.triangle.fill"
         case .high: return "exclamationmark.circle.fill"
         case .normal: return "circle"
         case .low: return "arrow.down.circle"
+        case .custom: return "circle"
         }
     }
 
     var tint: Color {
-        switch self {
-        case .critical: return .red
-        case .high: return .orange
-        case .normal: return .secondary
-        case .low: return .blue
+        badgeColors.foreground
+    }
+
+    var normalizedKey: String {
+        IssuePriority.normalizedKey(rawValue)
+    }
+
+    var sortRank: Int {
+        switch semantic {
+        case .critical: return 4
+        case .high: return 3
+        case .normal: return 2
+        case .low: return 1
+        case .custom: return 0
         }
     }
-}
 
-extension IssuePriority {
-    static func from(displayName: String) -> IssuePriority? {
-        let normalized = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        switch normalized {
-        case "show-stopper", "showstopper", "critical", "blocker": return .critical
-        case "major", "high", "important": return .high
-        case "normal", "medium", "default": return .normal
-        case "minor", "low", "trivial": return .low
-        default:
-            if let match = IssuePriority(rawValue: normalized) {
-                return match
+    var isNormalSemantic: Bool {
+        semantic == .normal
+    }
+
+    static func deduplicated(_ priorities: [IssuePriority]) -> [IssuePriority] {
+        var seen = Set<String>()
+        var unique: [IssuePriority] = []
+        for priority in priorities {
+            let key = priority.normalizedKey
+            if seen.insert(key).inserted {
+                unique.append(priority)
             }
-            return nil
+        }
+        return unique
+    }
+
+    static func sortedUnique(_ priorities: [IssuePriority]) -> [IssuePriority] {
+        let unique = deduplicated(priorities)
+        return unique.sorted { left, right in
+            if left.sortRank != right.sortRank {
+                return left.sortRank < right.sortRank
+            }
+            return left.displayName.localizedCaseInsensitiveCompare(right.displayName) == .orderedAscending
         }
     }
 
-    init?(option: IssueFieldOption) {
+    static func from(displayName: String) -> IssuePriority? {
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return IssuePriority(rawValue: trimmed) ?? .custom(trimmed)
+    }
+
+    init(option: IssueFieldOption) {
         let candidate = option.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallback = option.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolved = candidate.isEmpty ? fallback : candidate
-        if let match = IssuePriority.from(displayName: resolved) {
-            self = match
-        } else if let fallbackMatch = IssuePriority.from(displayName: fallback) {
-            self = fallbackMatch
-        } else {
-            return nil
+        self = IssuePriority(rawValue: resolved) ?? .custom(resolved)
+    }
+
+    static func == (lhs: IssuePriority, rhs: IssuePriority) -> Bool {
+        lhs.normalizedKey == rhs.normalizedKey
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(normalizedKey)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        self = IssuePriority(rawValue: raw) ?? .custom(raw)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+private extension IssuePriority {
+    enum Semantic {
+        case critical
+        case high
+        case normal
+        case low
+        case custom
+    }
+
+    static let exactCriticalKeys: Set<String> = ["critical"]
+    static let exactHighKeys: Set<String> = ["high"]
+    static let exactNormalKeys: Set<String> = ["normal"]
+    static let exactLowKeys: Set<String> = ["low"]
+
+    static func normalizedKey(_ value: String) -> String {
+        let lowered = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let scalars = lowered.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
+        return String(String.UnicodeScalarView(scalars))
+    }
+
+    static func exactCategory(for key: String) -> IssuePriority? {
+        if exactCriticalKeys.contains(key) { return .critical }
+        if exactHighKeys.contains(key) { return .high }
+        if exactNormalKeys.contains(key) { return .normal }
+        if exactLowKeys.contains(key) { return .low }
+        return nil
+    }
+
+    static func heuristicCategory(for key: String) -> Semantic {
+        if exactCriticalKeys.contains(key) || key.contains("critical") || key.contains("block") || key.contains("urgent") || key.contains("showstopper") {
+            return .critical
+        }
+        if exactHighKeys.contains(key) || key.contains("high") || key.contains("major") || key.contains("important") {
+            return .high
+        }
+        if exactLowKeys.contains(key) || key.contains("low") || key.contains("minor") || key.contains("trivial") {
+            return .low
+        }
+        if exactNormalKeys.contains(key) || key.contains("normal") || key.contains("medium") || key.contains("default") {
+            return .normal
+        }
+        return .custom
+    }
+
+    var semantic: Semantic {
+        switch self {
+        case .critical: return .critical
+        case .high: return .high
+        case .normal: return .normal
+        case .low: return .low
+        case .custom(let value):
+            return IssuePriority.heuristicCategory(for: IssuePriority.normalizedKey(value))
         }
     }
 }
@@ -215,9 +355,118 @@ extension IssueFieldColor {
     var foregroundColor: Color? {
         Color(hexString: foregroundHex)
     }
+
+    func readableForeground(for colorScheme: ColorScheme) -> Color? {
+        let baseBackground: SRGBColor = (colorScheme == .dark) ? .black : .white
+        guard var candidate = SRGBColor(hexString: foregroundHex ?? backgroundHex) else { return nil }
+        if baseBackground.contrastRatio(with: candidate) >= 4.5 {
+            return Color(candidate)
+        }
+        for _ in 0..<6 {
+            candidate = candidate.blended(
+                with: colorScheme == .dark ? SRGBColor.white : SRGBColor.black,
+                amount: 0.15
+            )
+            if baseBackground.contrastRatio(with: candidate) >= 4.5 {
+                return Color(candidate)
+            }
+        }
+        return colorScheme == .dark ? Color.white : Color.black
+    }
+
+    func readableForegroundForBadge() -> Color? {
+        guard let background = SRGBColor(hexString: backgroundHex) else {
+            return foregroundColor
+        }
+        if let foreground = SRGBColor(hexString: foregroundHex),
+           background.contrastRatio(with: foreground) >= 4.5 {
+            return Color(foreground)
+        }
+        let black = SRGBColor.black
+        let white = SRGBColor.white
+        let blackContrast = background.contrastRatio(with: black)
+        let whiteContrast = background.contrastRatio(with: white)
+        return Color(blackContrast >= whiteContrast ? black : white)
+    }
+}
+
+private struct SRGBColor: Hashable, Sendable {
+    let red: Double
+    let green: Double
+    let blue: Double
+    let alpha: Double
+
+    static let white = SRGBColor(red: 1, green: 1, blue: 1, alpha: 1)
+    static let black = SRGBColor(red: 0, green: 0, blue: 0, alpha: 1)
+
+    init(red: Double, green: Double, blue: Double, alpha: Double = 1) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+        self.alpha = alpha
+    }
+
+    init?(hexString: String?) {
+        guard var hex = hexString?.trimmingCharacters(in: .whitespacesAndNewlines), !hex.isEmpty else {
+            return nil
+        }
+        if hex.hasPrefix("#") {
+            hex.removeFirst()
+        }
+        if hex.count == 3 {
+            hex = hex.map { "\($0)\($0)" }.joined()
+        }
+        guard hex.count == 6 || hex.count == 8 else { return nil }
+
+        var value: UInt64 = 0
+        guard Scanner(string: hex).scanHexInt64(&value) else { return nil }
+
+        if hex.count == 6 {
+            self.red = Double((value & 0xFF0000) >> 16) / 255.0
+            self.green = Double((value & 0x00FF00) >> 8) / 255.0
+            self.blue = Double(value & 0x0000FF) / 255.0
+            self.alpha = 1.0
+        } else {
+            self.red = Double((value & 0xFF000000) >> 24) / 255.0
+            self.green = Double((value & 0x00FF0000) >> 16) / 255.0
+            self.blue = Double((value & 0x0000FF00) >> 8) / 255.0
+            self.alpha = Double(value & 0x000000FF) / 255.0
+        }
+    }
+
+    func contrastRatio(with other: SRGBColor) -> Double {
+        let l1 = max(relativeLuminance, other.relativeLuminance)
+        let l2 = min(relativeLuminance, other.relativeLuminance)
+        return (l1 + 0.05) / (l2 + 0.05)
+    }
+
+    func blended(with other: SRGBColor, amount: Double) -> SRGBColor {
+        let clamped = min(max(amount, 0), 1)
+        return SRGBColor(
+            red: red + (other.red - red) * clamped,
+            green: green + (other.green - green) * clamped,
+            blue: blue + (other.blue - blue) * clamped,
+            alpha: alpha + (other.alpha - alpha) * clamped
+        )
+    }
+
+    private var relativeLuminance: Double {
+        let r = SRGBColor.linearize(red)
+        let g = SRGBColor.linearize(green)
+        let b = SRGBColor.linearize(blue)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+
+    private static func linearize(_ component: Double) -> Double {
+        component <= 0.03928 ? (component / 12.92) : pow((component + 0.055) / 1.055, 2.4)
+    }
 }
 
 private extension Color {
+    init(_ components: SRGBColor) {
+        self = Color(.sRGB, red: components.red, green: components.green, blue: components.blue, opacity: components.alpha)
+    }
+
     init?(hexString: String?) {
         guard var hex = hexString?.trimmingCharacters(in: .whitespacesAndNewlines), !hex.isEmpty else {
             return nil
@@ -251,6 +500,49 @@ private extension Color {
         }
 
         self = Color(.sRGB, red: red, green: green, blue: blue, opacity: alpha)
+    }
+}
+
+struct IssueBadgeColors {
+    let background: Color
+    let foreground: Color
+    let border: Color
+}
+
+extension IssuePriority {
+    var badgeColors: IssueBadgeColors {
+        switch semantic {
+        case .critical:
+            return IssueBadgeColors(
+                background: Color(hexString: "#FEE2E2") ?? .red.opacity(0.2),
+                foreground: Color(hexString: "#991B1B") ?? .red,
+                border: Color(hexString: "#FCA5A5") ?? .red.opacity(0.4)
+            )
+        case .high:
+            return IssueBadgeColors(
+                background: Color(hexString: "#FFEDD5") ?? .orange.opacity(0.2),
+                foreground: Color(hexString: "#9A3412") ?? .orange,
+                border: Color(hexString: "#FDBA74") ?? .orange.opacity(0.4)
+            )
+        case .normal:
+            return IssueBadgeColors(
+                background: Color(hexString: "#E5E7EB") ?? .gray.opacity(0.2),
+                foreground: Color(hexString: "#374151") ?? .secondary,
+                border: Color(hexString: "#D1D5DB") ?? .gray.opacity(0.4)
+            )
+        case .low:
+            return IssueBadgeColors(
+                background: Color(hexString: "#DBEAFE") ?? .blue.opacity(0.2),
+                foreground: Color(hexString: "#1E40AF") ?? .blue,
+                border: Color(hexString: "#93C5FD") ?? .blue.opacity(0.4)
+            )
+        case .custom:
+            return IssueBadgeColors(
+                background: Color(hexString: "#E5E7EB") ?? .gray.opacity(0.2),
+                foreground: Color(hexString: "#374151") ?? .secondary,
+                border: Color(hexString: "#D1D5DB") ?? .gray.opacity(0.4)
+            )
+        }
     }
 }
 
@@ -331,14 +623,7 @@ enum IssueStatus: Hashable, Sendable, Codable, CaseIterable, RawRepresentable {
     }
 
     var tint: Color {
-        switch semantic {
-        case .open: return .blue
-        case .inProgress: return .mint
-        case .inReview: return .teal
-        case .blocked: return .red
-        case .done: return .green
-        case .custom: return .secondary
-        }
+        badgeColors.foreground
     }
 
     var normalizedKey: String {
@@ -395,6 +680,49 @@ enum IssueStatus: Hashable, Sendable, Codable, CaseIterable, RawRepresentable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(rawValue)
+    }
+}
+
+extension IssueStatus {
+    var badgeColors: IssueBadgeColors {
+        switch semantic {
+        case .open:
+            return IssueBadgeColors(
+                background: Color(hexString: "#DBEAFE") ?? .blue.opacity(0.2),
+                foreground: Color(hexString: "#1E40AF") ?? .blue,
+                border: Color(hexString: "#93C5FD") ?? .blue.opacity(0.4)
+            )
+        case .inProgress:
+            return IssueBadgeColors(
+                background: Color(hexString: "#FEF3C7") ?? .orange.opacity(0.2),
+                foreground: Color(hexString: "#92400E") ?? .orange,
+                border: Color(hexString: "#FCD34D") ?? .orange.opacity(0.4)
+            )
+        case .inReview:
+            return IssueBadgeColors(
+                background: Color(hexString: "#CCFBF1") ?? .teal.opacity(0.2),
+                foreground: Color(hexString: "#115E59") ?? .teal,
+                border: Color(hexString: "#5EEAD4") ?? .teal.opacity(0.4)
+            )
+        case .blocked:
+            return IssueBadgeColors(
+                background: Color(hexString: "#FEE2E2") ?? .red.opacity(0.2),
+                foreground: Color(hexString: "#991B1B") ?? .red,
+                border: Color(hexString: "#FCA5A5") ?? .red.opacity(0.4)
+            )
+        case .done:
+            return IssueBadgeColors(
+                background: Color(hexString: "#DCFCE7") ?? .green.opacity(0.2),
+                foreground: Color(hexString: "#166534") ?? .green,
+                border: Color(hexString: "#86EFAC") ?? .green.opacity(0.4)
+            )
+        case .custom:
+            return IssueBadgeColors(
+                background: Color(hexString: "#E5E7EB") ?? .gray.opacity(0.2),
+                foreground: Color(hexString: "#374151") ?? .secondary,
+                border: Color(hexString: "#D1D5DB") ?? .gray.opacity(0.4)
+            )
+        }
     }
 }
 

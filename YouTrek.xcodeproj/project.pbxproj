@@ -8,14 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		00FEB9220801E5364D578CD8 /* IssueRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413164C575D17B66BEBD006E /* IssueRepository.swift */; };
-		40CFE17D5D0249E263CCDE90 /* IssueProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837E26CF86C45D20765721F4 /* IssueProject.swift */; };
-		9655E060C50B90B629C560AD /* IssueField.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */; };
-		9ABF8CA24DA93B1795EDF5E7 /* ProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22474C986C8B156AE420F86D /* ProjectRepository.swift */; };
-		711FBBDF964284FEE9060EA9 /* IssueFieldRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF2DFD58E618AA42ED5A0EBF /* IssueFieldRepository.swift */; };
-		5FF6DD8ABD04D24EB1CB3B43 /* PeopleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE25293D0B475678E0E9AAD /* PeopleRepository.swift */; };
-		E503D754E49097AD959569AD /* YouTrackProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */; };
-		F058AB58B54E3B5254042C54 /* YouTrackIssueFieldRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */; };
-		98C448F02392A199D2C15637 /* YouTrackPeopleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */; };
 		03C386F12EEB26CD00BF8B68 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 03C386EF2EEB26BC00BF8B68 /* Assets.xcassets */; };
 		08C5D4B53937B5F198D5F1A4 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D3751AABB25A233B2008788 /* AppState.swift */; };
 		0B7E05DB1C0B6E4858EB9AB6 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 640A2F928E349C7C5BAB8CB3 /* Dependencies */; };
@@ -31,20 +23,24 @@
 		2C2E2C2E2C2E2C2E2C2E2C2E /* CLIEntrypoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1E1C1E1C1E1C1E1C1E1C1E /* CLIEntrypoint.swift */; };
 		2C7F193FF8B70AEE455E2DA1 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 259D750A7F2F67E76894DD3F /* AppContainer.swift */; };
 		2D2E2D2E2D2E2D2E2D2E2D2E /* CLIInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D1E1D1E1D1E1D1E1D1E1D1E /* CLIInstaller.swift */; };
+		40CFE17D5D0249E263CCDE90 /* IssueProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837E26CF86C45D20765721F4 /* IssueProject.swift */; };
 		4C6245368EDF72B81D7E85EB /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = B83164E55F38E5918B1AC16B /* SQLite */; };
 		5AD0AADC8F374977AD5209A1 /* SyncOperationQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE80E5F4EA04BE5A252AD14 /* SyncOperationQueueTests.swift */; };
 		5E2253FC639018566A8117DC /* YouTrackOAuthConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4FE22D10515F3D19C04518D /* YouTrackOAuthConfiguration.swift */; };
+		5FF6DD8ABD04D24EB1CB3B43 /* PeopleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE25293D0B475678E0E9AAD /* PeopleRepository.swift */; };
 		601C7017EBC7D39C44ABD474 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = 2F538221E5E814FFE04DB9BB /* Nuke */; };
 		67267D8D7D4B0FE29F5DEB44 /* SidebarItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F838F96136D2FC3F66D4B91 /* SidebarItem.swift */; };
 		6A1F91B3569145A98D660C5E /* ConflictResolutionDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE4E28048614444791892CC7 /* ConflictResolutionDialog.swift */; };
 		6B0CC68F84764DA397C2D889 /* SyncOperationQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCADEBB49EB84E5BB481AFA5 /* SyncOperationQueue.swift */; };
 		6B9DC658B0707436F4A51EB7 /* Issue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603472AD6E49B166DD1EAE1E /* Issue.swift */; };
+		711FBBDF964284FEE9060EA9 /* IssueFieldRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF2DFD58E618AA42ED5A0EBF /* IssueFieldRepository.swift */; };
 		778FF05D4EAC43E62857C01D /* NewIssueToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FA72E4D9ACF4E1772ABD7F /* NewIssueToolbar.swift */; };
 		7FE5F2F122F937FE6C8833DD /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96F1E15A048870421DA67DD8 /* SidebarView.swift */; };
 		879DC3DC38B8CC95B2F99F90 /* YouTrekTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67EE0549798C5BB97F80099A /* YouTrekTests.swift */; };
-		F0D1C2B3A4E5968778695A4D /* IssueDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D1C2B3A4E5968778695A4E /* IssueDetail.swift */; };
-		F0D1C2B3A4E5968778695A4B /* UserAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D1C2B3A4E5968778695A4C /* UserAvatarView.swift */; };
 		90DD2022BD6F618D47EB07C3 /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41A20A5EA468A3FDD6C766F3 /* SyncCoordinator.swift */; };
+		9655E060C50B90B629C560AD /* IssueField.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */; };
+		98C448F02392A199D2C15637 /* YouTrackPeopleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */; };
+		9ABF8CA24DA93B1795EDF5E7 /* ProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22474C986C8B156AE420F86D /* ProjectRepository.swift */; };
 		9BD6E38CB0F148EE071F5ED7 /* AuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2BB972C688C970A43F8706 /* AuthRepository.swift */; };
 		9FDEA781B9E8312D675F21C4 /* AppMenus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5127E6BFCB6228BCCACF3248 /* AppMenus.swift */; };
 		A9B8C7D6E5F40123456789AC /* NetworkRequestMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B8C7D6E5F40123456789AB /* NetworkRequestMonitor.swift */; };
@@ -68,10 +64,14 @@
 		CCB6FC4CB76C79D60B3D8268 /* YouTrackIssueRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB6E61C64224428A2A41938 /* YouTrackIssueRepository.swift */; };
 		D4E5F60708090A0B0C0D0E0F /* IssueDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F60708090A0B0C0E0F /* IssueDraftStoreTests.swift */; };
 		DBAD2E130516EF0E97DA9505 /* IssueWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9834245476CD9C6340D38207 /* IssueWindows.swift */; };
+		E503D754E49097AD959569AD /* YouTrackProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */; };
 		E830DA0BDF2A88981E76A320 /* YouTrackAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */; };
 		E9C4B2243C4A344ED73BAE55 /* AppAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */; };
 		EA94D7A93E3499BBFB64C3CE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96D7F507180F29C1DBEBFD1A /* SettingsView.swift */; };
 		EE1E07C0A405D6A416EB6A4D /* IssueListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF004390F090F845328D6B /* IssueListView.swift */; };
+		F058AB58B54E3B5254042C54 /* YouTrackIssueFieldRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */; };
+		F0D1C2B3A4E5968778695A4B /* UserAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D1C2B3A4E5968778695A4C /* UserAvatarView.swift */; };
+		F0D1C2B3A4E5968778695A4D /* IssueDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D1C2B3A4E5968778695A4E /* IssueDetail.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,34 +86,29 @@
 
 /* Begin PBXFileReference section */
 		03C386EF2EEB26BC00BF8B68 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Sources/YouTrek/Assets.xcassets; sourceTree = "<group>"; };
+		17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackProjectRepository.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4C5 /* SavedQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedQuery.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4C6 /* SavedQueryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedQueryRepository.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4C7 /* YouTrackSavedQueryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackSavedQueryRepository.swift; sourceTree = "<group>"; };
 		1C1E1C1E1C1E1C1E1C1E1C1E /* CLIEntrypoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIEntrypoint.swift; sourceTree = "<group>"; };
 		1D1E1D1E1D1E1D1E1D1E1D1E /* CLIInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIInstaller.swift; sourceTree = "<group>"; };
+		22474C986C8B156AE420F86D /* ProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRepository.swift; sourceTree = "<group>"; };
 		246CBF4F7505546908106B4E /* YouTrekTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YouTrekTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		259D750A7F2F67E76894DD3F /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
 		2AE80E5F4EA04BE5A252AD14 /* SyncOperationQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOperationQueueTests.swift; sourceTree = "<group>"; };
 		2E4FEE5B968D4FFFBC1197E1 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		3E846A3202CA8FD93450D72F /* LoggingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingService.swift; sourceTree = "<group>"; };
 		413164C575D17B66BEBD006E /* IssueRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueRepository.swift; sourceTree = "<group>"; };
-		22474C986C8B156AE420F86D /* ProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRepository.swift; sourceTree = "<group>"; };
-		FF2DFD58E618AA42ED5A0EBF /* IssueFieldRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueFieldRepository.swift; sourceTree = "<group>"; };
-		4EE25293D0B475678E0E9AAD /* PeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeopleRepository.swift; sourceTree = "<group>"; };
 		41A20A5EA468A3FDD6C766F3 /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 		4A7250E3A5DD409013899A4B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		4AB6E61C64224428A2A41938 /* YouTrackIssueRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueRepository.swift; sourceTree = "<group>"; };
-		17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackProjectRepository.swift; sourceTree = "<group>"; };
-		EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueFieldRepository.swift; sourceTree = "<group>"; };
-		DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackPeopleRepository.swift; sourceTree = "<group>"; };
+		4EE25293D0B475678E0E9AAD /* PeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeopleRepository.swift; sourceTree = "<group>"; };
 		5127E6BFCB6228BCCACF3248 /* AppMenus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMenus.swift; sourceTree = "<group>"; };
 		603472AD6E49B166DD1EAE1E /* Issue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Issue.swift; sourceTree = "<group>"; };
-		837E26CF86C45D20765721F4 /* IssueProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueProject.swift; sourceTree = "<group>"; };
-		DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueField.swift; sourceTree = "<group>"; };
 		67EE0549798C5BB97F80099A /* YouTrekTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrekTests.swift; sourceTree = "<group>"; };
 		6A2BB972C688C970A43F8706 /* AuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepository.swift; sourceTree = "<group>"; };
 		6F838F96136D2FC3F66D4B91 /* SidebarItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarItem.swift; sourceTree = "<group>"; };
-		F0D1C2B3A4E5968778695A4E /* IssueDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDetail.swift; sourceTree = "<group>"; };
+		837E26CF86C45D20765721F4 /* IssueProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueProject.swift; sourceTree = "<group>"; };
 		86D2C2DB3FD959E98B994951 /* KeychainStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStorage.swift; sourceTree = "<group>"; };
 		8D3751AABB25A233B2008788 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		8EBD085B49E4D2450109D389 /* YouTrackIssueRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueRepositoryTests.swift; sourceTree = "<group>"; };
@@ -134,7 +129,6 @@
 		A9B8C7D6E5F40123456789AB /* NetworkRequestMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkRequestMonitor.swift; sourceTree = "<group>"; };
 		A9B8C7D6E5F40123456789AD /* NetworkRequestFooterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkRequestFooterView.swift; sourceTree = "<group>"; };
 		AE4E28048614444791892CC7 /* ConflictResolutionDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConflictResolutionDialog.swift; sourceTree = "<group>"; };
-		F0D1C2B3A4E5968778695A4C /* UserAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserAvatarView.swift; sourceTree = "<group>"; };
 		B19ECD87B561BBF7954653FA /* YouTrek.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YouTrek.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAuthRepository.swift; sourceTree = "<group>"; };
 		BCADEBB49EB84E5BB481AFA5 /* SyncOperationQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOperationQueue.swift; sourceTree = "<group>"; };
@@ -142,10 +136,16 @@
 		D2BF004390F090F845328D6B /* IssueListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueListView.swift; sourceTree = "<group>"; };
 		D4FE22D10515F3D19C04518D /* YouTrackOAuthConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackOAuthConfiguration.swift; sourceTree = "<group>"; };
 		DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueLocalStore.swift; sourceTree = "<group>"; };
+		DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueField.swift; sourceTree = "<group>"; };
+		DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackPeopleRepository.swift; sourceTree = "<group>"; };
 		EC1761A3048AA9CE39B1317D /* AppMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMain.swift; sourceTree = "<group>"; };
+		EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueFieldRepository.swift; sourceTree = "<group>"; };
+		F0D1C2B3A4E5968778695A4C /* UserAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserAvatarView.swift; sourceTree = "<group>"; };
+		F0D1C2B3A4E5968778695A4E /* IssueDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDetail.swift; sourceTree = "<group>"; };
 		F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackAPIClient.swift; sourceTree = "<group>"; };
 		F6FA72E4D9ACF4E1772ABD7F /* NewIssueToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewIssueToolbar.swift; sourceTree = "<group>"; };
 		FD57D8CD24C08703B24D3C86 /* TelemetryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryService.swift; sourceTree = "<group>"; };
+		FF2DFD58E618AA42ED5A0EBF /* IssueFieldRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueFieldRepository.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -525,7 +525,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 2610;
 				TargetAttributes = {
 					333627F18207691738BF0870 = {
 						ProvisioningStyle = Automatic;
@@ -693,10 +693,12 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -712,6 +714,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.youtrek.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 6.0;
@@ -723,6 +726,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -741,6 +745,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				AUTOMATION_APPLE_EVENTS = NO;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 49PJNAT2WC;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
@@ -803,10 +808,12 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -829,6 +836,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.youtrek.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
@@ -840,6 +848,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -858,6 +867,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				AUTOMATION_APPLE_EVENTS = NO;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 49PJNAT2WC;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;

@@ -63,14 +63,8 @@ struct IssueDetailView: View {
     }
 
     private var metadata: some View {
-        let reporter = detail?.reporter ?? issue.reporter
-        let reporterName = reporter?.displayName ?? issue.reporterDisplayName
-        return VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             AssigneeEditor(issue: issue)
-            HStack(spacing: 8) {
-                UserAvatarView(person: reporter, size: 22)
-                Text("Created by \(reporterName)")
-            }
             Label("Updated \(issue.updatedAt.formatted(.relative(presentation: .named)))", systemImage: "clock")
             Label("Project: \(issue.projectName)", systemImage: "folder")
             if !issue.tags.isEmpty {
@@ -157,20 +151,14 @@ struct IssueDetailView: View {
                 Button {
                     updateStatus(status)
                 } label: {
-                    if status == issue.status {
-                        Label(status.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(status.displayName)
-                    }
+                    menuRow(title: status.displayName, colors: status.badgeColors, isSelected: status == issue.status)
                 }
             }
         } label: {
-            let statusColor = statusColorOverride
             BadgeLabel(
                 text: issue.status.displayName,
-                tint: issue.status.tint,
-                foreground: statusColor?.foregroundColor,
-                background: statusColor?.backgroundColor
+                colors: issue.status.badgeColors,
+                showsPile: true
             )
         }
         .menuStyle(.borderlessButton)
@@ -183,58 +171,40 @@ struct IssueDetailView: View {
 
     private var priorityMenu: some View {
         Menu {
-            ForEach(IssuePriority.allCases, id: \.self) { priority in
+            ForEach(priorityMenuOptions, id: \.self) { priority in
                 Button {
                     updatePriority(priority)
                 } label: {
-                    if priority == issue.priority {
-                        Label(priority.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(priority.displayName)
-                    }
+                    menuRow(title: priority.displayName, colors: priority.badgeColors, isSelected: priority == issue.priority)
                 }
             }
         } label: {
-            let priorityColor = priorityColorOverride
             BadgeLabel(
                 text: issue.priority.displayName,
-                tint: issue.priority.tint,
-                foreground: priorityColor?.foregroundColor,
-                background: priorityColor?.backgroundColor
+                colors: issue.priority.badgeColors,
+                showsPile: true
             )
         }
         .menuStyle(.borderlessButton)
     }
 
-    private var statusColorOverride: IssueFieldColor? {
-        statusOptionLookup[issue.status.normalizedKey]?.color
+    private var priorityMenuOptions: [IssuePriority] {
+        let base = priorityOptions.isEmpty ? IssuePriority.fallbackCases : priorityOptions.map(IssuePriority.init(option:))
+        return IssuePriority.deduplicated(base + [issue.priority])
     }
 
-    private var statusOptionLookup: [String: IssueFieldOption] {
-        var result: [String: IssueFieldOption] = [:]
-        for option in statusOptions {
-            let key = IssueStatus(option: option).normalizedKey
-            if result[key] == nil {
-                result[key] = option
+    private func menuRow(title: String, colors: IssueBadgeColors, isSelected: Bool) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(colors.foreground)
+                .frame(width: 8, height: 8)
+            Text(title)
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.secondary)
             }
         }
-        return result
-    }
-
-    private var priorityColorOverride: IssueFieldColor? {
-        priorityColorLookup[issue.priority]
-    }
-
-    private var priorityColorLookup: [IssuePriority: IssueFieldColor] {
-        var result: [IssuePriority: IssueFieldColor] = [:]
-        for option in priorityOptions {
-            guard let priority = IssuePriority(option: option),
-                  let color = option.color else { continue }
-            if result[priority] == nil {
-                result[priority] = color
-            }
-        }
-        return result
     }
 
     private func updateStatus(_ status: IssueStatus) {
@@ -272,8 +242,9 @@ struct IssueDetailView: View {
                     .accessibilityLabel("Comment text")
                 if commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Write a comment…")
+                        .font(.callout)
                         .foregroundStyle(.secondary)
-                        .padding(.top, 8)
+                        .padding(.top, 5)
                         .padding(.leading, 5)
                 }
             }
@@ -533,18 +504,27 @@ private struct UnassignedRow: View {
 
 private struct BadgeLabel: View {
     let text: String
-    let tint: Color
-    let foreground: Color?
-    let background: Color?
+    let colors: IssueBadgeColors
+    let showsPile: Bool
 
     var body: some View {
-        let foreground = foreground ?? tint
-        let background = background ?? tint.opacity(0.15)
-        Text(text)
-            .padding(.vertical, 4)
-            .padding(.horizontal, 8)
-            .background(background, in: Capsule())
-            .foregroundStyle(foreground)
+        ZStack(alignment: .topLeading) {
+            if showsPile {
+                Capsule()
+                    .fill(colors.border.opacity(0.35))
+                    .offset(x: 2, y: 2)
+            }
+            Text(text)
+                .font(.callout.weight(.semibold))
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(colors.background, in: Capsule())
+                .foregroundStyle(colors.foreground)
+                .overlay(
+                    Capsule()
+                        .stroke(colors.border, lineWidth: 1)
+                )
+        }
     }
 }
 
