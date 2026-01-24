@@ -207,7 +207,12 @@ struct IssueBoardView: View {
         var orderedKeySet: Set<String> = []
 
         for issue in issues {
-            let values = swimlaneValues(for: issue, fieldName: normalizedField, isAssignee: isAssignee)
+            let values = swimlaneValues(
+                for: issue,
+                fieldName: normalizedField,
+                isAssignee: isAssignee,
+                includeIdentifiers: !explicitValues.isEmpty
+            )
             if values.isEmpty {
                 unassigned.append(issue)
                 continue
@@ -318,15 +323,22 @@ struct IssueBoardView: View {
         }
     }
 
-    private func swimlaneValues(for issue: IssueSummary, fieldName: String, isAssignee: Bool) -> [String] {
+    private func swimlaneValues(
+        for issue: IssueSummary,
+        fieldName: String,
+        isAssignee: Bool,
+        includeIdentifiers: Bool
+    ) -> [String] {
         if isAssignee {
             var values: [String] = []
             if let assignee = issue.assignee {
-                values.append(assignee.displayName)
-                if let login = assignee.login?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !login.isEmpty,
-                   login.caseInsensitiveCompare(assignee.displayName) != .orderedSame {
-                    values.append(login)
+                let displayName = assignee.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                appendUnique(displayName, to: &values)
+                if includeIdentifiers {
+                    let remoteID = assignee.remoteID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    appendUnique(remoteID, to: &values)
+                    let login = assignee.login?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    appendUnique(login, to: &values)
                 }
             }
             if values.isEmpty {
@@ -335,6 +347,15 @@ struct IssueBoardView: View {
             return values
         }
         return issue.fieldValues(named: fieldName)
+    }
+
+    private func appendUnique(_ value: String, to values: inout [String]) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if values.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return
+        }
+        values.append(trimmed)
     }
 }
 

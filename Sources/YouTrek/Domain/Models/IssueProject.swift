@@ -22,9 +22,9 @@ struct IssueProject: Identifiable, Hashable, Sendable, Codable {
         let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         if id == trimmed { return true }
-        if let shortName {
-            return shortName.caseInsensitiveCompare(trimmed) == .orderedSame
+        if let shortName, shortName.caseInsensitiveCompare(trimmed) == .orderedSame {
+            return true
         }
-        return false
+        return name.caseInsensitiveCompare(trimmed) == .orderedSame
     }
 }

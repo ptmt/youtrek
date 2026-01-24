@@ -509,38 +509,53 @@ struct IssueBadgeColors {
     let border: Color
 }
 
+extension IssueFieldOption {
+    func badgeColors(fallback: IssueBadgeColors) -> IssueBadgeColors {
+        guard let color else { return fallback }
+        let foreground = color.readableForegroundForBadge() ?? fallback.foreground
+        let backgroundBase = color.backgroundColor ?? color.foregroundColor
+        let background = backgroundBase ?? foreground.opacity(0.18)
+        let borderBase = color.foregroundColor ?? foreground
+        return IssueBadgeColors(
+            background: background,
+            foreground: foreground,
+            border: borderBase.opacity(0.7)
+        )
+    }
+}
+
 extension IssuePriority {
     var badgeColors: IssueBadgeColors {
         switch semantic {
         case .critical:
             return IssueBadgeColors(
-                background: Color(hexString: "#FEE2E2") ?? .red.opacity(0.2),
-                foreground: Color(hexString: "#991B1B") ?? .red,
-                border: Color(hexString: "#FCA5A5") ?? .red.opacity(0.4)
+                background: Color(hexString: "#FECACA") ?? .red.opacity(0.25),
+                foreground: Color(hexString: "#B91C1C") ?? .red,
+                border: Color(hexString: "#F87171") ?? .red.opacity(0.45)
             )
         case .high:
             return IssueBadgeColors(
-                background: Color(hexString: "#FFEDD5") ?? .orange.opacity(0.2),
-                foreground: Color(hexString: "#9A3412") ?? .orange,
-                border: Color(hexString: "#FDBA74") ?? .orange.opacity(0.4)
+                background: Color(hexString: "#FED7AA") ?? .orange.opacity(0.25),
+                foreground: Color(hexString: "#C2410C") ?? .orange,
+                border: Color(hexString: "#FB923C") ?? .orange.opacity(0.45)
             )
         case .normal:
             return IssueBadgeColors(
                 background: Color(hexString: "#E5E7EB") ?? .gray.opacity(0.2),
                 foreground: Color(hexString: "#374151") ?? .secondary,
-                border: Color(hexString: "#D1D5DB") ?? .gray.opacity(0.4)
+                border: Color(hexString: "#9CA3AF") ?? .gray.opacity(0.45)
             )
         case .low:
             return IssueBadgeColors(
-                background: Color(hexString: "#DBEAFE") ?? .blue.opacity(0.2),
-                foreground: Color(hexString: "#1E40AF") ?? .blue,
-                border: Color(hexString: "#93C5FD") ?? .blue.opacity(0.4)
+                background: Color(hexString: "#BFDBFE") ?? .blue.opacity(0.25),
+                foreground: Color(hexString: "#1D4ED8") ?? .blue,
+                border: Color(hexString: "#60A5FA") ?? .blue.opacity(0.45)
             )
         case .custom:
             return IssueBadgeColors(
                 background: Color(hexString: "#E5E7EB") ?? .gray.opacity(0.2),
                 foreground: Color(hexString: "#374151") ?? .secondary,
-                border: Color(hexString: "#D1D5DB") ?? .gray.opacity(0.4)
+                border: Color(hexString: "#9CA3AF") ?? .gray.opacity(0.45)
             )
         }
     }
@@ -688,39 +703,39 @@ extension IssueStatus {
         switch semantic {
         case .open:
             return IssueBadgeColors(
-                background: Color(hexString: "#DBEAFE") ?? .blue.opacity(0.2),
-                foreground: Color(hexString: "#1E40AF") ?? .blue,
-                border: Color(hexString: "#93C5FD") ?? .blue.opacity(0.4)
+                background: Color(hexString: "#BFDBFE") ?? .blue.opacity(0.25),
+                foreground: Color(hexString: "#1D4ED8") ?? .blue,
+                border: Color(hexString: "#60A5FA") ?? .blue.opacity(0.45)
             )
         case .inProgress:
             return IssueBadgeColors(
-                background: Color(hexString: "#FEF3C7") ?? .orange.opacity(0.2),
+                background: Color(hexString: "#FDE68A") ?? .orange.opacity(0.25),
                 foreground: Color(hexString: "#92400E") ?? .orange,
-                border: Color(hexString: "#FCD34D") ?? .orange.opacity(0.4)
+                border: Color(hexString: "#F59E0B") ?? .orange.opacity(0.45)
             )
         case .inReview:
             return IssueBadgeColors(
-                background: Color(hexString: "#CCFBF1") ?? .teal.opacity(0.2),
-                foreground: Color(hexString: "#115E59") ?? .teal,
-                border: Color(hexString: "#5EEAD4") ?? .teal.opacity(0.4)
+                background: Color(hexString: "#99F6E4") ?? .teal.opacity(0.25),
+                foreground: Color(hexString: "#0F766E") ?? .teal,
+                border: Color(hexString: "#2DD4BF") ?? .teal.opacity(0.45)
             )
         case .blocked:
             return IssueBadgeColors(
-                background: Color(hexString: "#FEE2E2") ?? .red.opacity(0.2),
-                foreground: Color(hexString: "#991B1B") ?? .red,
-                border: Color(hexString: "#FCA5A5") ?? .red.opacity(0.4)
+                background: Color(hexString: "#FECACA") ?? .red.opacity(0.25),
+                foreground: Color(hexString: "#B91C1C") ?? .red,
+                border: Color(hexString: "#F87171") ?? .red.opacity(0.45)
             )
         case .done:
             return IssueBadgeColors(
-                background: Color(hexString: "#DCFCE7") ?? .green.opacity(0.2),
-                foreground: Color(hexString: "#166534") ?? .green,
-                border: Color(hexString: "#86EFAC") ?? .green.opacity(0.4)
+                background: Color(hexString: "#BBF7D0") ?? .green.opacity(0.25),
+                foreground: Color(hexString: "#15803D") ?? .green,
+                border: Color(hexString: "#4ADE80") ?? .green.opacity(0.45)
             )
         case .custom:
             return IssueBadgeColors(
                 background: Color(hexString: "#E5E7EB") ?? .gray.opacity(0.2),
                 foreground: Color(hexString: "#374151") ?? .secondary,
-                border: Color(hexString: "#D1D5DB") ?? .gray.opacity(0.4)
+                border: Color(hexString: "#9CA3AF") ?? .gray.opacity(0.45)
             )
         }
     }

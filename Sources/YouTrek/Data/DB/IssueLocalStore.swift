@@ -346,16 +346,19 @@ actor IssueLocalStore {
             resolvedAssignee = issue.assignee
         }
 
+        let resolvedProjectName = patch.projectName ?? issue.projectName
+        let resolvedStatus = patch.statusOption.map(IssueStatus.init(option:)) ?? patch.status ?? issue.status
+        let resolvedPriority = patch.priorityOption.map(IssuePriority.init(option:)) ?? patch.priority ?? issue.priority
         return IssueSummary(
             id: issue.id,
             readableID: issue.readableID,
             title: patch.title ?? issue.title,
-            projectName: issue.projectName,
+            projectName: resolvedProjectName,
             updatedAt: Date(),
             assignee: resolvedAssignee,
             reporter: issue.reporter,
-            priority: patch.priority ?? issue.priority,
-            status: patch.status ?? issue.status,
+            priority: resolvedPriority,
+            status: resolvedStatus,
             tags: issue.tags
         )
     }

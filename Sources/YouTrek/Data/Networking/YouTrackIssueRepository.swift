@@ -132,10 +132,14 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         }
 
         var customFields: [IssueUpdatePayload.CustomField] = []
-        if let status = patch.status {
+        if let statusOption = patch.statusOption {
+            customFields.append(.status(option: statusOption))
+        } else if let status = patch.status {
             customFields.append(.status(status))
         }
-        if let priority = patch.priority {
+        if let priorityOption = patch.priorityOption {
+            customFields.append(.priority(option: priorityOption))
+        } else if let priority = patch.priority {
             customFields.append(.priority(priority))
         }
         if let assignee = patch.assignee {
@@ -147,11 +151,16 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
             }
         }
 
+        let trimmedProjectID = patch.projectID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let projectReference = trimmedProjectID.isEmpty
+            ? nil
+            : IssueUpdatePayload.ProjectReference.from(identifier: trimmedProjectID)
         let trimmedTitle = patch.title?.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDescription = patch.description?.trimmingCharacters(in: .whitespacesAndNewlines)
         let payload = IssueUpdatePayload(
             summary: trimmedTitle?.isEmpty == false ? trimmedTitle : nil,
             description: trimmedDescription?.isEmpty == false ? trimmedDescription : nil,
+            project: projectReference,
             customFields: customFields.isEmpty ? nil : customFields
         )
         let encoder = JSONEncoder()
@@ -796,7 +805,20 @@ private struct IssueCommentPayload: Encodable {
 private struct IssueUpdatePayload: Encodable {
     let summary: String?
     let description: String?
+    let project: ProjectReference?
     let customFields: [CustomField]?
+
+    struct ProjectReference: Encodable {
+        let id: String?
+        let shortName: String?
+
+        static func from(identifier: String) -> ProjectReference {
+            if identifier.isLikelyYouTrackID {
+                return ProjectReference(id: identifier, shortName: nil)
+            }
+            return ProjectReference(id: nil, shortName: identifier)
+        }
+    }
 
     struct CustomField: Encodable {
         let typeName: String
@@ -817,11 +839,27 @@ private struct IssueUpdatePayload: Encodable {
             )
         }
 
+        static func status(option: IssueFieldOption) -> CustomField {
+            CustomField(
+                typeName: "StateIssueCustomField",
+                name: "State",
+                value: .option(OptionPayload(option: option))
+            )
+        }
+
         static func priority(_ priority: IssuePriority) -> CustomField {
             CustomField(
                 typeName: "SingleEnumIssueCustomField",
                 name: "Priority",
                 value: .option(OptionPayload(name: priority.displayName))
+            )
+        }
+
+        static func priority(option: IssueFieldOption) -> CustomField {
+            CustomField(
+                typeName: "SingleEnumIssueCustomField",
+                name: "Priority",
+                value: .option(OptionPayload(option: option))
             )
         }
 

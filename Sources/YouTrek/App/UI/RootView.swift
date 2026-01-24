@@ -306,22 +306,24 @@ private struct MultiIssueSelectionView: View {
                 .font(.headline)
             HStack(spacing: 12) {
                 Menu {
-                    ForEach(statusMenuOptions, id: \.self) { status in
+                    ForEach(statusMenuOptions, id: \.stableID) { option in
                         Button {
-                            applyStatus(status)
+                            applyStatus(option)
                         } label: {
-                            menuRow(title: status.displayName, colors: status.badgeColors)
+                            let colors = option.badgeColors(fallback: IssueStatus(option: option).badgeColors)
+                            menuRow(title: option.displayName, colors: colors)
                         }
                     }
                 } label: {
                     Label("Set Status", systemImage: "flag")
                 }
                 Menu {
-                    ForEach(priorityMenuOptions, id: \.self) { priority in
+                    ForEach(priorityMenuOptions, id: \.stableID) { option in
                         Button {
-                            applyPriority(priority)
+                            applyPriority(option)
                         } label: {
-                            menuRow(title: priority.displayName, colors: priority.badgeColors)
+                            let colors = option.badgeColors(fallback: IssuePriority(option: option).badgeColors)
+                            menuRow(title: option.displayName, colors: colors)
                         }
                     }
                 } label: {
@@ -370,35 +372,44 @@ private struct MultiIssueSelectionView: View {
         return "\(issueCount) \(issueCount == 1 ? "issue" : "issues") in \(projectCount) \(projectCount == 1 ? "project" : "projects") for \(peopleCount) \(peopleCount == 1 ? "person" : "people") selected"
     }
 
-    private var statusMenuOptions: [IssueStatus] {
-        let base = statusOptions.isEmpty
-            ? IssueStatus.fallbackCases
-            : statusOptions.map(IssueStatus.init(option:))
-        return IssueStatus.deduplicated(base)
+    private var statusMenuOptions: [IssueFieldOption] {
+        if statusOptions.isEmpty {
+            return IssueStatus.fallbackCases.map { status in
+                IssueFieldOption(id: "", name: status.displayName, displayName: status.displayName)
+            }
+        }
+        return statusOptions
     }
 
-    private var priorityMenuOptions: [IssuePriority] {
-        let base = priorityOptions.isEmpty
-            ? IssuePriority.fallbackCases
-            : priorityOptions.map(IssuePriority.init(option:))
-        return IssuePriority.deduplicated(base)
+    private var priorityMenuOptions: [IssueFieldOption] {
+        if priorityOptions.isEmpty {
+            return IssuePriority.fallbackCases.map { priority in
+                IssueFieldOption(id: "", name: priority.displayName, displayName: priority.displayName)
+            }
+        }
+        return priorityOptions
     }
 
     private func menuRow(title: String, colors: IssueBadgeColors) -> some View {
         HStack(spacing: 8) {
-            Circle()
-                .fill(colors.foreground)
-                .frame(width: 8, height: 8)
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(colors.background)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .stroke(colors.border, lineWidth: 1)
+                )
+                .frame(width: 18, height: 12)
             Text(title)
+                .foregroundStyle(.primary)
         }
     }
 
-    private func applyStatus(_ status: IssueStatus) {
-        applyPatch(IssuePatch(title: nil, description: nil, status: status, priority: nil))
+    private func applyStatus(_ option: IssueFieldOption) {
+        applyPatch(IssuePatch(title: nil, description: nil, status: nil, statusOption: option, priority: nil))
     }
 
-    private func applyPriority(_ priority: IssuePriority) {
-        applyPatch(IssuePatch(title: nil, description: nil, status: nil, priority: priority))
+    private func applyPriority(_ option: IssueFieldOption) {
+        applyPatch(IssuePatch(title: nil, description: nil, status: nil, priority: nil, priorityOption: option))
     }
 
     private func applyPatch(_ patch: IssuePatch) {

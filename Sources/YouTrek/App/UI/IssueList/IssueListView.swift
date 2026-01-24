@@ -163,9 +163,9 @@ private struct IssueMetaPill: View {
 
     var body: some View {
         Text(text)
-            .font(.caption.weight(.bold))
-            .padding(.vertical, 2)
-            .padding(.horizontal, 6)
+            .font(.caption2.weight(.medium))
+            .padding(.vertical, 3)
+            .padding(.horizontal, 7)
             .foregroundStyle(colors.foreground)
             .background(colors.background, in: Capsule())
             .overlay(

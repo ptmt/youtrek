@@ -316,7 +316,7 @@ private struct YouTrackAgileBoard: Decodable {
         let login: String?
 
         var resolvedName: String? {
-            name ?? localizedName ?? fullName ?? login
+            name ?? localizedName ?? fullName ?? login ?? id
         }
     }
 

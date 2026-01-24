@@ -84,8 +84,12 @@ struct IssueDraft: Equatable, Codable {
 struct IssuePatch: Equatable, Codable {
     var title: String?
     var description: String?
+    var projectID: String? = nil
+    var projectName: String? = nil
     var status: IssueStatus?
+    var statusOption: IssueFieldOption? = nil
     var priority: IssuePriority?
+    var priorityOption: IssueFieldOption? = nil
     var assignee: AssigneeChange? = nil
     var issueReadableID: String? = nil
 }
@@ -137,10 +141,19 @@ extension IssuePatch {
         if let description {
             parts.append("Description: \(description)")
         }
-        if let status {
+        if let projectName {
+            parts.append("Project: \(projectName)")
+        } else if let projectID {
+            parts.append("Project ID: \(projectID)")
+        }
+        if let statusOption {
+            parts.append("Status: \(statusOption.displayName)")
+        } else if let status {
             parts.append("Status: \(status.displayName)")
         }
-        if let priority {
+        if let priorityOption {
+            parts.append("Priority: \(priorityOption.displayName)")
+        } else if let priority {
             parts.append("Priority: \(priority.displayName)")
         }
         if let assignee {
