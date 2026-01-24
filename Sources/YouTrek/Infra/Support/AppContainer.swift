@@ -24,6 +24,9 @@ final class AppContainer: ObservableObject {
     private let peopleRepositorySwitcher: SwitchablePeopleRepository
     private let boardLocalStore: IssueBoardLocalStore
     private var lastLoadedIssueQuery: IssueQuery?
+    private var cachedProjects: [IssueProject] = []
+    private var statusOptionsCache: [String: [IssueFieldOption]] = [:]
+    private var priorityOptionsCache: [String: [IssueFieldOption]] = [:]
     @Published private(set) var supportsBrowserAuth: Bool = false
     @Published private(set) var requiresSetup: Bool = true
 
@@ -208,19 +211,35 @@ final class AppContainer: ObservableObject {
         lastLoadedIssueQuery = query
         appState.setIssuesLoading(true)
 
+        let board = boardForSelection(selection)
+        let sprintFilter = board.map { appState.sprintFilter(for: $0) }
+        let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(board: board, filter: sprintFilter)
+
         let cachedIssues = await syncCoordinator.loadCachedIssues(for: query)
         if !cachedIssues.isEmpty {
-            appState.replaceIssues(with: cachedIssues)
+            let filtered = applySprintFilterIfNeeded(
+                cachedIssues,
+                board: board,
+                filter: sprintFilter,
+                sprintIssueIDs: sprintIssueIDs
+            )
+            appState.replaceIssues(with: filtered)
             appState.setIssuesLoading(false)
-            await refreshIssueSeenUpdates(for: cachedIssues)
+            await refreshIssueSeenUpdates(for: filtered)
         }
 
         do {
             let issues = try await syncCoordinator.refreshIssues(using: query)
             appState.recordIssueSyncCompleted()
-            appState.replaceIssues(with: issues)
+            let filtered = applySprintFilterIfNeeded(
+                issues,
+                board: board,
+                filter: sprintFilter,
+                sprintIssueIDs: sprintIssueIDs
+            )
+            appState.replaceIssues(with: filtered)
             appState.setIssuesLoading(false)
-            await refreshIssueSeenUpdates(for: issues)
+            await refreshIssueSeenUpdates(for: filtered)
         } catch {
             appState.replaceIssues(with: [])
             appState.setIssuesLoading(false)
@@ -255,13 +274,22 @@ final class AppContainer: ObservableObject {
             appState.setIssuesLoading(true)
         }
         let query = issueQuery(for: item)
+        let board = boardForSelection(item)
+        let sprintFilter = board.map { appState.sprintFilter(for: $0) }
+        let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(board: board, filter: sprintFilter)
         do {
             let issues = try await syncCoordinator.refreshIssues(using: query)
             appState.recordIssueSyncCompleted()
             if isSelected {
-                appState.replaceIssues(with: issues)
+                let filtered = applySprintFilterIfNeeded(
+                    issues,
+                    board: board,
+                    filter: sprintFilter,
+                    sprintIssueIDs: sprintIssueIDs
+                )
+                appState.replaceIssues(with: filtered)
                 appState.setIssuesLoading(false)
-                await refreshIssueSeenUpdates(for: issues)
+                await refreshIssueSeenUpdates(for: filtered)
             }
         } catch {
             if isSelected {
@@ -315,6 +343,8 @@ final class AppContainer: ObservableObject {
                 appState.selectedIssue = nil
                 appState.setIssuesLoading(true)
                 self.lastLoadedIssueQuery = nil
+                self.statusOptionsCache.removeAll()
+                self.priorityOptionsCache.removeAll()
             }
             await refreshSidebarData()
             if let selection = appState.selectedSidebarItem {
@@ -337,6 +367,18 @@ final class AppContainer: ObservableObject {
         } catch {
             print("Failed to update issue locally: \(error.localizedDescription)")
         }
+    }
+
+    func addComment(to issue: IssueSummary, text: String) async throws -> IssueComment {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw YouTrackAPIError.http(statusCode: 400, body: "Missing comment text")
+        }
+        let comment = try await syncCoordinator.enqueue(label: "Add comment") {
+            try await self.issueRepositorySwitcher.addComment(issueReadableID: issue.readableID, text: trimmed)
+        }
+        appState.recordComment(comment, for: issue)
+        return comment
     }
 
     func beginNewIssue(withTitle title: String) {
@@ -363,12 +405,12 @@ final class AppContainer: ObservableObject {
                 let created = try await syncCoordinator.enqueue(label: "Create issue") {
                     try await self.issueRepositorySwitcher.createIssue(draft: draft)
                 }
-                await issueDraftStore.markDraftSubmitted(id: record.id)
+                _ = await issueDraftStore.markDraftSubmitted(id: record.id)
                 await MainActor.run {
                     self.appState.updateIssue(created)
                 }
             } catch {
-                await issueDraftStore.markDraftFailed(id: record.id, errorDescription: error.localizedDescription)
+                _ = await issueDraftStore.markDraftFailed(id: record.id, errorDescription: error.localizedDescription)
             }
         }
     }
@@ -634,7 +676,7 @@ private extension AppContainer {
     private func issueQuery(for selection: SidebarItem) -> IssueQuery {
         guard selection.isBoard else { return selection.query }
         let page = selection.query.page
-        let board = selection.board ?? IssueBoard(
+        let board = boardForSelection(selection) ?? IssueBoard(
             id: selection.boardID ?? selection.id,
             name: selection.title,
             isFavorite: true,
@@ -643,18 +685,58 @@ private extension AppContainer {
         return boardIssueQuery(for: board, page: page)
     }
 
+    private func boardForSelection(_ selection: SidebarItem) -> IssueBoard? {
+        guard selection.isBoard else { return nil }
+        if let board = selection.board {
+            return board
+        }
+        return IssueBoard(
+            id: selection.boardID ?? selection.id,
+            name: selection.title,
+            isFavorite: true,
+            projectNames: []
+        )
+    }
+
+    private func fetchSprintIssueIDsIfNeeded(
+        board: IssueBoard?,
+        filter: BoardSprintFilter?
+    ) async -> Set<String>? {
+        guard let board, let filter, case .sprint(let sprintID) = filter else { return nil }
+        do {
+            let ids = try await issueRepositorySwitcher.fetchSprintIssueIDs(agileID: board.id, sprintID: sprintID)
+            guard !ids.isEmpty else { return nil }
+            return Set(ids)
+        } catch {
+            return nil
+        }
+    }
+
+    private func applySprintFilterIfNeeded(
+        _ issues: [IssueSummary],
+        board: IssueBoard?,
+        filter: BoardSprintFilter?,
+        sprintIssueIDs: Set<String>?
+    ) -> [IssueSummary] {
+        guard let board, let filter else { return issues }
+        switch filter {
+        case .backlog:
+            return board.filteredIssues(issues, sprintFilter: filter)
+        case .sprint:
+            if let sprintIssueIDs {
+                return issues.filter { sprintIssueIDs.contains($0.readableID) }
+            }
+            return board.filteredIssues(issues, sprintFilter: filter)
+        }
+    }
+
     private func boardIssueQuery(for board: IssueBoard, page: IssueQuery.Page) -> IssueQuery {
         let filter = appState.sprintFilter(for: board)
         let resolved = board.resolveSprintFilter(filter)
         if resolved != filter {
             appState.updateSprintFilter(resolved, for: board.id)
         }
-        let sprintName = board.sprintName(for: resolved)
-        let rawQuery = IssueQuery.boardQuery(
-            boardName: board.name,
-            sprintName: sprintName,
-            sprintFieldName: board.sprintFieldName
-        )
+        let rawQuery = IssueQuery.boardQuery(boardName: board.name, sprintName: nil)
         return IssueQuery(
             rawQuery: rawQuery,
             search: "",
@@ -675,7 +757,9 @@ private extension AppContainer {
 extension AppContainer {
     func loadProjects() async -> [IssueProject] {
         do {
-            return try await projectRepositorySwitcher.fetchProjects()
+            let projects = try await projectRepositorySwitcher.fetchProjects()
+            cachedProjects = projects
+            return projects
         } catch {
             return []
         }
@@ -703,6 +787,155 @@ extension AppContainer {
         } catch {
             return []
         }
+    }
+
+    func loadStatusOptions(for issue: IssueSummary) async -> [IssueFieldOption] {
+        let trimmedProject = issue.projectName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedProject.isEmpty else { return [] }
+        if let project = await resolveProject(named: trimmedProject) {
+            return await loadStatusOptions(for: project)
+        }
+        return []
+    }
+
+    func loadStatusOptions(for issues: [IssueSummary]) async -> [IssueFieldOption] {
+        guard !issues.isEmpty else { return [] }
+        let projectNames = Set(issues.map { $0.projectName.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        var combined: [IssueFieldOption] = []
+        for name in projectNames where !name.isEmpty {
+            if let project = await resolveProject(named: name) {
+                let options = await loadStatusOptions(for: project)
+                combined.append(contentsOf: options)
+            }
+        }
+        return combined
+    }
+
+    func loadPriorityOptions(for issue: IssueSummary) async -> [IssueFieldOption] {
+        let trimmedProject = issue.projectName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedProject.isEmpty else { return [] }
+        if let project = await resolveProject(named: trimmedProject) {
+            return await loadPriorityOptions(for: project)
+        }
+        return []
+    }
+
+    func loadPriorityOptions(for issues: [IssueSummary]) async -> [IssueFieldOption] {
+        guard !issues.isEmpty else { return [] }
+        let projectNames = Set(issues.map { $0.projectName.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        var combined: [IssueFieldOption] = []
+        for name in projectNames where !name.isEmpty {
+            if let project = await resolveProject(named: name) {
+                let options = await loadPriorityOptions(for: project)
+                combined.append(contentsOf: options)
+            }
+        }
+        return combined
+    }
+}
+
+private extension AppContainer {
+    func resolveProject(named name: String) async -> IssueProject? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let cached = cachedProjects.first(where: { projectMatches($0, name: trimmed) }) {
+            return cached
+        }
+
+        do {
+            let projects = try await projectRepositorySwitcher.fetchProjects()
+            cachedProjects = projects
+            return projects.first(where: { projectMatches($0, name: trimmed) })
+        } catch {
+            return nil
+        }
+    }
+
+    func sortedOptions(_ options: [IssueFieldOption]) -> [IssueFieldOption] {
+        options.sorted { left, right in
+            let leftOrdinal = left.ordinal ?? Int.max
+            let rightOrdinal = right.ordinal ?? Int.max
+            if leftOrdinal != rightOrdinal {
+                return leftOrdinal < rightOrdinal
+            }
+            return left.displayName.localizedCaseInsensitiveCompare(right.displayName) == .orderedAscending
+        }
+    }
+
+    func loadStatusOptions(for project: IssueProject) async -> [IssueFieldOption] {
+        if let cached = statusOptionsCache[project.id] {
+            return cached
+        }
+
+        let fields = (try? await issueFieldRepositorySwitcher.fetchFields(projectID: project.id)) ?? []
+        guard let statusField = findStatusField(in: fields),
+              let bundleID = statusField.bundleID,
+              statusField.kind.usesOptions else {
+            return []
+        }
+
+        let options = (try? await issueFieldRepositorySwitcher.fetchBundleOptions(bundleID: bundleID, kind: statusField.kind)) ?? []
+        let sorted = sortedOptions(options)
+        statusOptionsCache[project.id] = sorted
+        return sorted
+    }
+
+    func findStatusField(in fields: [IssueField]) -> IssueField? {
+        let namedMatches = fields.filter { field in
+            let names = [field.name, field.localizedName]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            return names.contains("state") || names.contains("status")
+        }
+
+        if let stateMatch = namedMatches.first(where: { $0.kind == .state }) {
+            return stateMatch
+        }
+        if let namedMatch = namedMatches.first {
+            return namedMatch
+        }
+        return fields.first(where: { $0.kind == .state })
+    }
+
+    func loadPriorityOptions(for project: IssueProject) async -> [IssueFieldOption] {
+        if let cached = priorityOptionsCache[project.id] {
+            return cached
+        }
+
+        let fields = (try? await issueFieldRepositorySwitcher.fetchFields(projectID: project.id)) ?? []
+        guard let priorityField = findPriorityField(in: fields),
+              let bundleID = priorityField.bundleID,
+              priorityField.kind.usesOptions else {
+            return []
+        }
+
+        let options = (try? await issueFieldRepositorySwitcher.fetchBundleOptions(bundleID: bundleID, kind: priorityField.kind)) ?? []
+        let sorted = sortedOptions(options)
+        priorityOptionsCache[project.id] = sorted
+        return sorted
+    }
+
+    func findPriorityField(in fields: [IssueField]) -> IssueField? {
+        let namedMatches = fields.filter { field in
+            let names = [field.name, field.localizedName]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            return names.contains("priority")
+        }
+
+        if let match = namedMatches.first(where: { $0.kind == .enumeration }) {
+            return match
+        }
+        return namedMatches.first
+    }
+
+    func projectMatches(_ project: IssueProject, name: String) -> Bool {
+        if let shortName = project.shortName,
+           shortName.caseInsensitiveCompare(name) == .orderedSame {
+            return true
+        }
+        return project.name.caseInsensitiveCompare(name) == .orderedSame
     }
 }
 
@@ -918,6 +1151,10 @@ private struct PreviewIssueRepository: IssueRepository {
         AppStatePlaceholder.sampleIssues()
     }
 
+    func fetchSprintIssueIDs(agileID: String, sprintID: String) async throws -> [String] {
+        []
+    }
+
     func fetchIssueDetail(issue: IssueSummary) async throws -> IssueDetail {
         let comment = IssueComment(
             id: "preview-comment-1",
@@ -944,11 +1181,19 @@ private struct PreviewIssueRepository: IssueRepository {
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {
         throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support mutations")
     }
+
+    func addComment(issueReadableID: String, text: String) async throws -> IssueComment {
+        throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support mutations")
+    }
 }
 
 private struct EmptyIssueRepository: IssueRepository {
     func fetchIssues(query: IssueQuery) async throws -> [IssueSummary] {
         []
+    }
+
+    func fetchSprintIssueIDs(agileID: String, sprintID: String) async throws -> [String] {
+        throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
     }
 
     func fetchIssueDetail(issue: IssueSummary) async throws -> IssueDetail {
@@ -960,6 +1205,10 @@ private struct EmptyIssueRepository: IssueRepository {
     }
 
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {
+        throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
+    }
+
+    func addComment(issueReadableID: String, text: String) async throws -> IssueComment {
         throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
     }
 }

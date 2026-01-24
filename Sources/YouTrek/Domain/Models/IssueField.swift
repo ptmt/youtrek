@@ -105,6 +105,7 @@ struct IssueFieldOption: Identifiable, Hashable, Sendable, Codable {
     let login: String?
     let avatarURL: URL?
     let ordinal: Int?
+    let color: IssueFieldColor?
 
     init(
         id: String,
@@ -112,7 +113,8 @@ struct IssueFieldOption: Identifiable, Hashable, Sendable, Codable {
         displayName: String? = nil,
         login: String? = nil,
         avatarURL: URL? = nil,
-        ordinal: Int? = nil
+        ordinal: Int? = nil,
+        color: IssueFieldColor? = nil
     ) {
         self.id = id
         self.name = name
@@ -120,6 +122,7 @@ struct IssueFieldOption: Identifiable, Hashable, Sendable, Codable {
         self.login = login
         self.avatarURL = avatarURL
         self.ordinal = ordinal
+        self.color = color
     }
 
     var normalizedName: String {
@@ -129,6 +132,16 @@ struct IssueFieldOption: Identifiable, Hashable, Sendable, Codable {
     var stableID: String {
         let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? normalizedName : trimmed
+    }
+}
+
+struct IssueFieldColor: Hashable, Sendable, Codable {
+    let backgroundHex: String?
+    let foregroundHex: String?
+
+    init(backgroundHex: String? = nil, foregroundHex: String? = nil) {
+        self.backgroundHex = backgroundHex
+        self.foregroundHex = foregroundHex
     }
 }
 

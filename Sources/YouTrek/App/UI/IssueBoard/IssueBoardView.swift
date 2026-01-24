@@ -147,7 +147,8 @@ struct IssueBoardView: View {
             }
         }
 
-        let fallback: [IssueStatus] = [.open, .blocked, .inProgress, .inReview, .done]
+        let resolved = IssueStatus.sortedUnique(issues.map(\.status))
+        let fallback = resolved.isEmpty ? IssueStatus.fallbackCases : resolved
         return fallback.map { status in
             IssueBoardColumnDescriptor(
                 id: status.rawValue,

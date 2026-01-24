@@ -44,6 +44,10 @@ actor SwitchableIssueRepository: IssueRepository {
         try await current.fetchIssues(query: query)
     }
 
+    func fetchSprintIssueIDs(agileID: String, sprintID: String) async throws -> [String] {
+        try await current.fetchSprintIssueIDs(agileID: agileID, sprintID: sprintID)
+    }
+
     func fetchIssueDetail(issue: IssueSummary) async throws -> IssueDetail {
         try await current.fetchIssueDetail(issue: issue)
     }
@@ -54,6 +58,10 @@ actor SwitchableIssueRepository: IssueRepository {
 
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {
         try await current.updateIssue(id: id, patch: patch)
+    }
+
+    func addComment(issueReadableID: String, text: String) async throws -> IssueComment {
+        try await current.addComment(issueReadableID: issueReadableID, text: text)
     }
 }
 

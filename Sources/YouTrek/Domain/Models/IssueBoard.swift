@@ -131,6 +131,78 @@ extension IssueBoard {
             return sprints.contains(where: { $0.id == id }) ? filter : defaultSprintFilter
         }
     }
+
+    func filteredIssues(_ issues: [IssueSummary], sprintFilter: BoardSprintFilter) -> [IssueSummary] {
+        let fieldCandidate = sprintFieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let sprintField = fieldCandidate.isEmpty ? "Sprint" : fieldCandidate
+
+        switch sprintFilter {
+        case .backlog:
+            let hasSprintValues = issues.contains { issue in
+                !issue.fieldValues(named: sprintField).isEmpty
+            }
+            guard hasSprintValues else { return issues }
+            return issues.filter { issue in
+                issue.fieldValues(named: sprintField).isEmpty
+            }
+        case .sprint:
+            guard let sprintName = sprintName(for: sprintFilter) else { return issues }
+            let matches = issues.filter { issue in
+                matchesSprint(issue: issue, sprintName: sprintName, fieldName: sprintField)
+            }
+            if !matches.isEmpty { return matches }
+            if let detectedField = detectSprintField(in: issues, sprintName: sprintName) {
+                let fallbackMatches = issues.filter { issue in
+                    matchesSprint(issue: issue, sprintName: sprintName, fieldName: detectedField)
+                }
+                if !fallbackMatches.isEmpty { return fallbackMatches }
+            }
+            return matches
+        }
+    }
+
+    private func matchesSprint(issue: IssueSummary, sprintName: String, fieldName: String) -> Bool {
+        let values = issue.fieldValues(named: fieldName)
+        guard !values.isEmpty else { return false }
+
+        let normalizedSprint = normalize(sprintName)
+        let normalizedBoard = normalize(name)
+        let candidates: [String] = [
+            normalizedSprint,
+            normalize("\(normalizedBoard) \(sprintName)"),
+            normalize("\(normalizedBoard): \(sprintName)")
+        ]
+
+        for value in values {
+            let normalizedValue = normalize(value)
+            if candidates.contains(normalizedValue) { return true }
+            if normalizedValue.contains(normalizedSprint) { return true }
+        }
+        return false
+    }
+
+    private func detectSprintField(in issues: [IssueSummary], sprintName: String) -> String? {
+        let normalizedSprint = normalize(sprintName)
+        var matches: [String: Int] = [:]
+
+        for issue in issues {
+            for (key, values) in issue.customFieldValues {
+                for value in values {
+                    let normalizedValue = normalize(value)
+                    if normalizedValue.contains(normalizedSprint) {
+                        matches[key, default: 0] += 1
+                        break
+                    }
+                }
+            }
+        }
+
+        return matches.max(by: { $0.value < $1.value })?.key
+    }
+
+    private func normalize(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
 }
 
 struct IssueBoardColumn: Identifiable, Hashable, Sendable, Codable {

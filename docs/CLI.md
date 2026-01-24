@@ -66,7 +66,12 @@ exec "/Applications/YouTrek.app/Contents/MacOS/YouTrek" "$@"
 
 - `youtrek auth status`
 - `youtrek auth login --base-url <url> --token <PAT>`
-- `youtrek issues list [--query <ytql>] [--saved <name>] [--top 50] [--json]`
+- `youtrek issues list [--query <ytql>] [--saved <name>] [--top <n>] [--offline] [--json]`
+- `youtrek issues comment --id <id> --text <text> [--json]`
+- `youtrek issues statuses --project <id|shortName|name> [--fields <fields>]`
+- `youtrek agile-boards list [--favorites] [--offline] [--json]`
+- `youtrek agile-boards show --id <id> [--sprint <name> | --backlog] [--top <n>]`
+- `youtrek agile-boards show --name <name> [--sprint <name> | --backlog] [--top <n>]`
 - `youtrek saved-queries list [--json]`
 - `youtrek install-cli [--path <path>] [--force]`
 

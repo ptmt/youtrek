@@ -53,7 +53,7 @@ final class YouTrackIssueFieldRepository: IssueFieldRepository, Sendable {
     func fetchBundleOptions(bundleID: String, kind: IssueFieldKind) async throws -> [IssueFieldOption] {
         guard let path = kind.bundleEndpoint(bundleID: bundleID) else { return [] }
         let queryItems = [
-            URLQueryItem(name: "fields", value: "id,name,values(id,name,localizedName,fullName,login,avatarUrl,ordinal)")
+            URLQueryItem(name: "fields", value: "id,name,values(id,name,localizedName,fullName,login,avatarUrl,ordinal,color(background,foreground))")
         ]
 
         let data = try await client.get(path: path, queryItems: queryItems)
@@ -66,7 +66,11 @@ final class YouTrackIssueFieldRepository: IssueFieldRepository, Sendable {
                 displayName: value.localizedName ?? value.name ?? value.fullName ?? value.login ?? "",
                 login: value.login,
                 avatarURL: value.avatarUrl.flatMap(URL.init(string:)),
-                ordinal: value.ordinal
+                ordinal: value.ordinal,
+                color: IssueFieldColor(
+                    backgroundHex: value.color?.background,
+                    foregroundHex: value.color?.foreground
+                )
             )
         }
     }
@@ -129,6 +133,12 @@ private struct YouTrackBundleValue: Decodable {
     let login: String?
     let avatarUrl: String?
     let ordinal: Int?
+    let color: YouTrackFieldStyle?
+}
+
+private struct YouTrackFieldStyle: Decodable {
+    let background: String?
+    let foreground: String?
 }
 
 private extension YouTrackIssueFieldRepository {

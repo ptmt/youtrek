@@ -233,6 +233,82 @@ private enum CLIRunner {
                 CLIOutput.printIssues(issues)
             }
             return 0
+        case "comment":
+            let parsed = try parseOptions(
+                remaining,
+                valueOptions: ["--id", "--text", "--base-url", "--token"],
+                flagOptions: ["--json"]
+            )
+            if parsed.flags.contains("--help") {
+                CLIOutput.printIssuesHelp()
+                return 0
+            }
+
+            let issueID = parsed.options["--id"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !issueID.isEmpty else {
+                throw CLIError.missingArgument("--id")
+            }
+            let text = parsed.options["--text"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !text.isEmpty else {
+                throw CLIError.missingArgument("--text")
+            }
+
+            let connection = try resolveConnection(options: parsed)
+            let issueRepository = YouTrackIssueRepository(configuration: connection.configuration)
+            let comment = try await issueRepository.addComment(issueReadableID: issueID, text: text)
+
+            if parsed.flags.contains("--json") {
+                CLIOutput.printJSON(IssueCommentOutput(comment: comment, issueID: issueID))
+            } else {
+                CLIOutput.printInfo("Added comment to \(issueID).")
+            }
+            return 0
+        case "statuses":
+            let parsed = try parseOptions(
+                remaining,
+                valueOptions: ["--project", "--fields", "--base-url", "--token"],
+                flagOptions: []
+            )
+            if parsed.flags.contains("--help") {
+                CLIOutput.printIssuesHelp()
+                return 0
+            }
+
+            let projectIdentifier = parsed.options["--project"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !projectIdentifier.isEmpty else {
+                throw CLIError.missingArgument("--project")
+            }
+
+            let connection = try resolveConnection(options: parsed)
+            let projectRepo = YouTrackProjectRepository(configuration: connection.configuration)
+            let projects = try await projectRepo.fetchProjects()
+            guard let project = resolveProject(projects, identifier: projectIdentifier) else {
+                throw CLIError.invalidValue(option: "--project", value: projectIdentifier)
+            }
+
+            let fieldRepo = YouTrackIssueFieldRepository(configuration: connection.configuration)
+            let fields = try await fieldRepo.fetchFields(projectID: project.id)
+            guard let statusField = findStatusField(in: fields) else {
+                throw CLIError.missingConfiguration("status field for project \"\(project.displayName)\"")
+            }
+            guard let bundleID = statusField.bundleID else {
+                throw CLIError.missingConfiguration("status bundle for project \"\(project.displayName)\"")
+            }
+
+            let path = statusBundlePath(kind: statusField.kind, bundleID: bundleID)
+            let fieldsParam = parsed.options["--fields"]
+                ?? "id,name,values(id,name,localizedName,ordinal,color(background,foreground))"
+            let client = YouTrackAPIClient(configuration: connection.configuration)
+            let data = try await client.get(
+                path: path,
+                queryItems: [URLQueryItem(name: "fields", value: fieldsParam)]
+            )
+            if let raw = String(data: data, encoding: .utf8) {
+                print(raw)
+            } else {
+                CLIOutput.printError("Received non-UTF8 response data.")
+            }
+            return 0
         default:
             throw CLIError.invalidCommand("issues \(subcommand)")
         }
@@ -330,18 +406,29 @@ private enum CLIRunner {
             let board = try await boardRepository.fetchBoard(id: resolvedID)
             let sprintSelection = try resolveSprintSelection(parsed, board: board)
             let query = IssueQuery(
-                rawQuery: IssueQuery.boardQuery(
-                    boardName: board.name,
-                    sprintName: sprintSelection.sprintName,
-                    sprintFieldName: board.sprintFieldName
-                ),
+                rawQuery: IssueQuery.boardQuery(boardName: board.name, sprintName: nil),
                 search: "",
                 filters: [],
                 sort: nil,
                 page: IssueQuery.Page(size: pageSize, offset: 0)
             )
             let issues = try await issueRepository.fetchIssues(query: query)
-            CLIOutput.printBoard(board, issues: issues, sprintLabel: sprintSelection.label)
+            let visibleIssues: [IssueSummary]
+            switch sprintSelection.filter {
+            case .sprint(let sprintID):
+                if let sprintIDs = try? await issueRepository.fetchSprintIssueIDs(
+                    agileID: board.id,
+                    sprintID: sprintID
+                ), !sprintIDs.isEmpty {
+                    let idSet = Set(sprintIDs)
+                    visibleIssues = issues.filter { idSet.contains($0.readableID) }
+                } else {
+                    visibleIssues = board.filteredIssues(issues, sprintFilter: sprintSelection.filter)
+                }
+            case .backlog:
+                visibleIssues = board.filteredIssues(issues, sprintFilter: sprintSelection.filter)
+            }
+            CLIOutput.printBoard(board, issues: visibleIssues, sprintLabel: sprintSelection.label)
             return 0
         default:
             throw CLIError.invalidCommand("agile-boards \(subcommand)")
@@ -367,7 +454,7 @@ private enum CLIRunner {
     }
 
     private struct CLISprintSelection {
-        let sprintName: String?
+        let filter: BoardSprintFilter
         let label: String
     }
 
@@ -376,7 +463,7 @@ private enum CLIRunner {
         board: IssueBoard
     ) throws -> CLISprintSelection {
         if parsed.flags.contains("--backlog") {
-            return CLISprintSelection(sprintName: nil, label: "Backlog")
+            return CLISprintSelection(filter: .backlog, label: "Backlog")
         }
 
         if let rawSprint = parsed.options["--sprint"]?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -384,16 +471,16 @@ private enum CLIRunner {
             guard let sprint = board.sprints.first(where: { $0.name.caseInsensitiveCompare(rawSprint) == .orderedSame }) else {
                 throw CLIError.invalidValue(option: "--sprint", value: rawSprint)
             }
-            return CLISprintSelection(sprintName: sprint.name, label: sprint.name)
+            return CLISprintSelection(filter: .sprint(id: sprint.id), label: sprint.name)
         }
 
         let fallback = board.defaultSprintFilter
         if fallback.isBacklog {
-            return CLISprintSelection(sprintName: nil, label: "Backlog")
+            return CLISprintSelection(filter: .backlog, label: "Backlog")
         }
 
         let name = board.sprintName(for: fallback)
-        return CLISprintSelection(sprintName: name, label: name ?? "Sprint")
+        return CLISprintSelection(filter: fallback, label: name ?? "Sprint")
     }
 
     private static func parseOptions(
@@ -465,6 +552,45 @@ private enum CLIRunner {
         }
         return store.loadToken()
     }
+
+    private static func resolveProject(_ projects: [IssueProject], identifier: String) -> IssueProject? {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let match = projects.first(where: { $0.id == trimmed }) {
+            return match
+        }
+        if let match = projects.first(where: { $0.shortName?.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return match
+        }
+        if let match = projects.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return match
+        }
+        return nil
+    }
+
+    private static func findStatusField(in fields: [IssueField]) -> IssueField? {
+        let namedMatches = fields.filter { field in
+            let names = [field.name, field.localizedName]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            return names.contains("state") || names.contains("status")
+        }
+
+        if let stateMatch = namedMatches.first(where: { $0.kind == .state }) {
+            return stateMatch
+        }
+        if let namedMatch = namedMatches.first {
+            return namedMatch
+        }
+        return fields.first(where: { $0.kind == .state })
+    }
+
+    private static func statusBundlePath(kind: IssueFieldKind, bundleID: String) -> String {
+        let trimmedBundle = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if kind == .state {
+            return "admin/customFieldSettings/bundles/state/\(trimmedBundle)"
+        }
+        return "admin/customFieldSettings/bundles/enum/\(trimmedBundle)"
+    }
 }
 
 private struct CLIParsedOptions {
@@ -515,6 +641,8 @@ private struct CLIOutput {
               auth status
               auth login --base-url <url> --token <pat>
               issues list [--query <ytql>] [--saved <name>] [--top <n>] [--offline] [--json]
+              issues comment --id <id> --text <text> [--json]
+              issues statuses --project <id|shortName|name> [--fields <fields>]
               agile-boards list [--favorites] [--offline] [--json]
               agile-boards show --id <id> [--sprint <name> | --backlog] [--top <n>]
               agile-boards show --name <name> [--sprint <name> | --backlog] [--top <n>]
@@ -541,6 +669,8 @@ private struct CLIOutput {
             """
             Issues commands:
               youtrek issues list [--query <ytql>] [--saved <name>] [--top <n>] [--offline] [--json]
+              youtrek issues comment --id <id> --text <text> [--json]
+              youtrek issues statuses --project <id|shortName|name> [--fields <fields>]
             """
         )
     }
@@ -654,7 +784,7 @@ private struct CLIOutput {
             return
         }
 
-        let columns = makeBoardColumns(board)
+        let columns = makeBoardColumns(board, issues: issues)
         let groups = makeBoardGroups(board, issues: issues)
 
         for (index, group) in groups.enumerated() {
@@ -726,7 +856,7 @@ private struct CLIOutput {
         return formatter
     }
 
-    private static func makeBoardColumns(_ board: IssueBoard) -> [BoardColumnDescriptor] {
+    private static func makeBoardColumns(_ board: IssueBoard, issues: [IssueSummary]) -> [BoardColumnDescriptor] {
         if let fieldName = board.columnFieldName, !board.columns.isEmpty {
             let normalizedField = fieldName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let columns = board.columns.sorted { (left, right) in
@@ -751,7 +881,8 @@ private struct CLIOutput {
             }
         }
 
-        let fallback: [IssueStatus] = [.open, .blocked, .inProgress, .inReview, .done]
+        let resolved = IssueStatus.sortedUnique(issues.map(\.status))
+        let fallback = resolved.isEmpty ? IssueStatus.fallbackCases : resolved
         return fallback.map { status in
             BoardColumnDescriptor(
                 title: status.displayName,
@@ -868,6 +999,22 @@ private struct IssueSummaryOutput: Encodable {
 private extension IssueSummaryOutput {
     init(_ issue: IssueSummary) {
         self.init(issue: issue)
+    }
+}
+
+private struct IssueCommentOutput: Encodable {
+    let id: String
+    let issueID: String
+    let text: String
+    let createdAt: Date
+    let author: String?
+
+    init(comment: IssueComment, issueID: String) {
+        self.id = comment.id
+        self.issueID = issueID
+        self.text = comment.text
+        self.createdAt = comment.createdAt
+        self.author = comment.author?.displayName
     }
 }
 

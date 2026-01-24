@@ -76,6 +76,14 @@ final class AppState: ObservableObject {
         issueDetails[detail.id] = detail
     }
 
+    func recordComment(_ comment: IssueComment, for issue: IssueSummary) {
+        if let detail = issueDetails[issue.id] {
+            issueDetails[issue.id] = detail.appending(comment: comment)
+        }
+        let updatedAt = max(issue.updatedAt, comment.createdAt)
+        updateIssue(issue.updating(updatedAt: updatedAt))
+    }
+
     func setIssueDetailLoading(_ id: IssueSummary.ID, isLoading: Bool) {
         if isLoading {
             issueDetailLoadingIDs.insert(id)

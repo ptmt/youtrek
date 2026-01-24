@@ -20,6 +20,8 @@ private struct RootContentView: View {
     @State private var simulateSlowResponses: Bool = AppDebugSettings.simulateSlowResponses
     @State private var showNetworkFooter: Bool = AppDebugSettings.showNetworkFooter
     @State private var disableSyncing: Bool = AppDebugSettings.disableSyncing
+    @State private var statusOptions: [IssueFieldOption] = []
+    @State private var priorityOptions: [IssueFieldOption] = []
     private var selectedIssues: [IssueSummary] {
         appState.issues.filter { appState.selectedIssueIDs.contains($0.id) }
     }
@@ -137,10 +139,13 @@ private struct RootContentView: View {
                 searchQuery: searchQuery
             )
         } else {
+            let filteredIssues = appState.filteredIssues(searchQuery: searchQuery)
             IssueListView(
-                issues: appState.filteredIssues(searchQuery: searchQuery),
+                issues: filteredIssues,
                 selection: $appState.selectedIssue,
                 selectedIDs: $appState.selectedIssueIDs,
+                statusColors: statusColorLookup,
+                priorityColors: priorityColorLookup,
                 showAssigneeColumn: showAssigneeColumn,
                 showUpdatedColumn: showUpdatedColumn,
                 isLoading: appState.isLoadingIssues,
@@ -152,6 +157,10 @@ private struct RootContentView: View {
                     appState.recordIssueListRendered(issueCount: count)
                 }
             )
+            .task(id: filteredIssues.map(\.id)) {
+                statusOptions = await container.loadStatusOptions(for: filteredIssues)
+                priorityOptions = await container.loadPriorityOptions(for: filteredIssues)
+            }
         }
     }
 
@@ -234,6 +243,30 @@ private struct RootContentView: View {
         .inspectorColumnWidth(min: 320, ideal: 400, max: 500)
         .background(.ultraThinMaterial)
     }
+
+    private var statusColorLookup: [String: IssueFieldColor] {
+        var result: [String: IssueFieldColor] = [:]
+        for option in statusOptions {
+            guard let color = option.color else { continue }
+            let key = IssueStatus(option: option).normalizedKey
+            if result[key] == nil {
+                result[key] = color
+            }
+        }
+        return result
+    }
+
+    private var priorityColorLookup: [IssuePriority: IssueFieldColor] {
+        var result: [IssuePriority: IssueFieldColor] = [:]
+        for option in priorityOptions {
+            guard let priority = IssuePriority(option: option),
+                  let color = option.color else { continue }
+            if result[priority] == nil {
+                result[priority] = color
+            }
+        }
+        return result
+    }
 }
 
 private struct BoardContentView: View {
@@ -268,6 +301,7 @@ private struct BoardContentView: View {
 private struct MultiIssueSelectionView: View {
     @EnvironmentObject private var container: AppContainer
     let issues: [IssueSummary]
+    @State private var statusOptions: [IssueFieldOption] = []
 
     var body: some View {
         ScrollView {
@@ -284,6 +318,10 @@ private struct MultiIssueSelectionView: View {
             .textSelection(.enabled)
         }
         .background(.ultraThinMaterial)
+        .task(id: issues.map(\.id)) {
+            statusOptions = []
+            statusOptions = await container.loadStatusOptions(for: issues)
+        }
     }
 
     private var header: some View {
@@ -302,7 +340,7 @@ private struct MultiIssueSelectionView: View {
                 .font(.headline)
             HStack(spacing: 12) {
                 Menu {
-                    ForEach(IssueStatus.allCases, id: \.self) { status in
+                    ForEach(statusMenuOptions, id: \.self) { status in
                         Button(status.displayName) {
                             applyStatus(status)
                         }
@@ -360,6 +398,13 @@ private struct MultiIssueSelectionView: View {
         let projectCount = Set(issues.map(\.projectName)).count
         let peopleCount = Set(issues.compactMap(\.assignee?.id)).count
         return "\(issueCount) \(issueCount == 1 ? "issue" : "issues") in \(projectCount) \(projectCount == 1 ? "project" : "projects") for \(peopleCount) \(peopleCount == 1 ? "person" : "people") selected"
+    }
+
+    private var statusMenuOptions: [IssueStatus] {
+        let base = statusOptions.isEmpty
+            ? IssueStatus.fallbackCases
+            : statusOptions.map(IssueStatus.init(option:))
+        return IssueStatus.deduplicated(base)
     }
 
     private func applyStatus(_ status: IssueStatus) {

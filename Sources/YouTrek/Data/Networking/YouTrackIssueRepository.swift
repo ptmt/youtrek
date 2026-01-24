@@ -19,8 +19,27 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
 
     func fetchIssues(query: IssueQuery) async throws -> [IssueSummary] {
         let queryString = buildQueryString(from: query)
+        var lastError: Error?
+        for fields in Self.issueListFieldCandidates {
+            do {
+                return try await fetchIssues(query: query, queryString: queryString, fields: fields)
+            } catch let error as YouTrackAPIError {
+                if case .http(let statusCode, _) = error, statusCode == 400 {
+                    lastError = error
+                    continue
+                }
+                throw error
+            } catch {
+                throw error
+            }
+        }
+
+        throw lastError ?? YouTrackAPIError.invalidResponse
+    }
+
+    private func fetchIssues(query: IssueQuery, queryString: String?, fields: String) async throws -> [IssueSummary] {
         var queryItems: [URLQueryItem] = [
-            URLQueryItem(name: "fields", value: Self.issueListFields),
+            URLQueryItem(name: "fields", value: fields),
             URLQueryItem(name: "\u{24}top", value: String(query.page.size)),
             URLQueryItem(name: "\u{24}skip", value: String(query.page.offset))
         ]
@@ -31,6 +50,22 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         let data = try await client.get(path: "issues", queryItems: queryItems)
         let issues = try decoder.decode([YouTrackIssue].self, from: data)
         return issues.map(mapIssue(_:))
+    }
+
+    func fetchSprintIssueIDs(agileID: String, sprintID: String) async throws -> [String] {
+        let trimmedAgileID = agileID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSprintID = sprintID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAgileID.isEmpty, !trimmedSprintID.isEmpty else {
+            return []
+        }
+
+        let queryItems = [
+            URLQueryItem(name: "fields", value: "issues(idReadable)")
+        ]
+        let data = try await client.get(path: "agiles/\(trimmedAgileID)/sprints/\(trimmedSprintID)", queryItems: queryItems)
+        let sprint = try decoder.decode(YouTrackSprintIssues.self, from: data)
+        let ids = sprint.issues?.compactMap { $0.idReadable?.trimmingCharacters(in: .whitespacesAndNewlines) } ?? []
+        return ids.filter { !$0.isEmpty }
     }
 
     func fetchIssueDetail(issue: IssueSummary) async throws -> IssueDetail {
@@ -83,7 +118,7 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         let body = try encoder.encode(payload)
         let response = try await client.post(
             path: "issues",
-            queryItems: [URLQueryItem(name: "fields", value: Self.issueListFields)],
+            queryItems: [URLQueryItem(name: "fields", value: Self.issueListFieldsBase)],
             body: body
         )
         let issue = try decoder.decode(YouTrackIssue.self, from: response)
@@ -123,11 +158,33 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         let body = try encoder.encode(payload)
         let response = try await client.post(
             path: "issues/\(readableID)",
-            queryItems: [URLQueryItem(name: "fields", value: Self.issueListFields)],
+            queryItems: [URLQueryItem(name: "fields", value: Self.issueListFieldsBase)],
             body: body
         )
         let issue = try decoder.decode(YouTrackIssue.self, from: response)
         return mapIssue(issue)
+    }
+
+    func addComment(issueReadableID: String, text: String) async throws -> IssueComment {
+        let readableID = issueReadableID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !readableID.isEmpty else {
+            throw YouTrackAPIError.http(statusCode: 400, body: "Missing issue identifier for comment")
+        }
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            throw YouTrackAPIError.http(statusCode: 400, body: "Missing comment text")
+        }
+
+        let payload = IssueCommentPayload(text: trimmedText)
+        let encoder = JSONEncoder()
+        let body = try encoder.encode(payload)
+        let response = try await client.post(
+            path: "issues/\(readableID)/comments",
+            queryItems: [URLQueryItem(name: "fields", value: Self.issueCommentFields)],
+            body: body
+        )
+        let comment = try decoder.decode(YouTrackComment.self, from: response)
+        return mapComment(comment, fallbackText: trimmedText)
     }
 
     private static func makeDecoder() -> JSONDecoder {
@@ -171,10 +228,20 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
             )
         }
 
-        let status = statusField?.value.firstValue?.name.flatMap(IssueStatus.init(apiName:)) ?? .open
+        let statusName = statusField?.value.firstValue?.name
+            ?? statusField?.value.firstValue?.localizedName
+            ?? statusField?.value.firstValue?.resolvedName
+        let status = IssueStatus.from(apiName: statusName)
         let priority = priorityField?.value.firstValue?.name.flatMap(IssuePriority.init(apiName:)) ?? .normal
         let tags = issue.tags?.compactMap { $0.name } ?? []
-        let customFieldValues = extractCustomFieldValues(from: customFields)
+        var customFieldValues = extractCustomFieldValues(from: customFields)
+        if let sprintValues = issue.sprints?
+            .compactMap({ $0.name?.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .filter({ !$0.isEmpty }),
+           !sprintValues.isEmpty {
+            addCustomFieldValues(&customFieldValues, key: "sprint", values: sprintValues)
+            addCustomFieldValues(&customFieldValues, key: "sprints", values: sprintValues)
+        }
 
         return IssueSummary(
             id: Person.stableID(for: issue.idReadable),
@@ -189,6 +256,23 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
             tags: tags,
             customFieldValues: customFieldValues
         )
+    }
+
+    private func addCustomFieldValues(
+        _ values: inout [String: [String]],
+        key: String,
+        values newValues: [String]
+    ) {
+        let normalizedKey = key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedKey.isEmpty else { return }
+        let existing = values[normalizedKey] ?? []
+        var merged = existing
+        for value in newValues {
+            if !merged.contains(value) {
+                merged.append(value)
+            }
+        }
+        values[normalizedKey] = merged
     }
 
     private func mapIssueDetail(_ issue: YouTrackIssue, fallback: IssueSummary) -> IssueDetail {
@@ -241,10 +325,35 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         )
     }
 
+    private func mapComment(_ comment: YouTrackComment, fallbackText: String) -> IssueComment {
+        let createdAt = comment.created.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) } ?? Date()
+        let author = comment.author.flatMap { user -> Person? in
+            guard let displayName = user.displayName else { return nil }
+            let avatarURL = user.avatarUrl.flatMap(URL.init(string:))
+            let identifier = user.compositeIdentifier.isEmpty ? displayName : user.compositeIdentifier
+            return Person(
+                id: Person.stableID(for: identifier),
+                displayName: displayName,
+                avatarURL: avatarURL,
+                login: user.login,
+                remoteID: user.id
+            )
+        }
+        let resolvedID = comment.id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let id = (resolvedID?.isEmpty == false) ? resolvedID! : UUID().uuidString
+        let text = comment.text ?? fallbackText
+        return IssueComment(
+            id: id,
+            author: author,
+            createdAt: createdAt,
+            text: text
+        )
+    }
+
 }
 
 private extension YouTrackIssueRepository {
-    static let issueListFields = [
+    static let issueListFieldsBase = [
         "id",
         "idReadable",
         "summary",
@@ -255,6 +364,16 @@ private extension YouTrackIssueRepository {
         "tags(name)"
     ].joined(separator: ",")
 
+    static let issueListFieldsWithSprints = [
+        issueListFieldsBase,
+        "sprints(id,name)"
+    ].joined(separator: ",")
+
+    static let issueListFieldCandidates = [
+        issueListFieldsWithSprints,
+        issueListFieldsBase
+    ]
+
     static let issueDetailFields = [
         "id",
         "idReadable",
@@ -264,6 +383,13 @@ private extension YouTrackIssueRepository {
         "updated",
         "reporter(id,login,fullName,avatarUrl)",
         "comments(id,text,created,author(id,login,fullName,avatarUrl))"
+    ].joined(separator: ",")
+
+    static let issueCommentFields = [
+        "id",
+        "text",
+        "created",
+        "author(id,login,fullName,avatarUrl)"
     ].joined(separator: ",")
 
     func buildQueryString(from query: IssueQuery) -> String? {
@@ -326,21 +452,6 @@ private extension IssuePriority {
     }
 }
 
-private extension IssueStatus {
-    init?(apiName: String) {
-        let normalized = apiName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        switch normalized {
-        case "open", "new", "to do": self = .open
-        case "in progress", "doing", "implementation": self = .inProgress
-        case "in review", "code review", "qa", "testing": self = .inReview
-        case "blocked", "on hold", "stuck": self = .blocked
-        case "done", "fixed", "resolved", "closed", "completed": self = .done
-        default:
-            return nil
-        }
-    }
-}
-
 // MARK: - API DTOs
 
 private struct YouTrackIssue: Decodable {
@@ -355,6 +466,7 @@ private struct YouTrackIssue: Decodable {
     let comments: [Comment]?
     let customFields: [CustomField]?
     let tags: [Tag]?
+    let sprints: [Sprint]?
 
     struct Project: Decodable {
         let name: String?
@@ -362,6 +474,11 @@ private struct YouTrackIssue: Decodable {
     }
 
     struct Tag: Decodable {
+        let name: String?
+    }
+
+    struct Sprint: Decodable {
+        let id: String?
         let name: String?
     }
 
@@ -460,6 +577,36 @@ private struct YouTrackIssue: Decodable {
                 }
                 return values.compactMap { $0.resolvedName }
             }
+        }
+    }
+}
+
+private struct YouTrackSprintIssues: Decodable {
+    let issues: [IssueRef]?
+
+    struct IssueRef: Decodable {
+        let idReadable: String?
+    }
+}
+
+private struct YouTrackComment: Decodable {
+    let id: String?
+    let text: String?
+    let created: Int?
+    let author: User?
+
+    struct User: Decodable {
+        let id: String?
+        let login: String?
+        let fullName: String?
+        let avatarUrl: String?
+
+        var displayName: String? {
+            fullName ?? login ?? id
+        }
+
+        var compositeIdentifier: String {
+            [id, login, fullName].compactMap { $0 }.joined(separator: "|")
         }
     }
 }
@@ -654,6 +801,10 @@ private struct IssueCreatePayload: Encodable {
     struct PeriodPayload: Encodable {
         let minutes: Int
     }
+}
+
+private struct IssueCommentPayload: Encodable {
+    let text: String
 }
 
 private struct IssueUpdatePayload: Encodable {

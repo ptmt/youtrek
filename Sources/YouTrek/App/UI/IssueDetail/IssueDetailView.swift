@@ -5,6 +5,11 @@ struct IssueDetailView: View {
     let issue: IssueSummary
     let detail: IssueDetail?
     let isLoadingDetail: Bool
+    @State private var statusOptions: [IssueFieldOption] = []
+    @State private var priorityOptions: [IssueFieldOption] = []
+    @State private var commentText: String = ""
+    @State private var isSubmittingComment: Bool = false
+    @State private var commentError: String?
 
     var body: some View {
         ScrollView {
@@ -24,6 +29,8 @@ struct IssueDetailView: View {
                 descriptionSection
                 Divider()
                 timelineSection
+                Divider()
+                commentComposer
                 Spacer(minLength: 24)
             }
             .padding(24)
@@ -31,6 +38,14 @@ struct IssueDetailView: View {
             .textSelection(.enabled)
         }
         .background(.ultraThinMaterial)
+        .task(id: issue.readableID) {
+            statusOptions = []
+            priorityOptions = []
+            commentText = ""
+            commentError = nil
+            statusOptions = await container.loadStatusOptions(for: issue)
+            priorityOptions = await container.loadPriorityOptions(for: issue)
+        }
     }
 
     private var header: some View {
@@ -138,7 +153,7 @@ struct IssueDetailView: View {
 
     private var statusMenu: some View {
         Menu {
-            ForEach(IssueStatus.allCases, id: \.self) { status in
+            ForEach(statusMenuOptions, id: \.self) { status in
                 Button {
                     updateStatus(status)
                 } label: {
@@ -150,9 +165,20 @@ struct IssueDetailView: View {
                 }
             }
         } label: {
-            BadgeLabel(text: issue.status.displayName, tint: issue.status.tint)
+            let statusColor = statusColorOverride
+            BadgeLabel(
+                text: issue.status.displayName,
+                tint: issue.status.tint,
+                foreground: statusColor?.foregroundColor,
+                background: statusColor?.backgroundColor
+            )
         }
         .menuStyle(.borderlessButton)
+    }
+
+    private var statusMenuOptions: [IssueStatus] {
+        let base = statusOptions.isEmpty ? IssueStatus.fallbackCases : statusOptions.map(IssueStatus.init(option:))
+        return IssueStatus.deduplicated(base + [issue.status])
     }
 
     private var priorityMenu: some View {
@@ -169,9 +195,46 @@ struct IssueDetailView: View {
                 }
             }
         } label: {
-            BadgeLabel(text: issue.priority.displayName, tint: issue.priority.tint)
+            let priorityColor = priorityColorOverride
+            BadgeLabel(
+                text: issue.priority.displayName,
+                tint: issue.priority.tint,
+                foreground: priorityColor?.foregroundColor,
+                background: priorityColor?.backgroundColor
+            )
         }
         .menuStyle(.borderlessButton)
+    }
+
+    private var statusColorOverride: IssueFieldColor? {
+        statusOptionLookup[issue.status.normalizedKey]?.color
+    }
+
+    private var statusOptionLookup: [String: IssueFieldOption] {
+        var result: [String: IssueFieldOption] = [:]
+        for option in statusOptions {
+            let key = IssueStatus(option: option).normalizedKey
+            if result[key] == nil {
+                result[key] = option
+            }
+        }
+        return result
+    }
+
+    private var priorityColorOverride: IssueFieldColor? {
+        priorityColorLookup[issue.priority]
+    }
+
+    private var priorityColorLookup: [IssuePriority: IssueFieldColor] {
+        var result: [IssuePriority: IssueFieldColor] = [:]
+        for option in priorityOptions {
+            guard let priority = IssuePriority(option: option),
+                  let color = option.color else { continue }
+            if result[priority] == nil {
+                result[priority] = color
+            }
+        }
+        return result
     }
 
     private func updateStatus(_ status: IssueStatus) {
@@ -189,6 +252,70 @@ struct IssueDetailView: View {
         patch.issueReadableID = issue.readableID
         Task {
             await container.updateIssue(id: issue.id, patch: patch)
+        }
+    }
+
+    private var commentComposer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Add comment")
+                    .font(.headline)
+                if isSubmittingComment {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $commentText)
+                    .frame(minHeight: 120)
+                    .font(.callout)
+                    .accessibilityLabel("Comment text")
+                if commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Write a comment…")
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 8)
+                        .padding(.leading, 5)
+                }
+            }
+            HStack(spacing: 12) {
+                if let commentError {
+                    Text(commentError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                Spacer()
+                Button("Post Comment") {
+                    submitComment()
+                }
+                .keyboardShortcut(.return, modifiers: [.command])
+                .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmittingComment)
+            }
+        }
+        .onChange(of: commentText) { _, _ in
+            if commentError != nil {
+                commentError = nil
+            }
+        }
+    }
+
+    private func submitComment() {
+        let trimmed = commentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isSubmittingComment else { return }
+        commentError = nil
+        isSubmittingComment = true
+        Task {
+            do {
+                _ = try await container.addComment(to: issue, text: trimmed)
+                await MainActor.run {
+                    commentText = ""
+                    isSubmittingComment = false
+                }
+            } catch {
+                await MainActor.run {
+                    commentError = error.localizedDescription
+                    isSubmittingComment = false
+                }
+            }
         }
     }
 }
@@ -407,13 +534,17 @@ private struct UnassignedRow: View {
 private struct BadgeLabel: View {
     let text: String
     let tint: Color
+    let foreground: Color?
+    let background: Color?
 
     var body: some View {
+        let foreground = foreground ?? tint
+        let background = background ?? tint.opacity(0.15)
         Text(text)
             .padding(.vertical, 4)
             .padding(.horizontal, 8)
-            .background(tint.opacity(0.15), in: Capsule())
-            .foregroundStyle(tint)
+            .background(background, in: Capsule())
+            .foregroundStyle(foreground)
     }
 }
 

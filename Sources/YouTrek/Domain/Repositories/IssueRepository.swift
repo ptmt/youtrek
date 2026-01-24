@@ -2,9 +2,11 @@ import Foundation
 
 protocol IssueRepository: Sendable {
     func fetchIssues(query: IssueQuery) async throws -> [IssueSummary]
+    func fetchSprintIssueIDs(agileID: String, sprintID: String) async throws -> [String]
     func fetchIssueDetail(issue: IssueSummary) async throws -> IssueDetail
     func createIssue(draft: IssueDraft) async throws -> IssueSummary
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary
+    func addComment(issueReadableID: String, text: String) async throws -> IssueComment
 }
 
 struct IssueQuery: Equatable, Hashable, Sendable {
@@ -44,6 +46,14 @@ extension IssueQuery {
         }
 
         let escapedSprint = escapeQueryValue(trimmedSprint)
+        let boardClause = "has: {Board \(escapedBoard)}"
+        let fieldCandidate = sprintFieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !fieldCandidate.isEmpty {
+            let fieldName = escapeQueryValue(fieldCandidate)
+            return "\(boardClause) \(fieldName): {\(escapedSprint)}"
+        }
+
         let boardAttributeName = trimmedBoard.isEmpty ? "Board" : "Board \(escapedBoard)"
         return "\(boardAttributeName): {\(escapedSprint)}"
     }

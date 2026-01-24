@@ -4,6 +4,8 @@ struct IssueListView: View {
     let issues: [IssueSummary]
     @Binding var selection: IssueSummary?
     @Binding var selectedIDs: Set<IssueSummary.ID>
+    let statusColors: [String: IssueFieldColor]
+    let priorityColors: [IssuePriority: IssueFieldColor]
     let showAssigneeColumn: Bool
     let showUpdatedColumn: Bool
     let isLoading: Bool
@@ -115,14 +117,17 @@ struct IssueListView: View {
     }
 
     private func metadataRow(for issue: IssueSummary, isUnread: Bool) -> some View {
-        HStack(spacing: 8) {
+        let statusColor = statusColors[issue.status.normalizedKey]
+        let statusTint = statusColor?.foregroundColor ?? issue.status.tint
+        let priorityColor = priorityColors[issue.priority]?.foregroundColor ?? issue.priority.tint
+        return HStack(spacing: 8) {
             Text(issue.projectName)
                 .foregroundStyle(.secondary)
             Text(issue.status.displayName)
-                .foregroundStyle(issue.status.tint)
+                .foregroundStyle(statusTint)
             if issue.priority != .normal {
                 Text(issue.priority.displayName)
-                    .foregroundStyle(issue.priority.tint)
+                    .foregroundStyle(priorityColor)
             }
         }
         .font(.caption.weight(isUnread ? .medium : .regular))

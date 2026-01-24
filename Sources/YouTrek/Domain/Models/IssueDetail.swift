@@ -44,3 +44,21 @@ struct IssueComment: Identifiable, Hashable, Sendable {
         self.text = text
     }
 }
+
+extension IssueDetail {
+    func appending(comment: IssueComment) -> IssueDetail {
+        var updatedComments = comments
+        updatedComments.append(comment)
+        let updatedAt = max(self.updatedAt, comment.createdAt)
+        return IssueDetail(
+            id: id,
+            readableID: readableID,
+            title: title,
+            description: description,
+            reporter: reporter,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            comments: updatedComments
+        )
+    }
+}
