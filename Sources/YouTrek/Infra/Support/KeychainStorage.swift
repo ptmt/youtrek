@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Security
 
 struct KeychainStorage {
@@ -92,7 +93,11 @@ struct KeychainStorage {
 
     private func loadLegacy(account: String) throws -> Data? {
         var query = baseQuery(for: account, useDataProtectionKeychain: false)
-        if #available(macOS 10.10, *) {
+        if #available(macOS 11.0, *) {
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            query[kSecUseAuthenticationContext as String] = context
+        } else if #available(macOS 10.10, *) {
             query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         }
         query[kSecReturnData as String] = true
@@ -112,7 +117,11 @@ struct KeychainStorage {
 
     private func deleteLegacy(account: String) throws {
         var query = baseQuery(for: account, useDataProtectionKeychain: false)
-        if #available(macOS 10.10, *) {
+        if #available(macOS 11.0, *) {
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            query[kSecUseAuthenticationContext as String] = context
+        } else if #available(macOS 10.10, *) {
             query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         }
         let status = SecItemDelete(query as CFDictionary)

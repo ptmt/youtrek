@@ -40,6 +40,7 @@ actor SyncOperationQueue {
     private func markStarted(label: String) async {
         pendingCount += 1
         currentLabel = label
+        LoggingService.sync.info("Sync queue: started '\(label, privacy: .public)' (pending=\(self.pendingCount, privacy: .public)).")
         await publish()
     }
 
@@ -48,6 +49,7 @@ actor SyncOperationQueue {
         if pendingCount == 0 {
             currentLabel = nil
         }
+        LoggingService.sync.info("Sync queue: finished (pending=\(self.pendingCount, privacy: .public)).")
         await publish()
     }
 

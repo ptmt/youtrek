@@ -21,6 +21,7 @@ final class AppState: ObservableObject {
     @Published private(set) var isLoadingIssues: Bool = false
     @Published private(set) var hasCompletedIssueSync: Bool = false
     @Published private(set) var hasCompletedBoardSync: Bool = false
+    @Published private(set) var currentUserDisplayName: String? = nil
     @Published private(set) var boardSyncTimestamps: [String: Date] = [:]
     @Published private var boardSprintFilters: [String: BoardSprintFilter] = [:]
     @Published var activeConflict: ConflictNotice?
@@ -163,6 +164,26 @@ final class AppState: ObservableObject {
 
     func recordBoardListSyncCompleted() {
         hasCompletedBoardSync = true
+    }
+
+    func resetInitialSyncState() {
+        hasCompletedIssueSync = false
+        hasCompletedBoardSync = false
+    }
+
+    func setCurrentUserDisplayName(_ name: String?) {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        currentUserDisplayName = trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    var hasCompletedInitialSync: Bool {
+        hasCompletedIssueSync && hasCompletedBoardSync
+    }
+
+    var initialSyncProgress: Double {
+        let total: Double = 2
+        let completed: Double = (hasCompletedIssueSync ? 1 : 0) + (hasCompletedBoardSync ? 1 : 0)
+        return completed / total
     }
 
     func recordBoardSync(boardID: String, at date: Date = Date()) {

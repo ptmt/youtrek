@@ -51,7 +51,8 @@ private struct MainWindowContent: View {
 
     var body: some View {
         Group {
-            if container.requiresSetup {
+            let needsSetupPresentation = container.requiresSetup || !container.appState.hasCompletedInitialSync
+            if needsSetupPresentation {
                 SetupWindow()
                     .background(WindowAccessor(isSetup: true))
             } else {
@@ -108,7 +109,7 @@ private final class WindowAccessorView: NSView {
 
         if isSetup {
             if needsReconfigure {
-                window.styleMask = [.borderless, .fullSizeContentView]
+                window.styleMask = [.titled, .fullSizeContentView]
                 window.titlebarAppearsTransparent = true
                 window.titleVisibility = .hidden
                 window.standardWindowButton(.closeButton)?.isHidden = true

@@ -35,6 +35,12 @@ final class AppAuthRepository: NSObject, AuthRepository {
         }
     }
 
+    static func hasSavedAuthState(
+        keychain: KeychainStorage = KeychainStorage(service: "com.potomushto.youtrek.auth")
+    ) -> Bool {
+        (try? keychain.load(account: Constants.keychainAccount)) != nil
+    }
+
     func signIn() async throws {
         let serviceConfiguration = OIDServiceConfiguration(
             authorizationEndpoint: configuration.authorizationEndpoint,

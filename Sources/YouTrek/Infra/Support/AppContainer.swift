@@ -74,6 +74,7 @@ final class AppContainer: ObservableObject {
         let composer = IssueComposer()
         let palette = CommandPaletteCoordinator(router: router)
         let configurationStore = AppConfigurationStore()
+        state.setCurrentUserDisplayName(configurationStore.loadUserDisplayName())
         let draftStore = IssueDraftStore()
         let networkMonitor = NetworkRequestMonitor()
         let initialRequiresSetup = AppContainer.requiresSetupOnLaunch(configurationStore: configurationStore)
@@ -178,18 +179,22 @@ final class AppContainer: ObservableObject {
     }()
 
     func bootstrap() async {
+        LoggingService.sync.info("Bootstrap start.")
         let cachedBoards = await boardLocalStore.loadBoards()
+        LoggingService.sync.info("Bootstrap: cached boards loaded (\(cachedBoards.count, privacy: .public)).")
         let initialSections = buildSidebarSections(savedQueries: [], boards: cachedBoards)
         let initialPreferredSelectionID = storedSidebarSelectionID() ?? preferredSelectionID(from: [])
 
         appState.updateSidebar(sections: initialSections, preferredSelectionID: initialPreferredSelectionID)
         startBoardPrefetch(cachedBoards)
         if let selection = appState.selectedSidebarItem {
+            LoggingService.sync.info("Bootstrap: loading initial selection \(selection.id, privacy: .public).")
             await loadIssues(for: selection)
         }
 
         Task { [weak self] in
             guard let self else { return }
+            LoggingService.sync.info("Bootstrap: flushing pending mutations.")
             await self.syncCoordinator.flushPendingMutations()
         }
 
@@ -198,14 +203,19 @@ final class AppContainer: ObservableObject {
             guard !AppDebugSettings.disableSyncing else { return }
             let delay = AppDebugSettings.syncStartDelay
             if delay > 0 {
+                LoggingService.sync.info("Bootstrap: delaying sidebar refresh by \(delay, privacy: .public)s.")
                 let nanoseconds = UInt64(delay * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: nanoseconds)
             }
+            LoggingService.sync.info("Bootstrap: refreshing sidebar data.")
             await self.refreshSidebarData()
         }
     }
 
     func loadIssues(for selection: SidebarItem) async {
+        if !appState.hasCompletedInitialSync {
+            LoggingService.sync.info("Initial sync: loading issues for \(selection.id, privacy: .public).")
+        }
         let resolvedBoard = await resolveBoardDetailsIfNeeded(for: selection)
         let query: IssueQuery
         if selection.isBoard {
@@ -237,6 +247,7 @@ final class AppContainer: ObservableObject {
 
         let cachedIssues = await syncCoordinator.loadCachedIssues(for: query)
         if !cachedIssues.isEmpty {
+            LoggingService.sync.info("Initial sync: loaded cached issues (\(cachedIssues.count, privacy: .public)).")
             let filtered = applySprintFilterIfNeeded(
                 cachedIssues,
                 board: board,
@@ -250,26 +261,24 @@ final class AppContainer: ObservableObject {
             await refreshIssueSeenUpdates(for: filtered)
         }
 
-        do {
-            let issues = try await syncCoordinator.refreshIssues(using: query)
+        let syncResult = await syncCoordinator.refreshIssuesWithStatus(using: query)
+        if syncResult.didSyncRemote {
             appState.recordIssueSyncCompleted()
-            let filtered = applySprintFilterIfNeeded(
-                issues,
-                board: board,
-                filter: sprintFilter,
-                sprintIssueIDs: sprintIssueIDs
-            )
-            if filtered != appState.issues {
-                appState.replaceIssues(with: filtered)
-            }
-            appState.setIssuesLoading(false)
-            await refreshIssueSeenUpdates(for: filtered)
-        } catch {
-            if appState.issues.isEmpty {
-                appState.replaceIssues(with: [])
-            }
-            appState.setIssuesLoading(false)
+            LoggingService.sync.info("Initial sync: issues synced from remote (\(syncResult.issues.count, privacy: .public)).")
+        } else if !syncResult.issues.isEmpty {
+            LoggingService.sync.info("Initial sync: issues loaded from cache (\(syncResult.issues.count, privacy: .public)).")
         }
+        let filtered = applySprintFilterIfNeeded(
+            syncResult.issues,
+            board: board,
+            filter: sprintFilter,
+            sprintIssueIDs: sprintIssueIDs
+        )
+        if filtered != appState.issues {
+            appState.replaceIssues(with: filtered)
+        }
+        appState.setIssuesLoading(false)
+        await refreshIssueSeenUpdates(for: filtered)
         if selection.isBoard, let boardID = selection.boardID {
             appState.recordBoardSync(boardID: boardID)
         }
@@ -316,29 +325,22 @@ final class AppContainer: ObservableObject {
         let board = resolvedBoard ?? boardForSelection(item)
         let sprintFilter = board.map { appState.sprintFilter(for: $0) }
         let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(board: board, filter: sprintFilter)
-        do {
-            let issues = try await syncCoordinator.refreshIssues(using: query)
+        let syncResult = await syncCoordinator.refreshIssuesWithStatus(using: query)
+        if syncResult.didSyncRemote {
             appState.recordIssueSyncCompleted()
-            if isSelected {
-                let filtered = applySprintFilterIfNeeded(
-                    issues,
-                    board: board,
-                    filter: sprintFilter,
-                    sprintIssueIDs: sprintIssueIDs
-                )
-                if filtered != appState.issues {
-                    appState.replaceIssues(with: filtered)
-                }
-                appState.setIssuesLoading(false)
-                await refreshIssueSeenUpdates(for: filtered)
+        }
+        if isSelected {
+            let filtered = applySprintFilterIfNeeded(
+                syncResult.issues,
+                board: board,
+                filter: sprintFilter,
+                sprintIssueIDs: sprintIssueIDs
+            )
+            if filtered != appState.issues {
+                appState.replaceIssues(with: filtered)
             }
-        } catch {
-            if isSelected {
-                if appState.issues.isEmpty {
-                    appState.replaceIssues(with: [])
-                }
-                appState.setIssuesLoading(false)
-            }
+            appState.setIssuesLoading(false)
+            await refreshIssueSeenUpdates(for: filtered)
         }
         if let boardID = item.boardID {
             appState.recordBoardSync(boardID: boardID)
@@ -481,7 +483,11 @@ final class AppContainer: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             do {
+                self.appState.resetInitialSyncState()
+                LoggingService.sync.info("Sign-in: starting.")
                 try await authRepository.signIn()
+                self.updateUserDisplayName(from: self.authRepository.currentAccount)
+                LoggingService.sync.info("Sign-in: completed, bootstrapping.")
                 await self.bootstrap()
             } catch {
                 print("Sign-in failed: \(error.localizedDescription)")
@@ -489,26 +495,46 @@ final class AppContainer: ObservableObject {
         }
     }
 
-    func validateManualToken(baseURL: URL, token: String) async throws {
+    func cancelInitialSync() async {
+        LoggingService.sync.info("Initial sync: cancel requested.")
+        do {
+            try await authRepository.signOut()
+        } catch {
+            print("Sign-out failed: \(error.localizedDescription)")
+        }
+        configurationStore.clearUserDisplayName()
+        appState.setCurrentUserDisplayName(nil)
+        appState.updateSyncActivity(isSyncing: false, label: nil)
+        appState.resetInitialSyncState()
+        requiresSetup = true
+    }
+
+    func validateManualToken(baseURL: URL, token: String) async throws -> String? {
         let apiBaseURL = Self.apiBaseURL(from: baseURL)
         let tokenProvider = YouTrackAPITokenProvider.constant(token)
         let configuration = YouTrackAPIConfiguration(baseURL: apiBaseURL, tokenProvider: tokenProvider)
         let client = YouTrackAPIClient(configuration: configuration, session: .shared, monitor: networkMonitor)
         let queryItems = [URLQueryItem(name: "fields", value: "id,login,name,fullName")]
+        LoggingService.networking.info("Token validation: requesting users/me at \(apiBaseURL.absoluteString, privacy: .public).")
         let data = try await client.get(path: "users/me", queryItems: queryItems)
-        _ = try JSONDecoder().decode(YouTrackTokenValidationUser.self, from: data)
+        let user = try JSONDecoder().decode(YouTrackTokenValidationUser.self, from: data)
+        LoggingService.networking.info("Token validation: success for user \(user.displayName ?? "unknown", privacy: .public).")
+        return user.displayName
     }
 
-    func completeManualSetup(baseURL: URL, token: String) async {
+    func completeManualSetup(baseURL: URL, token: String, userDisplayName: String? = nil) async {
         let apiBaseURL = Self.apiBaseURL(from: baseURL)
 
+        appState.resetInitialSyncState()
         configurationStore.save(baseURL: apiBaseURL)
         let manualAuth = ManualTokenAuthRepository(configurationStore: configurationStore)
         do {
-            try manualAuth.apply(token: token)
+            try manualAuth.apply(token: token, displayName: userDisplayName)
         } catch {
-            print("Failed to save YouTrack token: \(error.localizedDescription)")
+            LoggingService.sync.error("Manual setup: failed to save token (\(error.localizedDescription, privacy: .public)).")
         }
+        updateUserDisplayName(from: manualAuth.currentAccount)
+        LoggingService.sync.info("Manual setup: repositories configured for \(apiBaseURL.absoluteString, privacy: .public).")
 
         authRepositorySwitcher.replace(with: manualAuth)
 
@@ -551,16 +577,36 @@ final class AppContainer: ObservableObject {
         supportsBrowserAuth
     }
 
+    private func updateUserDisplayName(from account: Account?) {
+        let trimmed = account?.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty {
+            configurationStore.saveUserDisplayName(trimmed)
+        }
+        appState.setCurrentUserDisplayName(configurationStore.loadUserDisplayName())
+    }
+
     private func configureIfNeeded() async {
         if let oauthConfiguration = try? YouTrackOAuthConfiguration.loadFromEnvironment() {
+            LoggingService.sync.info("Configuration: OAuth environment detected.")
             await applyOAuth(configuration: oauthConfiguration)
-            await bootstrap()
+            if authRepository.currentAccount != nil {
+                await bootstrap()
+            } else {
+                LoggingService.sync.info("Configuration: OAuth present but no saved auth state. Waiting for sign-in.")
+            }
             return
         }
 
         if let baseURL = configurationStore.loadBaseURL(), let token = configurationStore.loadToken(), !token.isEmpty {
-            await completeManualSetup(baseURL: baseURL, token: token)
+            var displayName = configurationStore.loadUserDisplayName()
+            if displayName == nil {
+                LoggingService.sync.info("Configuration: stored token found, validating user profile.")
+                displayName = try? await validateManualToken(baseURL: baseURL, token: token)
+            }
+            LoggingService.sync.info("Configuration: stored token found, bootstrapping.")
+            await completeManualSetup(baseURL: baseURL, token: token, userDisplayName: displayName)
         } else {
+            LoggingService.sync.info("Configuration: no saved credentials, setup required.")
             await MainActor.run {
                 requiresSetup = true
             }
@@ -569,8 +615,11 @@ final class AppContainer: ObservableObject {
 
     @MainActor
     private func applyOAuth(configuration: YouTrackOAuthConfiguration) async {
+        appState.resetInitialSyncState()
+        LoggingService.sync.info("OAuth: configuring repositories.")
         let appAuthRepository = AppAuthRepository(configuration: configuration, keychain: KeychainStorage(service: "com.potomushto.youtrek.auth"))
         authRepositorySwitcher.replace(with: appAuthRepository)
+        updateUserDisplayName(from: appAuthRepository.currentAccount)
         let tokenProvider = YouTrackAPITokenProvider { try await appAuthRepository.currentAccessToken() }
         let apiConfiguration = YouTrackAPIConfiguration(baseURL: configuration.apiBaseURL, tokenProvider: tokenProvider)
         let issueRepository = YouTrackIssueRepository(configuration: apiConfiguration, monitor: networkMonitor)
@@ -586,7 +635,7 @@ final class AppContainer: ObservableObject {
         await issueFieldRepositorySwitcher.replace(with: fieldRepository)
         await peopleRepositorySwitcher.replace(with: peopleRepository)
         supportsBrowserAuth = true
-        requiresSetup = false
+        requiresSetup = appAuthRepository.currentAccount == nil
     }
 }
 
@@ -595,6 +644,10 @@ private struct YouTrackTokenValidationUser: Decodable {
     let login: String?
     let name: String?
     let fullName: String?
+
+    var displayName: String? {
+        fullName ?? name ?? login
+    }
 }
 
 private extension AppContainer {
@@ -607,7 +660,7 @@ private extension AppContainer {
 
     static func requiresSetupOnLaunch(configurationStore: AppConfigurationStore) -> Bool {
         if (try? YouTrackOAuthConfiguration.loadFromEnvironment()) != nil {
-            return false
+            return !AppAuthRepository.hasSavedAuthState()
         }
 
         guard configurationStore.loadBaseURL() != nil,
@@ -621,6 +674,8 @@ private extension AppContainer {
 
 private extension AppContainer {
     func refreshSidebarData() async {
+        let startTime = Date()
+        LoggingService.sync.info("Sidebar refresh: start.")
         async let savedQueriesResult: [SavedQuery] = {
             do {
                 return try await syncCoordinator.enqueue(label: "Sync saved searches") {
@@ -634,6 +689,10 @@ private extension AppContainer {
 
         let resolvedSavedQueries = await savedQueriesResult
         let resolvedBoards = await boardsResult
+        let duration = Date().timeIntervalSince(startTime)
+        LoggingService.sync.info(
+            "Sidebar refresh: savedQueries=\(resolvedSavedQueries.count, privacy: .public) boards=\(resolvedBoards.count, privacy: .public) duration=\(duration, privacy: .public)s."
+        )
 
         let sections = buildSidebarSections(savedQueries: resolvedSavedQueries, boards: resolvedBoards)
         let preferredSelectionID = storedSidebarSelectionID() ?? preferredSelectionID(from: resolvedSavedQueries)
@@ -703,11 +762,13 @@ private extension AppContainer {
     func loadBoardsForSidebar() async -> [IssueBoard] {
         let cachedBoards = await boardLocalStore.loadBoards()
         do {
+            LoggingService.sync.info("Board sync: fetching remote boards.")
             let remoteBoards = try await syncCoordinator.enqueue(label: "Sync agile boards") {
                 try await self.boardRepositorySwitcher.fetchBoards()
             }
             appState.recordBoardListSyncCompleted()
             await boardLocalStore.saveRemoteBoards(remoteBoards)
+            LoggingService.sync.info("Board sync: fetched \(remoteBoards.count, privacy: .public) boards.")
             let syncDate = Date()
             for board in remoteBoards {
                 appState.recordBoardSync(boardID: board.id, at: syncDate)
@@ -715,6 +776,7 @@ private extension AppContainer {
             startBoardPrefetch(remoteBoards)
             return await boardLocalStore.loadBoards()
         } catch {
+            LoggingService.sync.error("Board sync: failed with \(error.localizedDescription, privacy: .public).")
             startBoardPrefetch(cachedBoards)
             return cachedBoards
         }

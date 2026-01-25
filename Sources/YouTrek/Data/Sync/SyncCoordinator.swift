@@ -1,6 +1,11 @@
 import Foundation
 
 actor SyncCoordinator {
+    struct IssueSyncResult: Sendable {
+        let issues: [IssueSummary]
+        let didSyncRemote: Bool
+    }
+
     private let issueRepository: IssueRepository
     private let localStore: IssueLocalStore
     private let operationQueue: SyncOperationQueue
@@ -19,18 +24,30 @@ actor SyncCoordinator {
     }
 
     func refreshIssues(using query: IssueQuery) async throws -> [IssueSummary] {
+        let result = await refreshIssuesWithStatus(using: query)
+        return result.issues
+    }
+
+    func refreshIssuesWithStatus(using query: IssueQuery) async -> IssueSyncResult {
         if AppDebugSettings.disableSyncing {
-            return await localStore.loadIssues(for: query)
+            let cached = await localStore.loadIssues(for: query)
+            LoggingService.sync.info("Issue sync: syncing disabled, loaded \(cached.count, privacy: .public) cached issues.")
+            return IssueSyncResult(issues: cached, didSyncRemote: false)
         }
         do {
-            return try await enqueue(label: "Sync issues") {
+            LoggingService.sync.info("Issue sync: fetching remote issues.")
+            let issues = try await enqueue(label: "Sync issues") {
                 let remote = try await self.issueRepository.fetchIssues(query: query)
                 await self.localStore.saveRemoteIssues(remote, for: query)
                 return await self.localStore.loadIssues(for: query)
             }
+            LoggingService.sync.info("Issue sync: remote issues fetched (\(issues.count, privacy: .public)).")
+            return IssueSyncResult(issues: issues, didSyncRemote: true)
         } catch {
             // On failure fall back to local cache.
-            return await localStore.loadIssues(for: query)
+            let cached = await localStore.loadIssues(for: query)
+            LoggingService.sync.error("Issue sync: failed (\(error.localizedDescription, privacy: .public)), loaded \(cached.count, privacy: .public) cached issues.")
+            return IssueSyncResult(issues: cached, didSyncRemote: false)
         }
     }
 

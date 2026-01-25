@@ -21,6 +21,9 @@ struct SetupWindow: View {
     @State private var mode: SignInMode = .token
     @State private var errorMessage: String?
     @State private var isValidatingToken = false
+    private var isPreparingWorkspace: Bool {
+        !container.requiresSetup && !container.appState.hasCompletedInitialSync
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -37,67 +40,95 @@ struct SetupWindow: View {
                 .tracking(2)
             }
 
-            Picker("", selection: $mode) {
-                ForEach(SignInMode.allCases, id: \.self) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-
-            VStack(alignment: .leading, spacing: 10) {
-                TextField("https://youtrack.jetbrains.com", text: $baseURLString, prompt: Text("YouTrack base URL"))
-                    .textContentType(.URL)
-                    .textFieldStyle(.roundedBorder)
-
-                if mode == .token {
-                    TextField("Permanent token", text: $token, prompt: Text("Paste your YouTrack token"))
-                        .textFieldStyle(.roundedBorder)
-                    if let tokenPortalURL {
-                        Link("How to create a personal token", destination: tokenPortalURL)
-                            .font(.callout)
-                            .underline()
+            if isPreparingWorkspace {
+                preparingContent
+            } else {
+                Picker("", selection: $mode) {
+                    ForEach(SignInMode.allCases, id: \.self) { mode in
+                        Text(mode.title).tag(mode)
                     }
-                } else {
-                    Label(browserHintText, systemImage: container.browserAuthAvailable ? "globe" : "exclamationmark.triangle.fill")
-                        .foregroundColor(container.browserAuthAvailable ? .secondary : .orange)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    TextField("https://youtrack.jetbrains.com", text: $baseURLString, prompt: Text("YouTrack base URL"))
+                        .textContentType(.URL)
+                        .textFieldStyle(.roundedBorder)
+
+                    if mode == .token {
+                        TextField("Permanent token", text: $token, prompt: Text("Paste your YouTrack token"))
+                            .textFieldStyle(.roundedBorder)
+                        if let tokenPortalURL {
+                            Link("How to create a personal token", destination: tokenPortalURL)
+                                .font(.callout)
+                                .underline()
+                        }
+                    } else {
+                        Label(browserHintText, systemImage: container.browserAuthAvailable ? "globe" : "exclamationmark.triangle.fill")
+                            .foregroundColor(container.browserAuthAvailable ? .secondary : .orange)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+
+                if isValidatingToken {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Validating token...")
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                }
+
+                if let errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
                         .font(.callout)
                         .textSelection(.enabled)
                 }
-            }
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity)
 
-            if isValidatingToken {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Validating token...")
+                HStack {
+                    Spacer()
+                    Button(action: submit) {
+                        Text(actionTitle)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.return, modifiers: [.command])
+                    .disabled(!canSubmit || isValidatingToken)
                 }
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            }
-
-            if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-                    .font(.callout)
-                    .textSelection(.enabled)
-            }
-
-            HStack {
-                Spacer()
-                Button(action: submit) {
-                    Text(actionTitle)
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.return, modifiers: [.command])
-                .disabled(!canSubmit || isValidatingToken)
             }
         }
         .padding(24)
         .frame(width: 480, height: 340)
         .modifier(GlassBackgroundModifier())
         .onAppear(perform: preload)
+    }
+
+    private var preparingContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(preparingTitle)
+                .font(.system(size: 24, weight: .semibold))
+            Text("YouTrek downloads as much as possible to minimize waiting time for most common tasks.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                ProgressView(value: container.appState.initialSyncProgress)
+                    .progressViewStyle(.linear)
+                    .animation(.easeInOut(duration: 0.35), value: container.appState.initialSyncProgress)
+                Text(syncStatusText)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", action: cancelInitialSync)
+                    .buttonStyle(.bordered)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var canSubmit: Bool {
@@ -115,6 +146,13 @@ struct SetupWindow: View {
         case .browser: "Sign in with Browser"
         case .token: "Sign In"
         }
+    }
+
+    private var preparingTitle: String {
+        if let name = container.appState.currentUserDisplayName {
+            return "Hey \(name), we are preparing your workspace"
+        }
+        return "Hey there, we are preparing your workspace"
     }
 
     private var browserHintText: String {
@@ -158,6 +196,24 @@ struct SetupWindow: View {
         }
     }
 
+    private var syncStatusText: String {
+        guard let label = container.appState.syncStatusMessage else {
+            return "Connecting to YouTrack..."
+        }
+        switch label {
+        case "Sync issues":
+            return "Downloading issues..."
+        case "Sync agile boards":
+            return "Downloading issue boards..."
+        case "Sync saved searches":
+            return "Downloading saved searches..."
+        case "Sync issue details":
+            return "Downloading issue details..."
+        default:
+            return "Syncing your workspace..."
+        }
+    }
+
     private func submit() {
         let trimmedURL = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -186,8 +242,8 @@ struct SetupWindow: View {
                 isValidatingToken = true
                 defer { isValidatingToken = false }
                 do {
-                    try await container.validateManualToken(baseURL: url, token: trimmedToken)
-                    await container.completeManualSetup(baseURL: url, token: trimmedToken)
+                    let displayName = try await container.validateManualToken(baseURL: url, token: trimmedToken)
+                    await container.completeManualSetup(baseURL: url, token: trimmedToken, userDisplayName: displayName)
                 } catch {
                     errorMessage = validationErrorMessage(for: error)
                 }
@@ -208,6 +264,12 @@ struct SetupWindow: View {
             return apiError.localizedDescription
         }
         return "Token validation failed: \(error.localizedDescription)"
+    }
+
+    private func cancelInitialSync() {
+        Task { @MainActor in
+            await container.cancelInitialSync()
+        }
     }
 }
 

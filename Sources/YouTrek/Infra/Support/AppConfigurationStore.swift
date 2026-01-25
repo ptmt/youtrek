@@ -5,6 +5,7 @@ struct AppConfigurationStore {
         static let baseURL = "com.potomushto.youtrek.config.base-url"
         static let tokenAccount = "com.potomushto.youtrek.config.token"
         static let lastSidebarSelectionID = "com.potomushto.youtrek.config.last-sidebar-selection"
+        static let userDisplayName = "com.potomushto.youtrek.config.user-display-name"
     }
 
     private let defaults: UserDefaults
@@ -34,6 +35,7 @@ struct AppConfigurationStore {
         do {
             tokenData = try keychain.load(account: Keys.tokenAccount)
         } catch {
+            LoggingService.sync.error("Keychain: failed to load token (\(error.localizedDescription, privacy: .public)).")
             return nil
         }
         guard let unwrapped = tokenData else { return nil }
@@ -47,6 +49,18 @@ struct AppConfigurationStore {
 
     func clearToken() throws {
         try keychain.delete(account: Keys.tokenAccount)
+    }
+
+    func loadUserDisplayName() -> String? {
+        defaults.string(forKey: Keys.userDisplayName)
+    }
+
+    func saveUserDisplayName(_ name: String) {
+        defaults.set(name, forKey: Keys.userDisplayName)
+    }
+
+    func clearUserDisplayName() {
+        defaults.removeObject(forKey: Keys.userDisplayName)
     }
 
     func loadLastSidebarSelectionID() -> String? {
