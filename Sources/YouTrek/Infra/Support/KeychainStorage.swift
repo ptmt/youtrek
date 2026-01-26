@@ -188,11 +188,13 @@ struct KeychainStorageError: Error, LocalizedError {
 }
 
 enum KeychainAccessGroupResolver {
+    private static let entitlementKey = "com.apple.security.keychain-access-groups"
+
     static func resolve(matchingSuffix suffix: String) -> String? {
         guard let task = SecTaskCreateFromSelf(nil) else { return nil }
         guard let value = SecTaskCopyValueForEntitlement(
             task,
-            kSecEntitlementKeychainAccessGroups as CFString,
+            entitlementKey as CFString,
             nil
         ) else {
             return nil
