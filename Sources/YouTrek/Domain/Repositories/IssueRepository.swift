@@ -36,33 +36,47 @@ extension IssueQuery {
     static func boardQuery(boardName: String, sprintName: String?, sprintFieldName: String? = nil) -> String {
         let trimmedBoard = boardName.trimmingCharacters(in: .whitespacesAndNewlines)
         let escapedBoard = escapeQueryValue(trimmedBoard)
+        let boardValue = quoteValue(escapedBoard)
         guard let sprintName else {
-            return "has: {Board \(escapedBoard)}"
+            return "Board: {\(boardValue)}"
         }
 
         let trimmedSprint = sprintName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedSprint.isEmpty else {
-            return "has: {Board \(escapedBoard)}"
+            return "Board: {\(boardValue)}"
         }
 
         let escapedSprint = escapeQueryValue(trimmedSprint)
-        let boardClause = "has: {Board \(escapedBoard)}"
+        let sprintValue = quoteValue(escapedSprint)
+        let boardClause = "Board: {\(boardValue)}"
         let fieldCandidate = sprintFieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         if !fieldCandidate.isEmpty {
-            let fieldName = escapeQueryValue(fieldCandidate)
-            return "\(boardClause) \(fieldName): {\(escapedSprint)}"
+            let fieldName = quoteIdentifierIfNeeded(escapeQueryValue(fieldCandidate))
+            return "\(boardClause) \(fieldName): {\(sprintValue)}"
         }
 
-        let boardAttributeName = trimmedBoard.isEmpty ? "Board" : "Board \(escapedBoard)"
-        return "\(boardAttributeName): {\(escapedSprint)}"
+        let boardAttributeName = trimmedBoard.isEmpty ? "Board" : "Board \(boardValue)"
+        return "\(boardAttributeName): {\(sprintValue)}"
     }
 
     private static func escapeQueryValue(_ value: String) -> String {
         var escaped = value.replacingOccurrences(of: "\\", with: "\\\\")
+        escaped = escaped.replacingOccurrences(of: "\"", with: "\\\"")
         escaped = escaped.replacingOccurrences(of: "{", with: "\\{")
         escaped = escaped.replacingOccurrences(of: "}", with: "\\}")
         return escaped
+    }
+
+    private static func quoteValue(_ value: String) -> String {
+        "\"\(value)\""
+    }
+
+    private static func quoteIdentifierIfNeeded(_ value: String) -> String {
+        if value.rangeOfCharacter(from: .whitespacesAndNewlines) != nil {
+            return "\"\(value)\""
+        }
+        return value
     }
 }
 

@@ -50,16 +50,15 @@ private struct MainWindowContent: View {
     @EnvironmentObject private var container: AppContainer
 
     var body: some View {
-        Group {
-            let needsSetupPresentation = container.requiresSetup || !container.appState.hasCompletedInitialSync
+        let needsSetupPresentation = container.requiresSetup || !container.appState.hasCompletedInitialSync
+        return Group {
             if needsSetupPresentation {
                 SetupWindow()
-                    .background(WindowAccessor(isSetup: true))
             } else {
                 RootView()
-                    .background(WindowAccessor(isSetup: false))
             }
         }
+        .background(WindowAccessor(isSetup: needsSetupPresentation))
     }
 }
 
@@ -110,26 +109,29 @@ private final class WindowAccessorView: NSView {
         if isSetup {
             if needsReconfigure {
                 window.styleMask = [.titled, .fullSizeContentView]
-                window.titlebarAppearsTransparent = true
-                window.titleVisibility = .hidden
-                window.standardWindowButton(.closeButton)?.isHidden = true
-                window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-                window.standardWindowButton(.zoomButton)?.isHidden = true
-                window.isMovableByWindowBackground = true
-                window.isOpaque = false
-                window.backgroundColor = .clear
-                window.hasShadow = true
-                if let contentView = window.contentView {
-                    contentView.wantsLayer = true
-                    if let layer = contentView.layer {
-                        layer.cornerRadius = 12
-                        if #available(macOS 10.13, *) {
-                            layer.cornerCurve = .continuous
-                        }
-                        layer.masksToBounds = true
-                    }
-                }
                 hasAppliedSetupPresentation = false
+            }
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.standardWindowButton(.closeButton)?.isHidden = true
+            window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+            window.standardWindowButton(.zoomButton)?.isHidden = true
+            if #available(macOS 11.0, *) {
+                window.titlebarSeparatorStyle = .none
+            }
+            window.isMovableByWindowBackground = true
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = true
+            if let contentView = window.contentView {
+                contentView.wantsLayer = true
+                if let layer = contentView.layer {
+                    layer.cornerRadius = 12
+                    if #available(macOS 10.13, *) {
+                        layer.cornerCurve = .continuous
+                    }
+                    layer.masksToBounds = true
+                }
             }
             if !hasAppliedSetupPresentation {
                 window.setContentSize(NSSize(width: 480, height: 340))
@@ -141,6 +143,12 @@ private final class WindowAccessorView: NSView {
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             window.titlebarAppearsTransparent = false
             window.titleVisibility = .visible
+            window.standardWindowButton(.closeButton)?.isHidden = false
+            window.standardWindowButton(.miniaturizeButton)?.isHidden = false
+            window.standardWindowButton(.zoomButton)?.isHidden = false
+            if #available(macOS 11.0, *) {
+                window.titlebarSeparatorStyle = .automatic
+            }
             window.isMovableByWindowBackground = false
             window.isOpaque = true
             window.backgroundColor = .windowBackgroundColor

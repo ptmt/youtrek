@@ -4,9 +4,11 @@ import Security
 
 struct KeychainStorage {
     let service: String
+    let accessGroup: String?
 
-    init(service: String) {
+    init(service: String, accessGroup: String? = nil) {
         self.service = service
+        self.accessGroup = accessGroup
     }
 
     func save(data: Data, account: String) throws {
@@ -65,6 +67,9 @@ struct KeychainStorage {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
+        if let accessGroup {
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
         if useDataProtectionKeychain {
             if #available(macOS 10.15, *) {
                 query[kSecUseDataProtectionKeychain as String] = true
@@ -76,6 +81,11 @@ struct KeychainStorage {
 
     private func loadData(account: String, useDataProtectionKeychain: Bool) throws -> Data? {
         var query = baseQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
+        if #available(macOS 10.10, *) {
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            query[kSecUseAuthenticationContext as String] = context
+        }
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -93,12 +103,10 @@ struct KeychainStorage {
 
     private func loadLegacy(account: String) throws -> Data? {
         var query = baseQuery(for: account, useDataProtectionKeychain: false)
-        if #available(macOS 11.0, *) {
+        if #available(macOS 10.10, *) {
             let context = LAContext()
             context.interactionNotAllowed = true
             query[kSecUseAuthenticationContext as String] = context
-        } else if #available(macOS 10.10, *) {
-            query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         }
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -117,12 +125,10 @@ struct KeychainStorage {
 
     private func deleteLegacy(account: String) throws {
         var query = baseQuery(for: account, useDataProtectionKeychain: false)
-        if #available(macOS 11.0, *) {
+        if #available(macOS 10.10, *) {
             let context = LAContext()
             context.interactionNotAllowed = true
             query[kSecUseAuthenticationContext as String] = context
-        } else if #available(macOS 10.10, *) {
-            query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         }
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound || status == errSecInteractionNotAllowed else {
@@ -138,7 +144,20 @@ struct KeychainStorage {
         // Ensure the keychain prompt includes a stable, non-empty label if it ever appears.
         query[kSecAttrLabel as String] = service
         let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else {
+        switch status {
+        case errSecSuccess:
+            return
+        case errSecDuplicateItem:
+            let updateQuery = baseQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
+            let attributes: [String: Any] = [
+                kSecValueData as String: data,
+                kSecAttrLabel as String: service
+            ]
+            let updateStatus = SecItemUpdate(updateQuery as CFDictionary, attributes as CFDictionary)
+            guard updateStatus == errSecSuccess else {
+                throw KeychainStorageError.operationFailed(status: updateStatus)
+            }
+        default:
             throw KeychainStorageError.operationFailed(status: status)
         }
     }
@@ -165,5 +184,20 @@ struct KeychainStorageError: Error, LocalizedError {
 
     static func operationFailed(status: OSStatus) -> KeychainStorageError {
         KeychainStorageError(status: status)
+    }
+}
+
+enum KeychainAccessGroupResolver {
+    static func resolve(matchingSuffix suffix: String) -> String? {
+        guard let task = SecTaskCreateFromSelf(nil) else { return nil }
+        guard let value = SecTaskCopyValueForEntitlement(
+            task,
+            kSecEntitlementKeychainAccessGroups as CFString,
+            nil
+        ) else {
+            return nil
+        }
+        let groups = value as? [String]
+        return groups?.first(where: { $0.hasSuffix(suffix) })
     }
 }

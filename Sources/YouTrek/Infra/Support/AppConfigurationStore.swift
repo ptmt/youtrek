@@ -8,15 +8,54 @@ struct AppConfigurationStore {
         static let userDisplayName = "com.potomushto.youtrek.config.user-display-name"
     }
 
+    private static let sharedSuiteName = "com.potomushto.youtrek.shared"
+    private static let sharedKeychainGroupSuffix = "com.potomushto.youtrek.shared"
+
     private let defaults: UserDefaults
     private let keychain: KeychainStorage
 
     init(
-        defaults: UserDefaults = .standard,
-        keychain: KeychainStorage = KeychainStorage(service: "com.potomushto.youtrek.config")
+        defaults: UserDefaults = AppConfigurationStore.defaultDefaults(),
+        keychain: KeychainStorage = KeychainStorage(
+            service: "com.potomushto.youtrek.config",
+            accessGroup: KeychainAccessGroupResolver.resolve(
+                matchingSuffix: AppConfigurationStore.sharedKeychainGroupSuffix
+            )
+        )
     ) {
         self.defaults = defaults
         self.keychain = keychain
+    }
+
+    private static func defaultDefaults() -> UserDefaults {
+        guard let sharedDefaults = UserDefaults(suiteName: sharedSuiteName) else {
+            return .standard
+        }
+        migrateDefaultsIfNeeded(from: .standard, to: sharedDefaults)
+        if let bundleIdentifier = Bundle.main.bundleIdentifier,
+           let bundleDefaults = UserDefaults(suiteName: bundleIdentifier),
+           bundleDefaults !== sharedDefaults {
+            migrateDefaultsIfNeeded(from: bundleDefaults, to: sharedDefaults)
+        }
+        return sharedDefaults
+    }
+
+    private static func migrateDefaultsIfNeeded(from source: UserDefaults, to target: UserDefaults) {
+        if target.string(forKey: Keys.baseURL) == nil,
+           let baseURL = source.string(forKey: Keys.baseURL),
+           !baseURL.isEmpty {
+            target.set(baseURL, forKey: Keys.baseURL)
+        }
+        if target.string(forKey: Keys.userDisplayName) == nil,
+           let name = source.string(forKey: Keys.userDisplayName),
+           !name.isEmpty {
+            target.set(name, forKey: Keys.userDisplayName)
+        }
+        if target.string(forKey: Keys.lastSidebarSelectionID) == nil,
+           let selection = source.string(forKey: Keys.lastSidebarSelectionID),
+           !selection.isEmpty {
+            target.set(selection, forKey: Keys.lastSidebarSelectionID)
+        }
     }
 
     func loadBaseURL() -> URL? {
@@ -30,6 +69,10 @@ struct AppConfigurationStore {
         defaults.set(baseURL.absoluteString, forKey: Keys.baseURL)
     }
 
+    func clearBaseURL() {
+        defaults.removeObject(forKey: Keys.baseURL)
+    }
+
     func loadToken() -> String? {
         let tokenData: Data?
         do {
@@ -38,17 +81,37 @@ struct AppConfigurationStore {
             LoggingService.sync.error("Keychain: failed to load token (\(error.localizedDescription, privacy: .public)).")
             return nil
         }
-        guard let unwrapped = tokenData else { return nil }
-        return String(data: unwrapped, encoding: .utf8)
+        if let unwrapped = tokenData {
+            return String(data: unwrapped, encoding: .utf8)
+        }
+        guard keychain.accessGroup != nil else { return nil }
+        do {
+            let legacyKeychain = KeychainStorage(service: "com.potomushto.youtrek.config")
+            if let legacyData = try legacyKeychain.load(account: Keys.tokenAccount) {
+                try? keychain.save(data: legacyData, account: Keys.tokenAccount)
+                return String(data: legacyData, encoding: .utf8)
+            }
+        } catch {
+            LoggingService.sync.error("Keychain: failed to load legacy token (\(error.localizedDescription, privacy: .public)).")
+        }
+        return nil
     }
 
     func save(token: String) throws {
         let data = Data(token.utf8)
         try keychain.save(data: data, account: Keys.tokenAccount)
+        if keychain.accessGroup != nil {
+            try? KeychainStorage(service: "com.potomushto.youtrek.config")
+                .save(data: data, account: Keys.tokenAccount)
+        }
     }
 
     func clearToken() throws {
         try keychain.delete(account: Keys.tokenAccount)
+        if keychain.accessGroup != nil {
+            try? KeychainStorage(service: "com.potomushto.youtrek.config")
+                .delete(account: Keys.tokenAccount)
+        }
     }
 
     func loadUserDisplayName() -> String? {
@@ -69,6 +132,10 @@ struct AppConfigurationStore {
 
     func saveLastSidebarSelectionID(_ id: String) {
         defaults.set(id, forKey: Keys.lastSidebarSelectionID)
+    }
+
+    func clearLastSidebarSelectionID() {
+        defaults.removeObject(forKey: Keys.lastSidebarSelectionID)
     }
 }
 

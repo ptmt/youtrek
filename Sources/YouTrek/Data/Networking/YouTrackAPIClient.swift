@@ -40,7 +40,7 @@ enum YouTrackAPIError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingAccessToken:
-            return "Missing OAuth access token. Sign in with YouTrack before retrying."
+            return "Missing access token. Sign in with YouTrack before retrying."
         case .unsupportedURL:
             return "Failed to construct valid YouTrack URL."
         case .transport(let underlying):

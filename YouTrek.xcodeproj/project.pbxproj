@@ -86,6 +86,7 @@
 
 /* Begin PBXFileReference section */
 		03C386EF2EEB26BC00BF8B68 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Sources/YouTrek/Assets.xcassets; sourceTree = "<group>"; };
+		DF3F7D0F15334A44B4448DD0 /* YouTrek.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YouTrek.entitlements; sourceTree = "<group>"; };
 		17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackProjectRepository.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4C5 /* SavedQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedQuery.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4C6 /* SavedQueryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedQueryRepository.swift; sourceTree = "<group>"; };
@@ -321,6 +322,7 @@
 			isa = PBXGroup;
 			children = (
 				03C386EF2EEB26BC00BF8B68 /* Assets.xcassets */,
+				DF3F7D0F15334A44B4448DD0 /* YouTrek.entitlements */,
 				95AC1BC550B7FDE44AD3CCE2 /* Sources */,
 				FBE4E18818B112C66C8092BE /* Tests */,
 				C2833F037193A549995747EC /* Products */,
@@ -747,6 +749,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 49PJNAT2WC;
+				CODE_SIGN_ENTITLEMENTS = YouTrek.entitlements;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
 				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
@@ -869,6 +872,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 49PJNAT2WC;
+				CODE_SIGN_ENTITLEMENTS = YouTrek.entitlements;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
 				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;

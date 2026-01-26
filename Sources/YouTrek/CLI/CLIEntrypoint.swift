@@ -110,6 +110,7 @@ private enum CLIRunner {
             try store.save(token: token)
 
             CLIOutput.printInfo("Token saved. Base URL: \(baseURL.absoluteString)")
+            await performInitialSync(baseURL: baseURL, token: token)
             return 0
         default:
             throw CLIError.invalidCommand("auth \(subcommand)")
@@ -551,6 +552,44 @@ private enum CLIRunner {
             return override
         }
         return store.loadToken()
+    }
+
+    private static func performInitialSync(baseURL: URL, token: String) async {
+        let configuration = YouTrackAPIConfiguration(baseURL: baseURL, tokenProvider: .constant(token))
+        let issueRepository = YouTrackIssueRepository(configuration: configuration)
+        let boardRepository = YouTrackIssueBoardRepository(configuration: configuration)
+        let savedQueryRepository = YouTrackSavedQueryRepository(configuration: configuration)
+        let issueStore = IssueLocalStore()
+        let boardStore = IssueBoardLocalStore()
+        let totalSteps = 3
+
+        CLIOutput.printInfo("Starting initial sync (1/\(totalSteps)): issues")
+        do {
+            let page = IssueQuery.Page(size: 50, offset: 0)
+            let query = IssueQuery(rawQuery: nil, search: "", filters: [], sort: .updated(descending: true), page: page)
+            let issues = try await issueRepository.fetchIssues(query: query)
+            await issueStore.saveRemoteIssues(issues, for: query)
+            CLIOutput.printInfo("Issues synced (\(issues.count)).")
+        } catch {
+            CLIOutput.printError("Issues sync failed: \(error.localizedDescription)")
+        }
+
+        CLIOutput.printInfo("Sync (2/\(totalSteps)): issue boards")
+        do {
+            let boards = try await boardRepository.fetchBoards()
+            await boardStore.saveRemoteBoards(boards)
+            CLIOutput.printInfo("Boards synced (\(boards.count)).")
+        } catch {
+            CLIOutput.printError("Boards sync failed: \(error.localizedDescription)")
+        }
+
+        CLIOutput.printInfo("Sync (3/\(totalSteps)): saved searches")
+        do {
+            let savedQueries = try await savedQueryRepository.fetchSavedQueries()
+            CLIOutput.printInfo("Saved searches synced (\(savedQueries.count)).")
+        } catch {
+            CLIOutput.printError("Saved searches sync failed: \(error.localizedDescription)")
+        }
     }
 
     private static func resolveProject(_ projects: [IssueProject], identifier: String) -> IssueProject? {

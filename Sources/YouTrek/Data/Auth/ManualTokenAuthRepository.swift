@@ -15,13 +15,13 @@ final class ManualTokenAuthRepository: AuthRepository {
     }
 
     func apply(token: String, displayName: String?) throws {
-        try configurationStore.save(token: token)
         sessionToken = token
         if let displayName, !displayName.isEmpty {
             configurationStore.saveUserDisplayName(displayName)
         }
         let resolvedName = configurationStore.loadUserDisplayName() ?? "YouTrack Token"
         currentAccount = Account(id: UUID(), displayName: resolvedName, avatarURL: nil)
+        try configurationStore.save(token: token)
     }
 
     func signIn() async throws {

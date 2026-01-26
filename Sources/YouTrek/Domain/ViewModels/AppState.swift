@@ -21,6 +21,7 @@ final class AppState: ObservableObject {
     @Published private(set) var isLoadingIssues: Bool = false
     @Published private(set) var hasCompletedIssueSync: Bool = false
     @Published private(set) var hasCompletedBoardSync: Bool = false
+    @Published private(set) var hasCompletedSavedSearchSync: Bool = false
     @Published private(set) var currentUserDisplayName: String? = nil
     @Published private(set) var boardSyncTimestamps: [String: Date] = [:]
     @Published private var boardSprintFilters: [String: BoardSprintFilter] = [:]
@@ -166,9 +167,19 @@ final class AppState: ObservableObject {
         hasCompletedBoardSync = true
     }
 
+    func recordSavedSearchSyncCompleted() {
+        hasCompletedSavedSearchSync = true
+    }
+
+    func resetBoardSyncState() {
+        boardSyncTimestamps = [:]
+        boardSprintFilters = [:]
+    }
+
     func resetInitialSyncState() {
         hasCompletedIssueSync = false
         hasCompletedBoardSync = false
+        hasCompletedSavedSearchSync = false
     }
 
     func setCurrentUserDisplayName(_ name: String?) {
@@ -181,8 +192,10 @@ final class AppState: ObservableObject {
     }
 
     var initialSyncProgress: Double {
-        let total: Double = 2
-        let completed: Double = (hasCompletedIssueSync ? 1 : 0) + (hasCompletedBoardSync ? 1 : 0)
+        let total: Double = 3
+        let completed: Double = (hasCompletedIssueSync ? 1 : 0)
+            + (hasCompletedBoardSync ? 1 : 0)
+            + (hasCompletedSavedSearchSync ? 1 : 0)
         return completed / total
     }
 

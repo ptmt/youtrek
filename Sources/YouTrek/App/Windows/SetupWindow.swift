@@ -20,7 +20,9 @@ struct SetupWindow: View {
     @State private var token: String = ""
     @State private var mode: SignInMode = .token
     @State private var errorMessage: String?
+    @State private var warningMessage: String?
     @State private var isValidatingToken = false
+    @State private var hasStartedSignIn = false
     private var isPreparingWorkspace: Bool {
         !container.requiresSetup && !container.appState.hasCompletedInitialSync
     }
@@ -74,18 +76,29 @@ struct SetupWindow: View {
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity)
 
-                if isValidatingToken {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Validating token...")
+                if shouldShowSetupProgress {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text(setupProgressText)
+                        }
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Setup progress")
+                        SetupNetworkStatusView(monitor: container.networkMonitor)
                     }
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
                 }
 
                 if let errorMessage {
                     Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
+                        .font(.callout)
+                        .textSelection(.enabled)
+                }
+
+                if let warningMessage {
+                    Label(warningMessage, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
                         .font(.callout)
                         .textSelection(.enabled)
                 }
@@ -102,8 +115,10 @@ struct SetupWindow: View {
             }
         }
         .padding(24)
-        .frame(width: 480, height: 340)
+        .frame(minWidth: 480, minHeight: 340)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .modifier(GlassBackgroundModifier())
+        .ignoresSafeArea()
         .onAppear(perform: preload)
     }
 
@@ -114,13 +129,20 @@ struct SetupWindow: View {
             Text("YouTrek downloads as much as possible to minimize waiting time for most common tasks.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 8) {
-                ProgressView(value: container.appState.initialSyncProgress)
-                    .progressViewStyle(.linear)
-                    .animation(.easeInOut(duration: 0.35), value: container.appState.initialSyncProgress)
-                Text(syncStatusText)
+            if let warningMessage {
+                Label(warningMessage, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                initialSyncProgressView
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(syncStatusText)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    SetupNetworkStatusView(monitor: container.networkMonitor)
+                }
             }
             HStack {
                 Spacer()
@@ -139,6 +161,17 @@ struct SetupWindow: View {
         case .token:
             return hasURL && !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
+    }
+
+    private var shouldShowSetupProgress: Bool {
+        isValidatingToken || hasStartedSignIn || container.appState.isSyncing
+    }
+
+    private var setupProgressText: String {
+        if isValidatingToken {
+            return "Validating token..."
+        }
+        return syncStatusText
     }
 
     private var actionTitle: String {
@@ -188,8 +221,6 @@ struct SetupWindow: View {
                 displayURL.deleteLastPathComponent()
             }
             baseURLString = displayURL.absoluteString
-        } else if baseURLString.isEmpty {
-            baseURLString = "https://youtrack.jetbrains.com"
         }
         if let storedToken = draft.token {
             token = storedToken
@@ -197,21 +228,99 @@ struct SetupWindow: View {
     }
 
     private var syncStatusText: String {
-        guard let label = container.appState.syncStatusMessage else {
+        if container.requiresSetup {
+            if hasStartedSignIn {
+                if mode == .browser {
+                    return "Waiting for browser sign-in..."
+                }
+                return "Signing in..."
+            }
             return "Connecting to YouTrack..."
         }
+
+        guard let label = resolvedSyncLabel else {
+            return "Preparing your workspace..."
+        }
+        let base: String
         switch label {
         case "Sync issues":
-            return "Downloading issues..."
+            base = "Fetching issues..."
         case "Sync agile boards":
-            return "Downloading issue boards..."
+            base = "Fetching issue boards..."
         case "Sync saved searches":
-            return "Downloading saved searches..."
+            base = "Fetching saved searches..."
         case "Sync issue details":
-            return "Downloading issue details..."
+            base = "Fetching issue details..."
         default:
-            return "Syncing your workspace..."
+            if label.lowercased().hasPrefix("sync ") {
+                let trimmed = label.dropFirst(5).lowercased()
+                base = "Fetching \(trimmed)..."
+            } else {
+                base = label
+            }
         }
+        if let suffix = syncStepSuffix {
+            return "\(base) \(suffix)"
+        }
+        return base
+    }
+
+    private var resolvedSyncLabel: String? {
+        if let label = container.appState.syncStatusMessage {
+            if isPreparingWorkspace {
+                switch label {
+                case "Sync issues" where container.appState.hasCompletedIssueSync:
+                    break
+                case "Sync agile boards" where container.appState.hasCompletedBoardSync:
+                    break
+                case "Sync saved searches" where container.appState.hasCompletedSavedSearchSync:
+                    break
+                default:
+                    return label
+                }
+            } else {
+                return label
+            }
+        }
+        if AppDebugSettings.disableSyncing {
+            return "Syncing disabled"
+        }
+        guard isPreparingWorkspace || hasStartedSignIn || container.appState.isSyncing else {
+            return nil
+        }
+        if !container.appState.hasCompletedIssueSync {
+            return "Sync issues"
+        }
+        if !container.appState.hasCompletedBoardSync {
+            return "Sync agile boards"
+        }
+        if !container.appState.hasCompletedSavedSearchSync {
+            return "Sync saved searches"
+        }
+        return nil
+    }
+
+    private var syncStepSuffix: String? {
+        guard isPreparingWorkspace || container.appState.isSyncing else { return nil }
+        let total = 3
+        let completed = (container.appState.hasCompletedIssueSync ? 1 : 0)
+            + (container.appState.hasCompletedBoardSync ? 1 : 0)
+            + (container.appState.hasCompletedSavedSearchSync ? 1 : 0)
+        return "(\(completed)/\(total))"
+    }
+
+    private var initialSyncProgressView: some View {
+        let progress = container.appState.initialSyncProgress
+        let view = Group {
+            if progress > 0 {
+                ProgressView(value: progress)
+            } else {
+                ProgressView()
+            }
+        }
+        return view
+            .progressViewStyle(.linear)
+            .animation(.easeInOut(duration: 0.35), value: progress)
     }
 
     private func submit() {
@@ -219,33 +328,47 @@ struct SetupWindow: View {
 
         guard let url = URL(string: trimmedURL), url.scheme?.hasPrefix("http") == true else {
             errorMessage = "Enter a valid YouTrack URL including https://"
+            hasStartedSignIn = false
             return
         }
 
         errorMessage = nil
+        warningMessage = nil
 
         switch mode {
         case .browser:
             guard container.browserAuthAvailable else {
                 errorMessage = "Browser sign-in needs YOUTRACK_CLIENT_ID in the environment."
+                hasStartedSignIn = false
                 return
             }
+            hasStartedSignIn = true
             container.setBaseURL(url)
             container.beginSignIn()
         case .token:
             let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedToken.isEmpty else {
                 errorMessage = "Paste a valid YouTrack permanent token."
+                hasStartedSignIn = false
                 return
             }
+            hasStartedSignIn = true
             Task { @MainActor in
                 isValidatingToken = true
                 defer { isValidatingToken = false }
                 do {
                     let displayName = try await container.validateManualToken(baseURL: url, token: trimmedToken)
-                    await container.completeManualSetup(baseURL: url, token: trimmedToken, userDisplayName: displayName)
+                    let tokenSaved = await container.completeManualSetup(
+                        baseURL: url,
+                        token: trimmedToken,
+                        userDisplayName: displayName
+                    )
+                    if !tokenSaved {
+                        warningMessage = "We couldn’t save your token to the keychain. You’ll need to sign in again after relaunching."
+                    }
                 } catch {
                     errorMessage = validationErrorMessage(for: error)
+                    hasStartedSignIn = false
                 }
             }
         }
@@ -269,7 +392,32 @@ struct SetupWindow: View {
     private func cancelInitialSync() {
         Task { @MainActor in
             await container.cancelInitialSync()
+            hasStartedSignIn = false
         }
+    }
+}
+
+private struct SetupNetworkStatusView: View {
+    @ObservedObject var monitor: NetworkRequestMonitor
+
+    var body: some View {
+        if let text = statusText {
+            Text(text)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+
+    private var statusText: String? {
+        guard let entry = monitor.entries.first else { return nil }
+        let verb = entry.method
+        let endpoint = entry.endpoint
+        if entry.isPending {
+            return "Request: \(verb) \(endpoint)"
+        }
+        return "Last request: \(verb) \(endpoint)"
     }
 }
 
