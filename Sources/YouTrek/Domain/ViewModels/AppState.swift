@@ -10,6 +10,8 @@ final class AppState: ObservableObject {
     @Published var selectedIssue: IssueSummary?
     @Published var selectedIssueIDs: Set<IssueSummary.ID> = []
     @Published private(set) var issues: [IssueSummary]
+    @Published private(set) var draftRecords: [IssueDraftRecord] = []
+    @Published var selectedDraftID: UUID?
     @Published private(set) var issueSeenUpdates: [IssueSummary.ID: Date] = [:]
     @Published private(set) var issueDetails: [IssueSummary.ID: IssueDetail] = [:]
     @Published private(set) var issueDetailLoadingIDs: Set<IssueSummary.ID> = []
@@ -42,6 +44,35 @@ final class AppState: ObservableObject {
         } else {
             selectedIssueIDs.removeAll()
         }
+    }
+
+    func setDrafts(_ drafts: [IssueDraftRecord]) {
+        draftRecords = drafts.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func addDraft(_ record: IssueDraftRecord) {
+        draftRecords.append(record)
+        draftRecords.sort { $0.createdAt > $1.createdAt }
+    }
+
+    func updateDraft(_ record: IssueDraftRecord) {
+        if let index = draftRecords.firstIndex(where: { $0.id == record.id }) {
+            draftRecords[index] = record
+        } else {
+            draftRecords.append(record)
+        }
+        draftRecords.sort { $0.createdAt > $1.createdAt }
+    }
+
+    func removeDraft(id: UUID) {
+        draftRecords.removeAll { $0.id == id }
+        if selectedDraftID == id {
+            selectedDraftID = nil
+        }
+    }
+
+    func draftRecord(id: UUID) -> IssueDraftRecord? {
+        draftRecords.first(where: { $0.id == id })
     }
 
     func updateIssue(_ issue: IssueSummary) {

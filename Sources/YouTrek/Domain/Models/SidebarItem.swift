@@ -8,6 +8,7 @@ struct SidebarItem: Identifiable, Hashable, Sendable {
         case createdByMe
         case board
         case savedSearch
+        case draft
     }
 
     let id: String
@@ -22,6 +23,7 @@ struct SidebarItem: Identifiable, Hashable, Sendable {
     var isInbox: Bool { kind == .inbox }
     var isBoard: Bool { kind == .board }
     var isSavedSearch: Bool { kind == .savedSearch }
+    var isDraft: Bool { kind == .draft }
     var savedQueryID: String? {
         guard isSavedSearch, id.hasPrefix("saved:") else { return nil }
         return String(id.dropFirst("saved:".count))
@@ -29,6 +31,10 @@ struct SidebarItem: Identifiable, Hashable, Sendable {
     var boardID: String? {
         guard isBoard, id.hasPrefix("board:") else { return nil }
         return String(id.dropFirst("board:".count))
+    }
+    var draftID: UUID? {
+        guard isDraft, id.hasPrefix("draft:") else { return nil }
+        return UUID(uuidString: String(id.dropFirst("draft:".count)))
     }
 }
 
@@ -133,6 +139,25 @@ extension SidebarItem {
                 page: page
             ),
             board: board
+        )
+    }
+
+    static func draft(_ record: IssueDraftRecord, page: IssueQuery.Page) -> SidebarItem {
+        let trimmedTitle = record.draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = trimmedTitle.isEmpty ? "Untitled Draft" : trimmedTitle
+        return SidebarItem(
+            id: "draft:\(record.id.uuidString)",
+            kind: .draft,
+            title: title,
+            iconName: "square.and.pencil",
+            query: IssueQuery(
+                rawQuery: nil,
+                search: "",
+                filters: [],
+                sort: .updated(descending: true),
+                page: page
+            ),
+            board: nil
         )
     }
 }

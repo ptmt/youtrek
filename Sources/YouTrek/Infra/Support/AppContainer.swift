@@ -25,10 +25,13 @@ final class AppContainer: ObservableObject {
     private let boardLocalStore: IssueBoardLocalStore
     private var lastLoadedIssueQuery: IssueQuery?
     private var cachedProjects: [IssueProject] = []
+    private var cachedSavedQueries: [SavedQuery] = []
+    private var cachedBoards: [IssueBoard] = []
     private var statusOptionsCache: [String: [IssueFieldOption]] = [:]
     private var priorityOptionsCache: [String: [IssueFieldOption]] = [:]
     private var hasStartedBoardPrefetch = false
     private var appStateCancellable: AnyCancellable?
+    private var draftSaveTask: Task<Void, Never>?
     @Published private(set) var supportsBrowserAuth: Bool = false
     @Published private(set) var requiresSetup: Bool = true
     private var oauthConfiguration: YouTrackOAuthConfiguration?
@@ -188,7 +191,12 @@ final class AppContainer: ObservableObject {
 
     func bootstrap() async {
         LoggingService.sync.info("Bootstrap start.")
+        let drafts = await issueDraftStore.loadDraftRecords(statuses: [.pending, .failed])
+        await MainActor.run {
+            appState.setDrafts(drafts)
+        }
         let cachedBoards = await boardLocalStore.loadBoards()
+        self.cachedBoards = cachedBoards
         LoggingService.sync.info("Bootstrap: cached boards loaded (\(cachedBoards.count, privacy: .public)).")
         let initialSections = buildSidebarSections(savedQueries: [], boards: cachedBoards)
         let initialPreferredSelectionID = storedSidebarSelectionID() ?? preferredSelectionID(from: [])
@@ -224,6 +232,7 @@ final class AppContainer: ObservableObject {
     }
 
     func loadIssues(for selection: SidebarItem) async {
+        guard !selection.isDraft else { return }
         if !appState.hasCompletedInitialSync {
             LoggingService.sync.info("Initial sync: loading issues for \(selection.id, privacy: .public).")
         }
@@ -442,23 +451,35 @@ final class AppContainer: ObservableObject {
     }
 
     func beginNewIssue(withTitle title: String) {
-        prepareNewIssueDraft(withTitle: title)
-        router.openNewIssueWindow()
-    }
-
-    func prepareNewIssueDraft(withTitle title: String) {
-        issueComposer.prepareNewIssue(title: title)
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let draft = IssueDraft(
+            title: trimmedTitle,
+            description: "",
+            projectID: "",
+            module: nil,
+            priority: .normal,
+            assigneeID: nil,
+            customFields: []
+        )
 
         Task { [weak self] in
             guard let self else { return }
-            guard let defaults = await issueDraftStore.latestSubmittedDraft() else { return }
+            let record = await issueDraftStore.saveDraft(draft)
             await MainActor.run {
-                self.issueComposer.applyDefaults(from: defaults)
+                appState.addDraft(record)
+                issueComposer.applyDraft(record.draft)
+                appState.selectedDraftID = record.id
+                rebuildSidebar(preferredSelectionID: "draft:\(record.id.uuidString)")
             }
         }
     }
 
     func submitIssueDraft() {
+        if let draftID = appState.selectedDraftID {
+            submitDraft(recordID: draftID)
+            return
+        }
+
         guard let draft = issueComposer.makeDraft() else { return }
         issueComposer.resetDraft()
 
@@ -479,6 +500,73 @@ final class AppContainer: ObservableObject {
         }
     }
 
+    func selectDraft(recordID: UUID) {
+        guard let record = appState.draftRecord(id: recordID) else { return }
+        issueComposer.applyDraft(record.draft)
+        appState.selectedDraftID = recordID
+    }
+
+    func updateDraft(recordID: UUID, draft: IssueDraft) {
+        guard var record = appState.draftRecord(id: recordID) else { return }
+        let previousTitle = record.draft.title
+        record.draft = draft
+        appState.updateDraft(record)
+        if previousTitle != draft.title {
+            rebuildSidebar()
+        }
+
+        draftSaveTask?.cancel()
+        draftSaveTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            _ = await self.issueDraftStore.updateDraft(id: recordID, draft: draft)
+        }
+    }
+
+    func discardDraft(recordID: UUID) {
+        Task { [weak self] in
+            guard let self else { return }
+            await self.issueDraftStore.deleteDraft(id: recordID)
+            await MainActor.run {
+                let wasSelected = appState.selectedDraftID == recordID
+                appState.removeDraft(id: recordID)
+                rebuildSidebar()
+                if wasSelected {
+                    issueComposer.resetDraft()
+                }
+            }
+        }
+    }
+
+    func submitDraft(recordID: UUID) {
+        guard let draft = issueComposer.makeDraft() else { return }
+
+        Task { [weak self] in
+            guard let self else { return }
+            _ = await issueDraftStore.updateDraft(id: recordID, draft: draft)
+            do {
+                let created = try await syncCoordinator.enqueue(label: "Create issue") {
+                    try await self.issueRepositorySwitcher.createIssue(draft: draft)
+                }
+                _ = await issueDraftStore.markDraftSubmitted(id: recordID)
+                await MainActor.run {
+                    self.appState.updateIssue(created)
+                    self.appState.removeDraft(id: recordID)
+                    self.rebuildSidebar()
+                    self.issueComposer.resetDraft()
+                }
+            } catch {
+                let record = await issueDraftStore.markDraftFailed(id: recordID, errorDescription: error.localizedDescription)
+                await MainActor.run {
+                    if let record {
+                        self.appState.updateDraft(record)
+                        self.rebuildSidebar()
+                    }
+                }
+            }
+        }
+    }
+
     func deleteSavedSearch(id: String) async {
         do {
             try await syncCoordinator.enqueue(label: "Delete saved search") {
@@ -493,6 +581,8 @@ final class AppContainer: ObservableObject {
             try await self.savedQueryRepositorySwitcher.fetchSavedQueries()
         }) ?? []
         let boards = await boardLocalStore.loadBoards()
+        cachedSavedQueries = savedQueries
+        cachedBoards = boards
         let sections = buildSidebarSections(savedQueries: savedQueries, boards: boards)
         let preferredSelectionID = preferredSelectionID(from: savedQueries)
         appState.updateSidebar(sections: sections, preferredSelectionID: preferredSelectionID)
@@ -762,6 +852,8 @@ private extension AppContainer {
         appState.recordSavedSearchSyncCompleted()
         let resolvedBoards = await boardsResult
         appState.recordBoardListSyncCompleted()
+        cachedSavedQueries = resolvedSavedQueries
+        cachedBoards = resolvedBoards
         let duration = Date().timeIntervalSince(startTime)
         LoggingService.sync.info(
             "Sidebar refresh: savedQueries=\(resolvedSavedQueries.count, privacy: .public) boards=\(resolvedBoards.count, privacy: .public) duration=\(duration, privacy: .public)s."
@@ -792,6 +884,7 @@ private extension AppContainer {
         smartItems.append(.assignedToMe(page: page))
         smartItems.append(.createdByMe(page: page))
 
+        let draftItems = appState.draftRecords.map { SidebarItem.draft($0, page: page) }
         let savedItems = visibleSavedQueries.map { SidebarItem.savedSearch($0, page: page) }
         let favoriteBoards = boards.filter(\.isFavorite)
         let boardItems = favoriteBoards.map { SidebarItem.board($0, page: page) }
@@ -800,6 +893,14 @@ private extension AppContainer {
         if !smartItems.isEmpty {
             sections.append(SidebarSection(id: "smart", title: "Smart Filters", items: smartItems))
         }
+        sections.append(
+            SidebarSection(
+                id: "drafts",
+                title: "Drafts",
+                items: draftItems,
+                emptyMessage: draftItems.isEmpty ? "No drafts yet" : nil
+            )
+        )
         let boardEmptyMessage = appState.hasCompletedBoardSync ? "No favorite boards" : nil
         sections.append(
             SidebarSection(
@@ -813,6 +914,11 @@ private extension AppContainer {
             sections.append(SidebarSection(id: "saved", title: "Saved Searches", items: savedItems))
         }
         return sections
+    }
+
+    func rebuildSidebar(preferredSelectionID: SidebarItem.ID? = nil) {
+        let sections = buildSidebarSections(savedQueries: cachedSavedQueries, boards: cachedBoards)
+        appState.updateSidebar(sections: sections, preferredSelectionID: preferredSelectionID)
     }
 
     func storedSidebarSelectionID() -> SidebarItem.ID? {
@@ -1191,6 +1297,7 @@ private extension AppContainer {
         }
         return project.name.caseInsensitiveCompare(name) == .orderedSame
     }
+
 }
 
 @MainActor
@@ -1236,6 +1343,16 @@ final class IssueComposer: ObservableObject {
         draftFields = []
     }
 
+    func applyDraft(_ draft: IssueDraft) {
+        draftTitle = draft.title
+        draftDescription = draft.description
+        draftProjectID = draft.projectID
+        draftModule = draft.module ?? ""
+        draftAssigneeID = draft.assigneeID ?? ""
+        draftPriority = draft.priority
+        draftFields = draft.customFields
+    }
+
     func applyDefaults(from draft: IssueDraft) {
         if draftProjectID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             draftProjectID = draft.projectID
@@ -1258,6 +1375,24 @@ final class IssueComposer: ObservableObject {
         guard !trimmedTitle.isEmpty, !trimmedProject.isEmpty else { return nil }
 
         let trimmedDescription = draftDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedModule = draftModule.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAssignee = draftAssigneeID.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return IssueDraft(
+            title: trimmedTitle,
+            description: trimmedDescription,
+            projectID: trimmedProject,
+            module: trimmedModule.isEmpty ? nil : trimmedModule,
+            priority: draftPriority,
+            assigneeID: trimmedAssignee.isEmpty ? nil : trimmedAssignee,
+            customFields: normalizedDraftFields(excluding: ["priority", "assignee", "subsystem", "module"])
+        )
+    }
+
+    func draftSnapshot() -> IssueDraft {
+        let trimmedTitle = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDescription = draftDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedProject = draftProjectID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedModule = draftModule.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedAssignee = draftAssigneeID.trimmingCharacters(in: .whitespacesAndNewlines)
 

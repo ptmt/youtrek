@@ -58,6 +58,13 @@ actor IssueDraftStore {
         return record
     }
 
+    func loadDraftRecords(statuses: [IssueDraftRecord.Status]? = nil) -> [IssueDraftRecord] {
+        let records = loadRecords()
+        guard let statuses else { return records }
+        let allowed = Set(statuses)
+        return records.filter { allowed.contains($0.status) }
+    }
+
     @discardableResult
     func markDraftSubmitted(id: UUID) -> IssueDraftRecord? {
         updateRecord(id: id, status: .submitted, error: nil)
@@ -74,6 +81,21 @@ actor IssueDraftStore {
             .sorted { ($0.submittedAt ?? .distantPast) > ($1.submittedAt ?? .distantPast) }
             .first?
             .draft
+    }
+
+    @discardableResult
+    func updateDraft(id: UUID, draft: IssueDraft) -> IssueDraftRecord? {
+        var records = loadRecords()
+        guard let index = records.firstIndex(where: { $0.id == id }) else { return nil }
+        records[index].draft = draft
+        persist(records)
+        return records[index]
+    }
+
+    func deleteDraft(id: UUID) {
+        var records = loadRecords()
+        records.removeAll { $0.id == id }
+        persist(records)
     }
 
     private func updateRecord(id: UUID, status: IssueDraftRecord.Status, error: String?) -> IssueDraftRecord? {

@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 
 struct AppMenus: Commands {
-    @Environment(\.openWindow) private var openWindow
     @ObservedObject var container: AppContainer
 
     var body: some Commands {
@@ -40,10 +39,7 @@ struct AppMenus: Commands {
 
     private func installCLI() {
         do {
-            let message = try CLIInstaller.installSymlink(
-                at: URL(fileURLWithPath: CLIInstaller.defaultInstallPath),
-                force: false
-            )
+            let message = try CLIInstaller.installDefault(force: false)
             showAlert(title: "CLI Installed", message: message, style: .informational)
         } catch {
             showAlert(title: "CLI Install Failed", message: error.localizedDescription, style: .warning)
@@ -51,8 +47,7 @@ struct AppMenus: Commands {
     }
 
     private func openNewIssue() {
-        container.prepareNewIssueDraft(withTitle: "")
-        openWindow(id: SceneID.newIssue.rawValue)
+        container.beginNewIssue(withTitle: "")
     }
 
     private func showAlert(title: String, message: String, style: NSAlert.Style) {

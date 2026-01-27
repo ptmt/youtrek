@@ -447,9 +447,13 @@ private enum CLIRunner {
             return 0
         }
 
-        let pathString = parsed.options["--path"] ?? CLIInstaller.defaultInstallPath
-        let installURL = URL(fileURLWithPath: pathString)
-        let message = try CLIInstaller.installSymlink(at: installURL, force: parsed.flags.contains("--force"))
+        let message: String
+        if let pathString = parsed.options["--path"] {
+            let installURL = CLIInstaller.resolveInstallURL(pathString)
+            message = try CLIInstaller.installSymlink(at: installURL, force: parsed.flags.contains("--force"))
+        } else {
+            message = try CLIInstaller.installDefault(force: parsed.flags.contains("--force"))
+        }
         CLIOutput.printInfo(message)
         return 0
     }
@@ -744,6 +748,10 @@ private struct CLIOutput {
 
             Default path:
               /usr/local/bin/youtrek
+
+            User-level paths:
+              ~/.local/bin/youtrek
+              ~/bin/youtrek
             """
         )
     }

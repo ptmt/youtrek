@@ -4,15 +4,13 @@ struct RootView: View {
     @EnvironmentObject private var container: AppContainer
 
     var body: some View {
-        RootContentView(appState: container.appState, router: container.router)
+        RootContentView(appState: container.appState)
             .environmentObject(container)
     }
 }
 
 private struct RootContentView: View {
     @EnvironmentObject private var container: AppContainer
-    @Environment(\.openWindow) private var openWindow
-    @ObservedObject private var router: WindowRouter
     @ObservedObject var appState: AppState
     @State private var searchQuery: String = ""
     @State private var isInspectorVisible: Bool = true
@@ -26,9 +24,8 @@ private struct RootContentView: View {
         appState.issues.filter { appState.selectedIssueIDs.contains($0.id) }
     }
 
-    init(appState: AppState, router: WindowRouter) {
+    init(appState: AppState) {
         self.appState = appState
-        self._router = ObservedObject(initialValue: router)
     }
 
     var body: some View {
@@ -99,14 +96,15 @@ private struct RootContentView: View {
         .onChange(of: appState.selectedSidebarItem) { _, selection in
             guard let selection else { return }
             container.recordSidebarSelection(selection)
-            Task {
-                await container.loadIssues(for: selection)
+            if selection.isDraft, let draftID = selection.draftID {
+                appState.selectedDraftID = draftID
+                container.selectDraft(recordID: draftID)
+            } else {
+                appState.selectedDraftID = nil
+                Task {
+                    await container.loadIssues(for: selection)
+                }
             }
-        }
-        .onChange(of: router.shouldOpenNewIssueWindow) { _, shouldOpen in
-            guard shouldOpen else { return }
-            openWindow(id: SceneID.newIssue.rawValue)
-            router.consumeNewIssueWindowFlag()
         }
         .sheet(item: $appState.activeConflict) { conflict in
             ConflictResolutionDialog(conflict: conflict)
@@ -140,7 +138,18 @@ private struct RootContentView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-                if let selection = appState.selectedSidebarItem, selection.isBoard {
+        if let selection = appState.selectedSidebarItem, selection.isDraft {
+            if let draftID = selection.draftID,
+               let record = appState.draftRecord(id: draftID) {
+                DraftIssueDetailView(record: record)
+            } else {
+                ContentUnavailableView(
+                    "Draft not found",
+                    systemImage: "square.and.pencil",
+                    description: Text("The selected draft is no longer available.")
+                )
+            }
+        } else if let selection = appState.selectedSidebarItem, selection.isBoard {
             BoardContentView(
                 appState: appState,
                 selection: selection,
