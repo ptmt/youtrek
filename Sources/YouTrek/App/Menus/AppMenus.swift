@@ -2,19 +2,20 @@ import AppKit
 import SwiftUI
 
 struct AppMenus: Commands {
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject var container: AppContainer
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Issue") {
-                container.beginNewIssue(withTitle: "")
+                openNewIssue()
             }
             .keyboardShortcut("n", modifiers: [.command])
         }
 
         CommandMenu("Issues") {
             Button("New Issue") {
-                container.beginNewIssue(withTitle: "")
+                openNewIssue()
             }
 
             Button("Command Palette…") {
@@ -47,6 +48,11 @@ struct AppMenus: Commands {
         } catch {
             showAlert(title: "CLI Install Failed", message: error.localizedDescription, style: .warning)
         }
+    }
+
+    private func openNewIssue() {
+        container.prepareNewIssueDraft(withTitle: "")
+        openWindow(id: SceneID.newIssue.rawValue)
     }
 
     private func showAlert(title: String, message: String, style: NSAlert.Style) {

@@ -4,7 +4,7 @@ struct RootView: View {
     @EnvironmentObject private var container: AppContainer
 
     var body: some View {
-        RootContentView(appState: container.appState)
+        RootContentView(appState: container.appState, router: container.router)
             .environmentObject(container)
     }
 }
@@ -12,6 +12,7 @@ struct RootView: View {
 private struct RootContentView: View {
     @EnvironmentObject private var container: AppContainer
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var router: WindowRouter
     @ObservedObject var appState: AppState
     @State private var searchQuery: String = ""
     @State private var isInspectorVisible: Bool = true
@@ -23,6 +24,11 @@ private struct RootContentView: View {
     @State private var showBoardDiagnostics: Bool = AppDebugSettings.showBoardDiagnostics
     private var selectedIssues: [IssueSummary] {
         appState.issues.filter { appState.selectedIssueIDs.contains($0.id) }
+    }
+
+    init(appState: AppState, router: WindowRouter) {
+        self.appState = appState
+        self._router = ObservedObject(initialValue: router)
     }
 
     var body: some View {
@@ -97,10 +103,10 @@ private struct RootContentView: View {
                 await container.loadIssues(for: selection)
             }
         }
-        .onChange(of: container.router.shouldOpenNewIssueWindow) { _, shouldOpen in
+        .onChange(of: router.shouldOpenNewIssueWindow) { _, shouldOpen in
             guard shouldOpen else { return }
             openWindow(id: SceneID.newIssue.rawValue)
-            container.router.consumeNewIssueWindowFlag()
+            router.consumeNewIssueWindowFlag()
         }
         .sheet(item: $appState.activeConflict) { conflict in
             ConflictResolutionDialog(conflict: conflict)

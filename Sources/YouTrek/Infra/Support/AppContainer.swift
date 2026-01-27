@@ -442,8 +442,12 @@ final class AppContainer: ObservableObject {
     }
 
     func beginNewIssue(withTitle title: String) {
-        issueComposer.prepareNewIssue(title: title)
+        prepareNewIssueDraft(withTitle: title)
         router.openNewIssueWindow()
+    }
+
+    func prepareNewIssueDraft(withTitle title: String) {
+        issueComposer.prepareNewIssue(title: title)
 
         Task { [weak self] in
             guard let self else { return }
