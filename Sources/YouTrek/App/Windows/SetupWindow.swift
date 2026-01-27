@@ -238,7 +238,7 @@ struct SetupWindow: View {
             return "Connecting to YouTrack..."
         }
 
-        guard let label = resolvedSyncLabel else {
+        guard let label = baseSyncLabel else {
             return "Preparing your workspace..."
         }
         let base: String
@@ -265,7 +265,7 @@ struct SetupWindow: View {
         return base
     }
 
-    private var resolvedSyncLabel: String? {
+    private var baseSyncLabel: String? {
         if let label = container.appState.syncStatusMessage {
             if isPreparingWorkspace {
                 switch label {
@@ -300,17 +300,46 @@ struct SetupWindow: View {
         return nil
     }
 
-    private var syncStepSuffix: String? {
-        guard isPreparingWorkspace || container.appState.isSyncing else { return nil }
+    private struct SyncStepInfo {
+        let current: Int
+        let completed: Int
+        let total: Int
+        let isActive: Bool
+    }
+
+    private var syncStepInfo: SyncStepInfo {
         let total = 3
         let completed = (container.appState.hasCompletedIssueSync ? 1 : 0)
             + (container.appState.hasCompletedBoardSync ? 1 : 0)
             + (container.appState.hasCompletedSavedSearchSync ? 1 : 0)
-        return "(\(completed)/\(total))"
+        let isActive = isPreparingWorkspace || container.appState.isSyncing || hasStartedSignIn
+        let labelStep: Int? = {
+            switch baseSyncLabel {
+            case "Sync issues": return 1
+            case "Sync agile boards": return 2
+            case "Sync saved searches": return 3
+            default: return nil
+            }
+        }()
+
+        var current = max(completed, labelStep ?? completed)
+        if current == 0, isActive {
+            current = 1
+        } else if isPreparingWorkspace, completed < total, current == completed {
+            current = min(total, completed + 1)
+        }
+        return SyncStepInfo(current: current, completed: completed, total: total, isActive: isActive)
+    }
+
+    private var syncStepSuffix: String? {
+        let info = syncStepInfo
+        guard info.isActive else { return nil }
+        return "(\(info.current)/\(info.total))"
     }
 
     private var initialSyncProgressView: some View {
-        let progress = container.appState.initialSyncProgress
+        let info = syncStepInfo
+        let progress = info.isActive ? Double(info.current) / Double(info.total) : container.appState.initialSyncProgress
         let view = Group {
             if progress > 0 {
                 ProgressView(value: progress)

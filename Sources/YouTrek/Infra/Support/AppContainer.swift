@@ -28,6 +28,7 @@ final class AppContainer: ObservableObject {
     private var statusOptionsCache: [String: [IssueFieldOption]] = [:]
     private var priorityOptionsCache: [String: [IssueFieldOption]] = [:]
     private var hasStartedBoardPrefetch = false
+    private var appStateCancellable: AnyCancellable?
     @Published private(set) var supportsBrowserAuth: Bool = false
     @Published private(set) var requiresSetup: Bool = true
     private var oauthConfiguration: YouTrackOAuthConfiguration?
@@ -69,6 +70,9 @@ final class AppContainer: ObservableObject {
         self.issueFieldRepositorySwitcher = issueFieldRepositorySwitcher
         self.peopleRepositorySwitcher = peopleRepositorySwitcher
         self.boardLocalStore = boardLocalStore
+        self.appStateCancellable = appState.objectWillChange.sink { [weak self] in
+            self?.objectWillChange.send()
+        }
     }
 
     static let live: AppContainer = {

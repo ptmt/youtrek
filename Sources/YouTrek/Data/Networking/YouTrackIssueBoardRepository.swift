@@ -18,17 +18,8 @@ final class YouTrackIssueBoardRepository: IssueBoardRepository, Sendable {
     }
 
     func fetchBoards() async throws -> [IssueBoard] {
-        let summaries = try await fetchBoardSummaries()
-        let favorites = summaries.filter(\.isFavorite)
-        guard !favorites.isEmpty else { return summaries }
-
-        let detailedByID = await fetchFavoriteBoardDetails(for: favorites)
-        guard !detailedByID.isEmpty else { return summaries }
-
-        return summaries.map { board in
-            guard let detail = detailedByID[board.id] else { return board }
-            return applyingFavorite(board.isFavorite, to: detail)
-        }
+        // Sidebar only needs summary data; fetch full details lazily per board.
+        return try await fetchBoardSummaries()
     }
 
     func fetchBoardSummaries() async throws -> [IssueBoard] {

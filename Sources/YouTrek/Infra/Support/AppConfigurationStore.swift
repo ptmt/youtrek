@@ -32,11 +32,6 @@ struct AppConfigurationStore {
             return .standard
         }
         migrateDefaultsIfNeeded(from: .standard, to: sharedDefaults)
-        if let bundleIdentifier = Bundle.main.bundleIdentifier,
-           let bundleDefaults = UserDefaults(suiteName: bundleIdentifier),
-           bundleDefaults !== sharedDefaults {
-            migrateDefaultsIfNeeded(from: bundleDefaults, to: sharedDefaults)
-        }
         return sharedDefaults
     }
 
