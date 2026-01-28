@@ -18,6 +18,7 @@ struct SetupWindow: View {
 
     @State private var baseURLString: String = ""
     @State private var token: String = ""
+    // TODO: Restore the OAuth vs Personal Token switch once browser sign-in is ready to ship.
     @State private var mode: SignInMode = .token
     @State private var errorMessage: String?
     @State private var warningMessage: String?
@@ -28,6 +29,18 @@ struct SetupWindow: View {
     }
 
     var body: some View {
+        ZStack(alignment: .topLeading) {
+            SetupWindowBackground()
+            content
+        }
+        .frame(minWidth: 480, minHeight: 340)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .preferredColorScheme(.dark)
+        .ignoresSafeArea()
+        .onAppear(perform: preload)
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 0) {
@@ -45,14 +58,7 @@ struct SetupWindow: View {
             if isPreparingWorkspace {
                 preparingContent
             } else {
-                Picker("", selection: $mode) {
-                    ForEach(SignInMode.allCases, id: \.self) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-
+                // TODO: Bring back the OAuth vs Personal Token segmented control when browser sign-in is restored.
                 VStack(alignment: .leading, spacing: 10) {
                     TextField("https://youtrack.jetbrains.com", text: $baseURLString, prompt: Text("YouTrack base URL"))
                         .textContentType(.URL)
@@ -97,29 +103,39 @@ struct SetupWindow: View {
                 }
 
                 if let warningMessage {
-                    Label(warningMessage, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Keychain warning", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.callout)
+                        Text(warningMessage)
+                            .foregroundStyle(.orange)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                        Button("Copy Details") {
+                            copyToPasteboard(warningMessage)
+                        }
                         .font(.callout)
-                        .textSelection(.enabled)
+                    }
                 }
 
                 HStack {
                     Spacer()
                     Button(action: submit) {
                         Text(actionTitle)
+                            .font(.title3.weight(.semibold))
+                            .padding(.horizontal, 26)
+                            .padding(.vertical, 6)
                     }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(minWidth: 220)
                     .keyboardShortcut(.return, modifiers: [.command])
                     .disabled(!canSubmit || isValidatingToken)
                 }
             }
         }
         .padding(24)
-        .frame(minWidth: 480, minHeight: 340)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .modifier(GlassBackgroundModifier())
-        .ignoresSafeArea()
-        .onAppear(perform: preload)
     }
 
     private var preparingContent: some View {
@@ -387,13 +403,16 @@ struct SetupWindow: View {
                 defer { isValidatingToken = false }
                 do {
                     let displayName = try await container.validateManualToken(baseURL: url, token: trimmedToken)
-                    let tokenSaved = await container.completeManualSetup(
+                    let outcome = await container.completeManualSetup(
                         baseURL: url,
                         token: trimmedToken,
-                        userDisplayName: displayName
+                        userDisplayName: displayName,
+                        allowKeychainInteraction: true
                     )
-                    if !tokenSaved {
-                        warningMessage = "We couldn’t save your token to the keychain. You’ll need to sign in again after relaunching."
+                    if !outcome.saved {
+                        let warning = tokenSaveWarningMessage(error: outcome.errorMessage)
+                        warningMessage = warning
+                        LoggingService.sync.error("Keychain warning: \(warning, privacy: .public)")
                     }
                 } catch {
                     errorMessage = validationErrorMessage(for: error)
@@ -416,6 +435,27 @@ struct SetupWindow: View {
             return apiError.localizedDescription
         }
         return "Token validation failed: \(error.localizedDescription)"
+    }
+
+    private func tokenSaveWarningMessage(error: String?) -> String {
+        let detail = error?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reason = detail?.isEmpty == false ? detail! : "Unknown (no OSStatus returned)"
+        let groups = KeychainAccessGroupResolver.availableGroups()
+        let groupList = groups.isEmpty ? "(none)" : groups.joined(separator: ", ")
+        return """
+        We couldn’t save your token to the keychain.
+        Reason: \(reason)
+        Keychain item: service "com.potomushto.youtrek.config", account "com.potomushto.youtrek.config.token".
+        Keychain access groups: \(groupList)
+        Tip: ensure the app is signed with Keychain Sharing enabled if you expect access groups to be present.
+        You’ll need to sign in again after relaunching.
+        """
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
     }
 
     private func cancelInitialSync() {
@@ -450,28 +490,30 @@ private struct SetupNetworkStatusView: View {
     }
 }
 
-private struct GlassBackgroundModifier: ViewModifier {
-    private let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-
-    func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content.glassEffect(.regular, in: shape)
-        } else {
-            content
-                .background(VisualEffectBackground())
-                .clipShape(shape)
+private struct SetupWindowBackground: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.06, green: 0.07, blue: 0.1),
+                    Color(red: 0.03, green: 0.04, blue: 0.06)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            RadialGradient(
+                colors: [
+                    Color.white.opacity(0.12),
+                    Color.clear
+                ],
+                center: .topLeading,
+                startRadius: 40,
+                endRadius: 260
+            )
+            .blendMode(.screen)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                .padding(14)
         }
     }
-}
-
-private struct VisualEffectBackground: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .hudWindow
-        view.blendingMode = .behindWindow
-        view.state = .active
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }

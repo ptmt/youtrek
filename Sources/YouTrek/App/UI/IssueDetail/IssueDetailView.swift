@@ -414,7 +414,7 @@ private struct MetadataIcon: View {
     }
 }
 
-private struct ProjectEditor: View {
+struct ProjectEditor: View {
     @EnvironmentObject private var container: AppContainer
     let issue: IssueSummary
     let projects: [IssueProject]

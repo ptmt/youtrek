@@ -469,6 +469,7 @@ final class AppContainer: ObservableObject {
                 appState.addDraft(record)
                 issueComposer.applyDraft(record.draft)
                 appState.selectedDraftID = record.id
+                appState.selectedSidebarItem = nil
                 rebuildSidebar(preferredSelectionID: "draft:\(record.id.uuidString)")
             }
         }
@@ -660,18 +661,38 @@ final class AppContainer: ObservableObject {
         return user.displayName
     }
 
-    func completeManualSetup(baseURL: URL, token: String, userDisplayName: String? = nil) async -> Bool {
+    struct ManualTokenSaveOutcome: Sendable {
+        let saved: Bool
+        let errorMessage: String?
+    }
+
+    func completeManualSetup(
+        baseURL: URL,
+        token: String,
+        userDisplayName: String? = nil,
+        allowKeychainInteraction: Bool = false
+    ) async -> ManualTokenSaveOutcome {
         let apiBaseURL = Self.apiBaseURL(from: baseURL)
 
         appState.resetInitialSyncState()
         configurationStore.save(baseURL: apiBaseURL)
         let manualAuth = ManualTokenAuthRepository(configurationStore: configurationStore)
         var tokenSaved = true
+        var tokenSaveError: String?
         do {
             try manualAuth.apply(token: token, displayName: userDisplayName)
         } catch {
             tokenSaved = false
+            tokenSaveError = error.localizedDescription
             LoggingService.sync.error("Manual setup: failed to save token (\(error.localizedDescription, privacy: .public)).")
+        }
+        if tokenSaved {
+            let storedToken = configurationStore.loadToken(allowInteraction: allowKeychainInteraction)
+            if storedToken?.isEmpty ?? true {
+                tokenSaved = false
+                tokenSaveError = "Saved token could not be read back from Keychain."
+                LoggingService.sync.error("Manual setup: token verification failed after save.")
+            }
         }
         updateUserDisplayName(from: manualAuth.currentAccount)
         LoggingService.sync.info("Manual setup: repositories configured for \(apiBaseURL.absoluteString, privacy: .public).")
@@ -699,7 +720,7 @@ final class AppContainer: ObservableObject {
             requiresSetup = false
         }
         await bootstrap()
-        return tokenSaved
+        return ManualTokenSaveOutcome(saved: tokenSaved, errorMessage: tokenSaveError)
     }
 
     func storedConfigurationDraft() -> (baseURL: URL?, token: String?) {
@@ -741,7 +762,15 @@ final class AppContainer: ObservableObject {
             supportsBrowserAuth = false
         }
 
-        if let baseURL = configurationStore.loadBaseURL(), let token = configurationStore.loadToken(), !token.isEmpty {
+        let baseURL = configurationStore.loadBaseURL()
+        var token = configurationStore.loadToken()
+        if token == nil, baseURL != nil {
+            token = await MainActor.run {
+                configurationStore.loadToken(allowInteraction: true)
+            }
+        }
+
+        if let baseURL, let token, !token.isEmpty {
             var displayName = configurationStore.loadUserDisplayName()
             if displayName == nil {
                 LoggingService.sync.info("Configuration: stored token found, validating user profile.")

@@ -21,19 +21,27 @@ struct KeychainStorage {
         }
     }
 
-    func load(account: String) throws -> Data? {
+    func load(account: String, allowInteraction: Bool = false) throws -> Data? {
         var dataProtectionError: Error?
         do {
-            if let data = try loadData(account: account, useDataProtectionKeychain: true) {
+            if let data = try loadData(
+                account: account,
+                useDataProtectionKeychain: true,
+                allowInteraction: allowInteraction
+            ) {
                 return data
             }
         } catch {
             dataProtectionError = error
         }
 
-        if let legacyData = try loadLegacy(account: account) {
+        if let legacyData = try loadLegacy(account: account, allowInteraction: allowInteraction) {
             if dataProtectionError == nil {
-                try? saveData(legacyData, account: account, useDataProtectionKeychain: true)
+                try? saveData(
+                    legacyData,
+                    account: account,
+                    useDataProtectionKeychain: true
+                )
                 try? deleteLegacy(account: account)
             }
             return legacyData
@@ -79,11 +87,15 @@ struct KeychainStorage {
         return query
     }
 
-    private func loadData(account: String, useDataProtectionKeychain: Bool) throws -> Data? {
+    private func loadData(
+        account: String,
+        useDataProtectionKeychain: Bool,
+        allowInteraction: Bool
+    ) throws -> Data? {
         var query = baseQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
         if #available(macOS 10.10, *) {
             let context = LAContext()
-            context.interactionNotAllowed = true
+            context.interactionNotAllowed = !allowInteraction
             query[kSecUseAuthenticationContext as String] = context
         }
         query[kSecReturnData as String] = true
@@ -94,18 +106,23 @@ struct KeychainStorage {
         switch status {
         case errSecSuccess:
             return item as? Data
-        case errSecItemNotFound, errSecInteractionNotAllowed:
+        case errSecItemNotFound:
             return nil
+        case errSecInteractionNotAllowed:
+            if allowInteraction {
+                return nil
+            }
+            throw KeychainStorageError.operationFailed(status: status)
         default:
             throw KeychainStorageError.operationFailed(status: status)
         }
     }
 
-    private func loadLegacy(account: String) throws -> Data? {
+    private func loadLegacy(account: String, allowInteraction: Bool) throws -> Data? {
         var query = baseQuery(for: account, useDataProtectionKeychain: false)
         if #available(macOS 10.10, *) {
             let context = LAContext()
-            context.interactionNotAllowed = true
+            context.interactionNotAllowed = !allowInteraction
             query[kSecUseAuthenticationContext as String] = context
         }
         query[kSecReturnData as String] = true
@@ -116,8 +133,13 @@ struct KeychainStorage {
         switch status {
         case errSecSuccess:
             return item as? Data
-        case errSecItemNotFound, errSecInteractionNotAllowed:
+        case errSecItemNotFound:
             return nil
+        case errSecInteractionNotAllowed:
+            if allowInteraction {
+                return nil
+            }
+            throw KeychainStorageError.operationFailed(status: status)
         default:
             throw KeychainStorageError.operationFailed(status: status)
         }
@@ -201,5 +223,26 @@ enum KeychainAccessGroupResolver {
         }
         let groups = value as? [String]
         return groups?.first(where: { $0.hasSuffix(suffix) })
+    }
+
+    static func resolve(matchingSuffixes suffixes: [String]) -> String? {
+        for suffix in suffixes {
+            if let match = resolve(matchingSuffix: suffix) {
+                return match
+            }
+        }
+        return nil
+    }
+
+    static func availableGroups() -> [String] {
+        guard let task = SecTaskCreateFromSelf(nil) else { return [] }
+        guard let value = SecTaskCopyValueForEntitlement(
+            task,
+            entitlementKey as CFString,
+            nil
+        ) else {
+            return []
+        }
+        return value as? [String] ?? []
     }
 }

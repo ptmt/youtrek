@@ -42,8 +42,32 @@ struct AppMenus: Commands {
             let message = try CLIInstaller.installDefault(force: false)
             showAlert(title: "CLI Installed", message: message, style: .informational)
         } catch {
+            if case CLIInstallerError.permissionDenied = error {
+                showAlert(
+                    title: "CLI Install Needs Terminal",
+                    message: manualInstallInstructions(),
+                    style: .warning
+                )
+                return
+            }
             showAlert(title: "CLI Install Failed", message: error.localizedDescription, style: .warning)
         }
+    }
+
+    private func manualInstallInstructions() -> String {
+        let executablePath = Bundle.main.executableURL?.path ?? "/Applications/YouTrek.app/Contents/MacOS/YouTrek"
+        return """
+        YouTrek could not create the CLI alias automatically.
+
+        Run one of the following in Terminal:
+
+        sudo ln -s "\(executablePath)" /usr/local/bin/youtrek
+
+        mkdir -p ~/.local/bin
+        ln -s "\(executablePath)" ~/.local/bin/youtrek
+
+        If you use the user-level path, ensure ~/.local/bin is on your PATH.
+        """
     }
 
     private func openNewIssue() {

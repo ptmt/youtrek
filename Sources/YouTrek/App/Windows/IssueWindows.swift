@@ -98,13 +98,17 @@ struct NewIssueWindow: View {
             viewModel.bind(container: container)
             aiAssistViewModel.refreshAvailability()
         }
+        .onChange(of: container.issueComposer.draftProjectID) { _, newValue in
+            viewModel.clearSelectionIfNeeded(for: newValue)
+        }
     }
 
     private var footer: some View {
         let missingFields = viewModel.missingRequiredFields(using: container.issueComposer)
+        let missingFieldNames = missingFields.map(\.displayName).joined(separator: ", ")
         return HStack(alignment: .center, spacing: 12) {
             if !missingFields.isEmpty {
-                Text("Missing required fields: \(missingFields.map(\.displayName).joined(separator: ", "))")
+                Text("Missing required fields: \(missingFieldNames)")
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -124,40 +128,14 @@ struct NewIssueWindow: View {
         viewModel.isLoadingFields || !container.issueComposer.canSubmit || !missingFields.isEmpty
     }
 
-    @ViewBuilder
     private var projectRow: some View {
-        if viewModel.isLoadingProjects {
-            LabeledContent("Project") {
-                ProgressView()
+        ProjectEditor(
+            issue: draftIssueSummary,
+            projects: viewModel.projects,
+            isLoading: viewModel.isLoadingProjects,
+            onSelect: { project in
+                viewModel.selectProject(project, composer: container.issueComposer)
             }
-        } else if viewModel.projects.isEmpty {
-            TextField("Project ID", text: draftProjectBinding)
-        } else {
-            LabeledContent("Project") {
-                HStack(spacing: 8) {
-                    Picker("Project", selection: projectSelectionBinding) {
-                        Text("Select a project").tag(IssueProject?.none)
-                        ForEach(viewModel.projects) { project in
-                            Text(project.displayName).tag(Optional(project))
-                        }
-                    }
-                    .labelsHidden()
-                    Button {
-                        Task { await viewModel.reloadProjects() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Refresh projects")
-                }
-            }
-        }
-    }
-
-    private var projectSelectionBinding: Binding<IssueProject?> {
-        Binding(
-            get: { viewModel.selectedProject },
-            set: { viewModel.selectProject($0, composer: container.issueComposer) }
         )
     }
 
@@ -175,13 +153,13 @@ struct NewIssueWindow: View {
         )
     }
 
-    private var draftProjectBinding: Binding<String> {
-        Binding(
-            get: { container.issueComposer.draftProjectID },
-            set: {
-                container.issueComposer.draftProjectID = $0
-                viewModel.clearSelectionIfNeeded(for: $0)
-            }
+    private var draftIssueSummary: IssueSummary {
+        IssueSummary(
+            readableID: "DRAFT",
+            title: container.issueComposer.draftTitle,
+            projectName: container.issueComposer.draftProjectID,
+            updatedAt: Date(),
+            priority: container.issueComposer.draftPriority
         )
     }
 
@@ -289,7 +267,7 @@ struct DraftIssueDetailView: View {
         let missingFields = viewModel.missingRequiredFields(using: container.issueComposer)
         return HStack(alignment: .center, spacing: 12) {
             if !missingFields.isEmpty {
-                Text("Missing required fields: \(missingFields.map(\.displayName).joined(separator: \", \"))")
+                Text("Missing required fields: \(missingFields.map(\.displayName).joined(separator: ", "))")
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -309,40 +287,14 @@ struct DraftIssueDetailView: View {
         viewModel.isLoadingFields || !container.issueComposer.canSubmit || !missingFields.isEmpty
     }
 
-    @ViewBuilder
     private var projectRow: some View {
-        if viewModel.isLoadingProjects {
-            LabeledContent("Project") {
-                ProgressView()
+        ProjectEditor(
+            issue: draftIssueSummary,
+            projects: viewModel.projects,
+            isLoading: viewModel.isLoadingProjects,
+            onSelect: { project in
+                viewModel.selectProject(project, composer: container.issueComposer)
             }
-        } else if viewModel.projects.isEmpty {
-            TextField("Project ID", text: draftProjectBinding)
-        } else {
-            LabeledContent("Project") {
-                HStack(spacing: 8) {
-                    Picker("Project", selection: projectSelectionBinding) {
-                        Text("Select a project").tag(IssueProject?.none)
-                        ForEach(viewModel.projects) { project in
-                            Text(project.displayName).tag(Optional(project))
-                        }
-                    }
-                    .labelsHidden()
-                    Button {
-                        Task { await viewModel.reloadProjects() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Refresh projects")
-                }
-            }
-        }
-    }
-
-    private var projectSelectionBinding: Binding<IssueProject?> {
-        Binding(
-            get: { viewModel.selectedProject },
-            set: { viewModel.selectProject($0, composer: container.issueComposer) }
         )
     }
 
@@ -360,10 +312,14 @@ struct DraftIssueDetailView: View {
         )
     }
 
-    private var draftProjectBinding: Binding<String> {
-        Binding(
-            get: { container.issueComposer.draftProjectID },
-            set: { container.issueComposer.draftProjectID = $0 }
+    private var draftIssueSummary: IssueSummary {
+        IssueSummary(
+            id: record.id,
+            readableID: "DRAFT",
+            title: container.issueComposer.draftTitle,
+            projectName: container.issueComposer.draftProjectID,
+            updatedAt: record.createdAt,
+            priority: container.issueComposer.draftPriority
         )
     }
 
@@ -924,6 +880,7 @@ final class IssueAIAssistViewModel: ObservableObject {
 
     private func buildPrompt(context: IssueAIAssistContext) -> String {
         var lines: [String] = []
+        let separator = ", "
         lines.append("Draft notes:")
         lines.append(promptText.trimmedNonEmpty ?? "N/A")
 
@@ -939,13 +896,13 @@ final class IssueAIAssistViewModel: ObservableObject {
 
         let priorities = context.availablePriorities.map { $0.trimmedNonEmpty ?? "" }.filter { !$0.isEmpty }
         if !priorities.isEmpty {
-            lines.append("Allowed priorities: \(priorities.joined(separator: ", "))")
+            lines.append("Allowed priorities: \(priorities.joined(separator: separator))")
         }
 
         let fields = context.availableFields.map { $0.trimmedNonEmpty ?? "" }.filter { !$0.isEmpty }
         if !fields.isEmpty {
             let limited = Array(fields.prefix(12))
-            lines.append("Known fields: \(limited.joined(separator: ", "))")
+            lines.append("Known fields: \(limited.joined(separator: separator))")
         }
 
         lines.append("Return only information supported by the schema; omit fields you cannot infer.")

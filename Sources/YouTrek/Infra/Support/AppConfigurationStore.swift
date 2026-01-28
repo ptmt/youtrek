@@ -10,6 +10,10 @@ struct AppConfigurationStore {
 
     private static let sharedSuiteName = "com.potomushto.youtrek.shared"
     private static let sharedKeychainGroupSuffix = "com.potomushto.youtrek.shared"
+    private static let legacyKeychainGroupSuffixes = [
+        "com.potomushto.youtrek.macos",
+        "com.potomushto.youtrek"
+    ]
 
     private let defaults: UserDefaults
     private let keychain: KeychainStorage
@@ -19,7 +23,8 @@ struct AppConfigurationStore {
         keychain: KeychainStorage = KeychainStorage(
             service: "com.potomushto.youtrek.config",
             accessGroup: KeychainAccessGroupResolver.resolve(
-                matchingSuffix: AppConfigurationStore.sharedKeychainGroupSuffix
+                matchingSuffixes: [AppConfigurationStore.sharedKeychainGroupSuffix]
+                    + AppConfigurationStore.legacyKeychainGroupSuffixes
             )
         )
     ) {
@@ -68,10 +73,10 @@ struct AppConfigurationStore {
         defaults.removeObject(forKey: Keys.baseURL)
     }
 
-    func loadToken() -> String? {
+    func loadToken(allowInteraction: Bool = false) -> String? {
         let tokenData: Data?
         do {
-            tokenData = try keychain.load(account: Keys.tokenAccount)
+            tokenData = try keychain.load(account: Keys.tokenAccount, allowInteraction: allowInteraction)
         } catch {
             LoggingService.sync.error("Keychain: failed to load token (\(error.localizedDescription, privacy: .public)).")
             return nil
@@ -82,7 +87,10 @@ struct AppConfigurationStore {
         guard keychain.accessGroup != nil else { return nil }
         do {
             let legacyKeychain = KeychainStorage(service: "com.potomushto.youtrek.config")
-            if let legacyData = try legacyKeychain.load(account: Keys.tokenAccount) {
+            if let legacyData = try legacyKeychain.load(
+                account: Keys.tokenAccount,
+                allowInteraction: allowInteraction
+            ) {
                 try? keychain.save(data: legacyData, account: Keys.tokenAccount)
                 return String(data: legacyData, encoding: .utf8)
             }
