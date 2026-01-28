@@ -54,12 +54,12 @@ struct SetupWindow: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             Image("YouTrekLogo")
                 .resizable()
                 .scaledToFit()
                 .frame(height: 44)
-                .padding(.bottom, 16)
+                .padding(.bottom, 8)
                 .accessibilityLabel("YouTrek")
 
             if isPreparingWorkspace {
@@ -90,8 +90,8 @@ struct SetupWindow: View {
                                 Text("Paste your YouTrack token")
                                     .font(.system(size: 14, weight: .regular, design: .monospaced))
                                     .foregroundStyle(tertiaryTextColor)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 6)
+                                    .padding(.leading, 5)
+                                    .padding(.top, 8)
                                     .allowsHitTesting(false)
                             }
                             TextEditor(text: $token)
@@ -102,9 +102,9 @@ struct SetupWindow: View {
                                 .accessibilityLabel("YouTrack token")
                                 .focused($focusedField, equals: .token)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 8)
-                        .frame(minHeight: 120, maxHeight: 180)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 4)
+                        .frame(minHeight: 72, maxHeight: 100)
                         .modifier(SetupInputChrome(
                             isFocused: focusedField == .token,
                             fill: inputFillColor,
@@ -124,44 +124,8 @@ struct SetupWindow: View {
                             .textSelection(.enabled)
                     }
                 }
-                .padding(.vertical, 12)
+                .padding(.vertical, 8)
                 .frame(maxWidth: .infinity)
-
-                if shouldShowSetupProgress {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                            Text(setupProgressText)
-                        }
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(secondaryTextColor)
-                        .accessibilityLabel("Setup progress")
-                        SetupNetworkStatusView(monitor: container.networkMonitor)
-                    }
-                }
-
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                        .font(.callout)
-                        .textSelection(.enabled)
-                }
-
-                if let warningMessage {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label("Keychain warning", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                            .font(.callout.weight(.semibold))
-                        Text(warningMessage)
-                            .foregroundStyle(.orange)
-                            .font(.callout)
-                            .textSelection(.enabled)
-                        Button("Copy Details") {
-                            copyToPasteboard(warningMessage)
-                        }
-                        .font(.callout)
-                    }
-                }
 
                 Button(action: submit) {
                     Text(actionTitle)
@@ -170,13 +134,41 @@ struct SetupWindow: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .tint(accentColor)
+                .padding(.top, 4)
                 .keyboardShortcut(.return, modifiers: [.command])
                 .disabled(!canSubmit || isValidatingToken)
+
+                // Status area with fixed height to prevent layout jumps
+                VStack(alignment: .leading, spacing: 4) {
+                    if shouldShowSetupProgress {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text(setupProgressText)
+                        }
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(secondaryTextColor)
+                        .accessibilityLabel("Setup progress")
+                        SetupNetworkStatusView(monitor: container.networkMonitor)
+                    } else if let errorMessage {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                    } else if let warningMessage {
+                        Label(warningMessage, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                            .lineLimit(2)
+                    }
+                }
+                .frame(height: 44, alignment: .top)
             }
         }
         .padding(.horizontal, 32)
-        .padding(.top, 48)
-        .padding(.bottom, 32)
+        .padding(.top, 64)
+        .padding(.bottom, 48)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .foregroundStyle(primaryTextColor)
     }
@@ -184,7 +176,7 @@ struct SetupWindow: View {
     private var preparingContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(preparingTitle)
-                .font(.system(size: 24, weight: .semibold, design: .rounded))
+                .font(.callout).bold()
             Text("YouTrek downloads as much as possible to minimize waiting time for most common tasks.")
                 .font(.callout)
                 .foregroundStyle(secondaryTextColor)
@@ -482,17 +474,10 @@ struct SetupWindow: View {
 
     private func tokenSaveWarningMessage(error: String?) -> String {
         let detail = error?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let reason = detail?.isEmpty == false ? detail! : "Unknown (no OSStatus returned)"
-        let groups = KeychainAccessGroupResolver.availableGroups()
-        let groupList = groups.isEmpty ? "(none)" : groups.joined(separator: ", ")
-        return """
-        We couldn’t save your token to the keychain.
-        Reason: \(reason)
-        Keychain item: service "com.potomushto.youtrek.config", account "com.potomushto.youtrek.config.token".
-        Keychain access groups: \(groupList)
-        Tip: ensure the app is signed with Keychain Sharing enabled if you expect access groups to be present.
-        You’ll need to sign in again after relaunching.
-        """
+        if let detail, !detail.isEmpty {
+            return "Could not save token to keychain: \(detail). You may need to sign in again after relaunching."
+        }
+        return "Could not save token to keychain. You may need to sign in again after relaunching."
     }
 
     private func copyToPasteboard(_ text: String) {
