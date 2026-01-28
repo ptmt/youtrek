@@ -4,232 +4,259 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="YouTrek is a native macOS client for YouTrack." />
-    <title>YouTrek — macOS YouTrack client</title>
+    <title>YouTrek — unofficial macOS YouTrack client</title>
     <style>
+      @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
       :root {
-        --bg: #070a12;
-        --panel: rgba(255, 255, 255, 0.06);
-        --border: rgba(255, 255, 255, 0.10);
-        --text: rgba(255, 255, 255, 0.92);
-        --muted: rgba(255, 255, 255, 0.72);
-        --faint: rgba(255, 255, 255, 0.58);
-        --brand: #7c5cff;
-        --brand2: #30d5c8;
-        --shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        --bg: #05070c;
+        --bg-2: #090f1c;
+        --panel: rgba(8, 12, 20, 0.72);
+        --border: rgba(150, 170, 210, 0.22);
+        --text: #eef3ff;
+        --muted: rgba(238, 243, 255, 0.68);
+        --faint: rgba(238, 243, 255, 0.46);
+        --accent: #6bd4ff;
+        --accent-2: #9cf2ff;
+        --shadow: 0 28px 60px rgba(2, 6, 16, 0.55);
+        --logo-height: clamp(280px, 28vw, 520px);
       }
 
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
 
       body {
         margin: 0;
         color: var(--text);
         background:
-          radial-gradient(900px 520px at 12% 8%, rgba(124, 92, 255, 0.26), transparent 60%),
-          radial-gradient(820px 520px at 86% 22%, rgba(48, 213, 200, 0.18), transparent 62%),
-          radial-gradient(1200px 700px at 50% 110%, rgba(255, 255, 255, 0.06), transparent 60%),
-          var(--bg);
-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-        line-height: 1.45;
+          linear-gradient(180deg, rgba(4, 8, 16, 0.1) 0%, rgba(5, 8, 16, 0.88) 42%, rgba(5, 7, 12, 0.96) 100%),
+          radial-gradient(900px 520px at 20% 20%, rgba(107, 212, 255, 0.18), transparent 65%),
+          radial-gradient(880px 620px at 85% 12%, rgba(38, 148, 255, 0.2), transparent 60%),
+          linear-gradient(180deg, var(--bg), var(--bg-2));
+        font-family: "Space Grotesk", "Segoe UI", sans-serif;
+        line-height: 1.5;
+        position: relative;
+        min-height: 100vh;
+        isolation: isolate;
       }
 
-      a { color: inherit; }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0 0 auto 0;
+        height: var(--logo-height);
+        background: url("./youtrek_logo_full.png") center top / contain no-repeat;
+        filter: drop-shadow(0 24px 60px rgba(4, 10, 20, 0.65));
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      a {
+        color: inherit;
+      }
 
       .container {
-        max-width: 1080px;
+        max-width: 1140px;
         margin: 0 auto;
-        padding: 28px 18px 64px;
-      }
-
-      header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        padding: 10px 2px 0;
-      }
-
-      .brand {
-        display: inline-flex;
-        align-items: center;
-        gap: 12px;
-        text-decoration: none;
-      }
-
-      .logo {
-        width: 34px;
-        height: 34px;
-        border-radius: 10px;
-        background: linear-gradient(135deg, rgba(124, 92, 255, 0.22), rgba(48, 213, 200, 0.16));
-        border: 1px solid var(--border);
-        display: grid;
-        place-items: center;
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-      }
-
-      .logo::before {
-        content: "Y";
-        font-weight: 760;
-        letter-spacing: 0.03em;
-        color: rgba(255, 255, 255, 0.88);
-      }
-
-      .brand-name {
-        font-weight: 720;
-        letter-spacing: -0.015em;
-      }
-
-      .nav {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      .nav a {
-        text-decoration: none;
-        color: var(--muted);
-        border: 1px solid transparent;
-        padding: 8px 10px;
-        border-radius: 10px;
-      }
-
-      .nav a:hover {
-        color: var(--text);
-        border-color: var(--border);
-        background: rgba(255, 255, 255, 0.04);
+        padding: 20px 20px 72px;
+        position: relative;
+        z-index: 1;
       }
 
       .hero {
-        margin-top: 44px;
-        display: grid;
-        grid-template-columns: 1.1fr 0.9fr;
-        gap: 22px;
-        align-items: start;
+        margin-top: clamp(200px, calc(var(--logo-height) - 120px), 420px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 14px;
       }
 
-      @media (max-width: 920px) {
-        .hero { grid-template-columns: 1fr; }
+      .hero-card {
+        width: min(740px, 100%);
+        padding: 22px 24px;
+        border-radius: 22px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px) saturate(140%);
       }
 
       .hero h1 {
-        margin: 0;
-        font-size: clamp(34px, 4vw, 52px);
-        letter-spacing: -0.03em;
-        line-height: 1.08;
+        margin: 6px 0 0;
+        font-family: "Fraunces", "Times New Roman", serif;
+        font-size: clamp(30px, 4.5vw, 52px);
+        letter-spacing: -0.02em;
+        line-height: 1.1;
       }
 
-      .hero p {
-        margin: 14px 0 0;
+      .hero h1 em {
+        font-style: normal;
+        color: var(--accent);
+        position: relative;
+        z-index: 0;
+      }
+
+      .hero h1 em::after {
+        content: "";
+        position: absolute;
+        left: -0.08em;
+        right: -0.08em;
+        bottom: 0.05em;
+        height: 0.38em;
+        background: rgba(107, 212, 255, 0.25);
+        border-radius: 999px;
+        z-index: -1;
+      }
+
+      .subslogan {
+        margin: 0 auto;
+        font-size: 16px;
         color: var(--muted);
-        font-size: 16.5px;
-        max-width: 62ch;
+        max-width: 60ch;
+        text-align: center;
       }
 
-      .cta {
-        display: flex;
+      .install {
+        margin-top: 8px;
+        display: inline-flex;
+        align-items: center;
         gap: 12px;
-        margin-top: 22px;
-        flex-wrap: wrap;
-      }
-
-      .button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        padding: 11px 14px;
-        border-radius: 12px;
-        border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.05);
-        text-decoration: none;
-        color: var(--text);
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
-      }
-
-      .button:hover {
-        background: rgba(255, 255, 255, 0.07);
-        border-color: rgba(255, 255, 255, 0.16);
-      }
-
-      .button.primary {
-        background: linear-gradient(135deg, rgba(124, 92, 255, 0.92), rgba(48, 213, 200, 0.70));
-        border-color: rgba(255, 255, 255, 0.18);
-        color: rgba(5, 8, 16, 0.96);
-        font-weight: 720;
-      }
-
-      .button.primary:hover {
-        filter: brightness(1.05);
-      }
-
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 7px 10px;
+        padding: 10px 18px;
         border-radius: 999px;
         border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.04);
-        color: var(--muted);
-        font-size: 13px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        font-weight: 600;
       }
 
-      .panel {
+      .install span {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--accent-2);
+      }
+
+      .screens {
+        margin-top: 54px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      @media (max-width: 980px) {
+        .screens {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 640px) {
+        .screens {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .screen-card {
         border: 1px solid var(--border);
         background: var(--panel);
-        border-radius: 16px;
-        padding: 16px;
+        border-radius: 20px;
+        padding: 18px;
         box-shadow: var(--shadow);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        backdrop-filter: blur(14px) saturate(140%);
       }
 
-      .card {
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        background: rgba(0, 0, 0, 0.18);
-        border-radius: 14px;
-        padding: 14px;
-      }
-
-      .card h3 {
-        margin: 0 0 6px;
-        font-size: 15px;
+      .screen-card h2 {
+        margin: 0;
+        font-size: 20px;
         letter-spacing: -0.01em;
       }
 
-      .card p {
+      .screen-card p {
         margin: 0;
         color: var(--muted);
         font-size: 14px;
       }
 
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
-        margin-top: 14px;
-      }
-
-      @media (max-width: 560px) {
-        .grid { grid-template-columns: 1fr; }
-      }
-
-      .right {
+      .shot-frame {
+        border-radius: 16px;
+        border: 1px solid rgba(150, 170, 210, 0.28);
+        overflow: hidden;
+        min-height: 220px;
+        background: linear-gradient(145deg, rgba(16, 24, 40, 0.8), rgba(10, 16, 28, 0.9));
         position: relative;
       }
 
-      .art {
-        border-radius: 18px;
-        overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(255, 255, 255, 0.03);
+      .shot-frame::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(320px 180px at 85% 10%, rgba(107, 212, 255, 0.18), transparent 60%);
+        opacity: 0.7;
       }
 
-      .art img {
-        display: block;
-        width: 100%;
-        height: auto;
+      .shot-bar {
+        height: 34px;
+        background: rgba(9, 14, 24, 0.9);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--border);
+        position: relative;
+        z-index: 1;
+      }
+
+      .shot-bar span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.4);
+      }
+
+      .shot-body {
+        padding: 16px;
+        display: grid;
+        gap: 10px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .shot-line {
+        height: 10px;
+        border-radius: 999px;
+        background: rgba(238, 243, 255, 0.22);
+      }
+
+      .shot-line.short {
+        width: 48%;
+      }
+
+      .shot-line.medium {
+        width: 72%;
+      }
+
+      .shot-line.long {
+        width: 90%;
+      }
+
+      .screen-card.cli .shot-frame {
+        background: linear-gradient(145deg, rgba(12, 24, 42, 0.92), rgba(10, 20, 34, 0.95));
+      }
+
+      .screen-card.skill .shot-frame {
+        background: linear-gradient(145deg, rgba(18, 20, 36, 0.92), rgba(10, 18, 30, 0.95));
+      }
+
+      .screen-card.desktop .shot-frame {
+        background: linear-gradient(145deg, rgba(12, 18, 32, 0.92), rgba(12, 22, 40, 0.92));
       }
 
       footer {
-        margin-top: 44px;
+        margin-top: 46px;
         color: var(--faint);
         font-size: 13px;
         display: flex;
@@ -243,74 +270,148 @@
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         font-size: 0.95em;
       }
+
+      .terminal {
+        padding: 12px 14px;
+      }
+
+      .terminal pre {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 10px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow: visible;
+      }
+
+      .terminal code {
+        font-size: inherit;
+        color: inherit;
+        background: transparent;
+      }
+
+      .agent-session .agent-thinking {
+        color: var(--faint);
+        font-style: italic;
+      }
+
+      .agent-session .tool-call {
+        color: var(--accent);
+      }
+
+      .agent-session .tool-result {
+        color: #7ee787;
+      }
+
+      @media (max-width: 720px) {
+        .hero {
+          text-align: left;
+          align-items: flex-start;
+        }
+
+        .install {
+          align-self: stretch;
+          justify-content: center;
+          text-align: center;
+          flex-wrap: wrap;
+        }
+      }
     </style>
   </head>
   <body>
     <div class="container">
-      <header>
-        <a class="brand" href="#top" aria-label="YouTrek">
-          <span class="logo" aria-hidden="true"></span>
-          <span class="brand-name">YouTrek</span>
-        </a>
-        <nav class="nav" aria-label="Primary">
-          <a id="navReleases" href="#">Releases</a>
-          <a id="navRepo" href="#">GitHub</a>
-        </nav>
-      </header>
-
       <main class="hero" id="top">
-        <section>
-          <span class="pill">Native macOS client for YouTrack</span>
-          <h1>Track issues fast.
-            <br />Stay in flow.</h1>
-          <p>
-            YouTrek is a lightweight macOS app that connects to YouTrack so you can browse, search, and
-            manage issues without living in a browser tab.
-          </p>
+        <div class="hero-card">
+          <p class="subslogan">never say never to creating issues</p>
 
-          <div class="cta">
-            <a class="button primary" id="downloadBtn" href="#">Download for macOS</a>
-            <a class="button" id="viewReleasesBtn" href="#">View releases</a>
+          <h1>a <em>CLI</em>, a <em>Skill</em>, a desktop <em>App</em></h1>
+          <div class="install">
+            <code>brew install --cask youtrek</code>
           </div>
-
-          <div class="panel" style="margin-top: 18px;">
-            <div class="grid">
-              <div class="card">
-                <h3>Fast navigation</h3>
-                <p>Sidebar-first UX designed for switching projects and issue lists quickly.</p>
-              </div>
-              <div class="card">
-                <h3>Native feel</h3>
-                <p>SwiftUI app with platform-native menus, windows, and shortcuts.</p>
-              </div>
-              <div class="card">
-                <h3>Secure auth</h3>
-                <p>OAuth login via YouTrack and tokens stored in macOS Keychain.</p>
-              </div>
-              <div class="card">
-                <h3>Open source</h3>
-                <p>Built in public—browse the code, file issues, and contribute.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <aside class="right">
-          <div class="art">
-            <img src="./youtrek_logo_full.png" alt="YouTrek logo" />
-          </div>
-          <div class="panel" style="margin-top: 12px;">
-            <div style="display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;">
-              <strong style="letter-spacing: -0.01em;">Download</strong>
-              <span style="color: var(--muted);">from the latest GitHub Release</span>
-            </div>
-            <p style="margin: 8px 0 0; color: var(--muted); font-size: 14px;">
-              Tip: if you’re using Gatekeeper, you may need to right-click the app and choose
-              <em>Open</em> the first time.
-            </p>
-          </div>
-        </aside>
+        </div>
       </main>
+
+      <section class="screens" aria-label="Product screenshots">
+        <article class="screen-card cli">
+          <div>
+            <h2>CLI</h2>
+            <p>Command-first flows for creating, listing, and updating issues.</p>
+          </div>
+          <div class="shot-frame" role="img" aria-label="CLI screenshot">
+            <div class="shot-bar">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="shot-body terminal">
+              <pre><code>Usage:
+  youtrek &lt;command&gt; [subcommand] [options]
+
+Commands:
+  auth status
+  auth login --base-url &lt;url&gt; --token &lt;pat&gt;
+  issues list [--query &lt;ytql&gt;] [--saved &lt;name&gt;] [--top &lt;n&gt;] [--offline] [--json]
+  issues comment --id &lt;id&gt; --text &lt;text&gt; [--json]
+  issues statuses --project &lt;id|shortName|name&gt; [--fields &lt;fields&gt;]
+  agile-boards list [--favorites] [--offline] [--json]
+  agile-boards show --id &lt;id&gt; [--sprint &lt;name&gt; | --backlog] [--top &lt;n&gt;]
+  agile-boards show --name &lt;name&gt; [--sprint &lt;name&gt; | --backlog] [--top &lt;n&gt;]
+  saved-queries list [--json]</code></pre>
+            </div>
+          </div>
+        </article>
+
+        <article class="screen-card skill">
+          <div>
+            <h2>Skill</h2>
+            <p>Teach your agent how to work with YouTrack and keep the flow/p>
+          </div>
+          <div class="shot-frame" role="img" aria-label="Skill screenshot">
+            <div class="shot-bar">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="shot-body terminal agent-session">
+              <pre><code><span class="agent-thinking">Updating issue status to "In Progress"...</span>
+
+<span class="tool-call">youtrek issues update --id PROJ-142 --state "In Progress"</span>
+<span class="tool-result">✓ PROJ-142 updated</span>
+
+<span class="agent-thinking">Creating issue for the new auth module...</span>
+
+<span class="tool-call">youtrek issues create --project PROJ \
+  --summary "Implement OAuth2 flow" \
+  --type Task</span>
+<span class="tool-result">✓ Created PROJ-156</span></code></pre>
+            </div>
+          </div>
+        </article>
+
+        <article class="screen-card desktop">
+          <div>
+            <h2>Desktop</h2>
+            <p>Native macOS app with focus on speed. Offline first. Downloads as much as possible locally, sync periodically.</p>
+          </div>
+          <div class="shot-frame" role="img" aria-label="Desktop screenshot">
+            <div class="shot-bar">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="shot-body">
+              <div class="shot-line long"></div>
+              <div class="shot-line long"></div>
+              <div class="shot-line medium"></div>
+              <div class="shot-line short"></div>
+            </div>
+          </div>
+        </article>
+      </section>
 
       <footer>
         <span>© <span id="year"></span> YouTrek</span>
@@ -319,18 +420,7 @@
     </div>
 
     <script>
-      // Update this if your GitHub org/user is different.
       const repo = "ptmt/youtrek";
-
-      const repoUrl = `https://github.com/${repo}`;
-      const releasesUrl = `${repoUrl}/releases`;
-      const latestReleaseUrl = `${repoUrl}/releases/latest`;
-
-      document.getElementById("navRepo").href = repoUrl;
-      document.getElementById("navReleases").href = releasesUrl;
-
-      document.getElementById("downloadBtn").href = latestReleaseUrl;
-      document.getElementById("viewReleasesBtn").href = releasesUrl;
 
       document.getElementById("repoCode").textContent = repo;
       document.getElementById("year").textContent = String(new Date().getFullYear());

@@ -5,6 +5,8 @@
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)com.potomushto.youtrek</string>
+		<string>$(AppIdentifierPrefix)com.potomushto.youtrek.macos</string>
+		<string>$(AppIdentifierPrefix)com.potomushto.youtrek.config</string>
 	</array>
 </dict>
 </plist>

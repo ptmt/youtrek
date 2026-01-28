@@ -687,11 +687,16 @@ final class AppContainer: ObservableObject {
             LoggingService.sync.error("Manual setup: failed to save token (\(error.localizedDescription, privacy: .public)).")
         }
         if tokenSaved {
-            let storedToken = configurationStore.loadToken(allowInteraction: allowKeychainInteraction)
-            if storedToken?.isEmpty ?? true {
+            let loadResult = configurationStore.loadTokenResult(allowInteraction: allowKeychainInteraction)
+            if loadResult.token?.isEmpty ?? true {
                 tokenSaved = false
-                tokenSaveError = "Saved token could not be read back from Keychain."
-                LoggingService.sync.error("Manual setup: token verification failed after save.")
+                if let loadError = loadResult.error, !loadError.isEmpty {
+                    tokenSaveError = loadError
+                    LoggingService.sync.error("Manual setup: token verification failed after save (\(loadError, privacy: .public)).")
+                } else {
+                    tokenSaveError = "Saved token could not be read back from Keychain."
+                    LoggingService.sync.error("Manual setup: token verification failed after save.")
+                }
             }
         }
         updateUserDisplayName(from: manualAuth.currentAccount)

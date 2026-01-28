@@ -74,17 +74,22 @@ struct AppConfigurationStore {
     }
 
     func loadToken(allowInteraction: Bool = false) -> String? {
+        loadTokenResult(allowInteraction: allowInteraction).token
+    }
+
+    func loadTokenResult(allowInteraction: Bool = false) -> (token: String?, error: String?) {
         let tokenData: Data?
         do {
             tokenData = try keychain.load(account: Keys.tokenAccount, allowInteraction: allowInteraction)
         } catch {
-            LoggingService.sync.error("Keychain: failed to load token (\(error.localizedDescription, privacy: .public)).")
-            return nil
+            let message = error.localizedDescription
+            LoggingService.sync.error("Keychain: failed to load token (\(message, privacy: .public)).")
+            return (nil, message)
         }
         if let unwrapped = tokenData {
-            return String(data: unwrapped, encoding: .utf8)
+            return (String(data: unwrapped, encoding: .utf8), nil)
         }
-        guard keychain.accessGroup != nil else { return nil }
+        guard keychain.accessGroup != nil else { return (nil, nil) }
         do {
             let legacyKeychain = KeychainStorage(service: "com.potomushto.youtrek.config")
             if let legacyData = try legacyKeychain.load(
@@ -92,12 +97,14 @@ struct AppConfigurationStore {
                 allowInteraction: allowInteraction
             ) {
                 try? keychain.save(data: legacyData, account: Keys.tokenAccount)
-                return String(data: legacyData, encoding: .utf8)
+                return (String(data: legacyData, encoding: .utf8), nil)
             }
         } catch {
-            LoggingService.sync.error("Keychain: failed to load legacy token (\(error.localizedDescription, privacy: .public)).")
+            let message = error.localizedDescription
+            LoggingService.sync.error("Keychain: failed to load legacy token (\(message, privacy: .public)).")
+            return (nil, message)
         }
-        return nil
+        return (nil, nil)
     }
 
     func save(token: String) throws {

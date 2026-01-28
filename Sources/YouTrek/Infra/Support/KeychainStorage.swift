@@ -14,7 +14,16 @@ struct KeychainStorage {
     func save(data: Data, account: String) throws {
         do {
             try saveData(data, account: account, useDataProtectionKeychain: true)
-            try? deleteLegacy(account: account)
+            let readback = try? loadData(
+                account: account,
+                useDataProtectionKeychain: true,
+                allowInteraction: false
+            )
+            if readback != nil {
+                try? deleteLegacy(account: account)
+            } else {
+                try saveData(data, account: account, useDataProtectionKeychain: false)
+            }
         } catch {
             // Fall back to the legacy keychain when data protection keychain isn't available.
             try saveData(data, account: account, useDataProtectionKeychain: false)
@@ -96,6 +105,9 @@ struct KeychainStorage {
         if #available(macOS 10.10, *) {
             let context = LAContext()
             context.interactionNotAllowed = !allowInteraction
+            if allowInteraction {
+                context.localizedReason = "Allow YouTrek to access your saved token."
+            }
             query[kSecUseAuthenticationContext as String] = context
         }
         query[kSecReturnData as String] = true
@@ -109,10 +121,10 @@ struct KeychainStorage {
         case errSecItemNotFound:
             return nil
         case errSecInteractionNotAllowed:
-            if allowInteraction {
+            if !allowInteraction {
                 return nil
             }
-            throw KeychainStorageError.operationFailed(status: status)
+            fallthrough
         default:
             throw KeychainStorageError.operationFailed(status: status)
         }
@@ -123,6 +135,9 @@ struct KeychainStorage {
         if #available(macOS 10.10, *) {
             let context = LAContext()
             context.interactionNotAllowed = !allowInteraction
+            if allowInteraction {
+                context.localizedReason = "Allow YouTrek to access your saved token."
+            }
             query[kSecUseAuthenticationContext as String] = context
         }
         query[kSecReturnData as String] = true
@@ -136,10 +151,10 @@ struct KeychainStorage {
         case errSecItemNotFound:
             return nil
         case errSecInteractionNotAllowed:
-            if allowInteraction {
+            if !allowInteraction {
                 return nil
             }
-            throw KeychainStorageError.operationFailed(status: status)
+            fallthrough
         default:
             throw KeychainStorageError.operationFailed(status: status)
         }

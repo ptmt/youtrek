@@ -24,9 +24,22 @@ struct SetupWindow: View {
     @State private var warningMessage: String?
     @State private var isValidatingToken = false
     @State private var hasStartedSignIn = false
+    @FocusState private var focusedField: FocusField?
     private var isPreparingWorkspace: Bool {
         !container.requiresSetup && !container.appState.hasCompletedInitialSync
     }
+
+    private enum FocusField: Hashable {
+        case baseURL
+        case token
+    }
+
+    private var primaryTextColor: Color { .white }
+    private var secondaryTextColor: Color { .white.opacity(0.7) }
+    private var tertiaryTextColor: Color { .white.opacity(0.5) }
+    private var accentColor: Color { Color(red: 0.56, green: 0.84, blue: 1.0) }
+    private var inputFillColor: Color { .white.opacity(0.08) }
+    private var inputStrokeColor: Color { .white.opacity(0.18) }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -42,18 +55,12 @@ struct SetupWindow: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 0) {
-                    Text("YOU")
-                        .font(.system(size: 36, weight: .black))
-                        .italic()
-                    Text(" ")
-                    Text("TREK")
-                        .font(.system(size: 36, weight: .black))
-                        .italic()
-                }
-                .tracking(2)
-            }
+            Image("YouTrekLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 44)
+                .padding(.bottom, 16)
+                .accessibilityLabel("YouTrek")
 
             if isPreparingWorkspace {
                 preparingContent
@@ -62,20 +69,58 @@ struct SetupWindow: View {
                 VStack(alignment: .leading, spacing: 10) {
                     TextField("https://youtrack.jetbrains.com", text: $baseURLString, prompt: Text("YouTrack base URL"))
                         .textContentType(.URL)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+                        .tint(accentColor)
+                        .accessibilityLabel("YouTrack base URL")
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .modifier(SetupInputChrome(
+                            isFocused: focusedField == .baseURL,
+                            fill: inputFillColor,
+                            stroke: inputStrokeColor,
+                            focus: accentColor.opacity(0.9)
+                        ))
+                        .focused($focusedField, equals: .baseURL)
 
                     if mode == .token {
-                        TextField("Permanent token", text: $token, prompt: Text("Paste your YouTrack token"))
-                            .textFieldStyle(.roundedBorder)
+                        ZStack(alignment: .topLeading) {
+                            if token.isEmpty {
+                                Text("Paste your YouTrack token")
+                                    .font(.system(size: 14, weight: .regular, design: .monospaced))
+                                    .foregroundStyle(tertiaryTextColor)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 6)
+                                    .allowsHitTesting(false)
+                            }
+                            TextEditor(text: $token)
+                                .font(.system(size: 14, weight: .regular, design: .monospaced))
+                                .foregroundStyle(primaryTextColor)
+                                .tint(accentColor)
+                                .scrollContentBackground(.hidden)
+                                .accessibilityLabel("YouTrack token")
+                                .focused($focusedField, equals: .token)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 8)
+                        .frame(minHeight: 120, maxHeight: 180)
+                        .modifier(SetupInputChrome(
+                            isFocused: focusedField == .token,
+                            fill: inputFillColor,
+                            stroke: inputStrokeColor,
+                            focus: accentColor.opacity(0.9)
+                        ))
                         if let tokenPortalURL {
                             Link("How to create a personal token", destination: tokenPortalURL)
                                 .font(.callout)
+                                .foregroundStyle(accentColor)
                                 .underline()
                         }
                     } else {
                         Label(browserHintText, systemImage: container.browserAuthAvailable ? "globe" : "exclamationmark.triangle.fill")
-                            .foregroundColor(container.browserAuthAvailable ? .secondary : .orange)
-                            .font(.callout)
+                            .foregroundStyle(container.browserAuthAvailable ? secondaryTextColor : .orange)
+                            .font(.callout.weight(.medium))
                             .textSelection(.enabled)
                     }
                 }
@@ -88,8 +133,8 @@ struct SetupWindow: View {
                             ProgressView()
                             Text(setupProgressText)
                         }
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(secondaryTextColor)
                         .accessibilityLabel("Setup progress")
                         SetupNetworkStatusView(monitor: container.networkMonitor)
                     }
@@ -106,7 +151,7 @@ struct SetupWindow: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Label("Keychain warning", systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
-                            .font(.callout)
+                            .font(.callout.weight(.semibold))
                         Text(warningMessage)
                             .foregroundStyle(.orange)
                             .font(.callout)
@@ -118,37 +163,35 @@ struct SetupWindow: View {
                     }
                 }
 
-                HStack {
-                    Spacer()
-                    Button(action: submit) {
-                        Text(actionTitle)
-                            .font(.title3.weight(.semibold))
-                            .padding(.horizontal, 26)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .frame(minWidth: 220)
-                    .keyboardShortcut(.return, modifiers: [.command])
-                    .disabled(!canSubmit || isValidatingToken)
+                Button(action: submit) {
+                    Text(actionTitle)
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .tint(accentColor)
+                .keyboardShortcut(.return, modifiers: [.command])
+                .disabled(!canSubmit || isValidatingToken)
             }
         }
-        .padding(24)
+        .padding(.horizontal, 32)
+        .padding(.top, 48)
+        .padding(.bottom, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .foregroundStyle(primaryTextColor)
     }
 
     private var preparingContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(preparingTitle)
-                .font(.system(size: 24, weight: .semibold))
+                .font(.system(size: 24, weight: .semibold, design: .rounded))
             Text("YouTrek downloads as much as possible to minimize waiting time for most common tasks.")
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(secondaryTextColor)
             if let warningMessage {
                 Label(warningMessage, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
-                    .font(.callout)
+                    .font(.callout.weight(.semibold))
                     .textSelection(.enabled)
             }
             VStack(alignment: .leading, spacing: 8) {
@@ -156,7 +199,7 @@ struct SetupWindow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(syncStatusText)
                         .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(secondaryTextColor)
                     SetupNetworkStatusView(monitor: container.networkMonitor)
                 }
             }
@@ -473,7 +516,7 @@ private struct SetupNetworkStatusView: View {
         if let text = statusText {
             Text(text)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.55))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -495,25 +538,52 @@ private struct SetupWindowBackground: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.06, green: 0.07, blue: 0.1),
-                    Color(red: 0.03, green: 0.04, blue: 0.06)
+                    Color(red: 0.07, green: 0.08, blue: 0.12),
+                    Color(red: 0.04, green: 0.05, blue: 0.08),
+                    Color(red: 0.02, green: 0.02, blue: 0.04)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             RadialGradient(
                 colors: [
-                    Color.white.opacity(0.12),
+                    Color(red: 0.58, green: 0.82, blue: 1.0).opacity(0.18),
                     Color.clear
                 ],
                 center: .topLeading,
                 startRadius: 40,
+                endRadius: 320
+            )
+            .blendMode(.screen)
+            RadialGradient(
+                colors: [
+                    Color.white.opacity(0.08),
+                    Color.clear
+                ],
+                center: .bottomTrailing,
+                startRadius: 40,
                 endRadius: 260
             )
             .blendMode(.screen)
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                .padding(14)
         }
+    }
+}
+
+private struct SetupInputChrome: ViewModifier {
+    let isFocused: Bool
+    let fill: Color
+    let stroke: Color
+    let focus: Color
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(fill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isFocused ? focus : stroke, lineWidth: 1)
+            )
     }
 }

@@ -108,7 +108,7 @@ private final class WindowAccessorView: NSView {
 
         if isSetup {
             if needsReconfigure {
-                window.styleMask = [.titled, .fullSizeContentView]
+                window.styleMask = [.borderless, .fullSizeContentView]
                 hasAppliedSetupPresentation = false
             }
             window.titlebarAppearsTransparent = true
