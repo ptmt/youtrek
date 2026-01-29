@@ -24,11 +24,21 @@ actor SyncCoordinator {
     }
 
     func refreshIssues(using query: IssueQuery) async throws -> [IssueSummary] {
-        let result = await refreshIssuesWithStatus(using: query)
+        let result = await refreshIssuesWithStatus(
+            using: query,
+            currentUserID: nil,
+            currentUserLogin: nil,
+            currentUserDisplayName: nil
+        )
         return result.issues
     }
 
-    func refreshIssuesWithStatus(using query: IssueQuery) async -> IssueSyncResult {
+    func refreshIssuesWithStatus(
+        using query: IssueQuery,
+        currentUserID: String?,
+        currentUserLogin: String?,
+        currentUserDisplayName: String?
+    ) async -> IssueSyncResult {
         if AppDebugSettings.disableSyncing {
             let cached = await localStore.loadIssues(for: query)
             LoggingService.sync.info("Issue sync: syncing disabled, loaded \(cached.count, privacy: .public) cached issues.")
@@ -38,7 +48,13 @@ actor SyncCoordinator {
             LoggingService.sync.info("Issue sync: fetching remote issues.")
             let issues = try await enqueue(label: "Sync issues") {
                 let remote = try await self.issueRepository.fetchIssues(query: query)
-                await self.localStore.saveRemoteIssues(remote, for: query)
+                await self.localStore.saveRemoteIssues(
+                    remote,
+                    for: query,
+                    currentUserID: currentUserID,
+                    currentUserLogin: currentUserLogin,
+                    currentUserDisplayName: currentUserDisplayName
+                )
                 return await self.localStore.loadIssues(for: query)
             }
             LoggingService.sync.info("Issue sync: remote issues fetched (\(issues.count, privacy: .public)).")
@@ -74,6 +90,14 @@ actor SyncCoordinator {
 
     func markIssueSeen(_ issue: IssueSummary) async {
         await localStore.markIssueSeen(issue)
+    }
+
+    func markIssuesSeen(_ issues: [IssueSummary]) async {
+        await localStore.markIssuesSeen(issues)
+    }
+
+    func hasSeenUpdates() async -> Bool {
+        await localStore.hasSeenUpdates()
     }
 
     func applyOptimisticUpdate(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary {

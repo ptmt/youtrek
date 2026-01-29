@@ -37,7 +37,7 @@ struct SetupWindow: View {
     private var primaryTextColor: Color { .white }
     private var secondaryTextColor: Color { .white.opacity(0.7) }
     private var tertiaryTextColor: Color { .white.opacity(0.5) }
-    private var accentColor: Color { Color(red: 0.56, green: 0.84, blue: 1.0) }
+    private var accentColor: Color { Color(red: 0.56, green: 0.84, blue: 1.0).opacity(0.8) }
     private var inputFillColor: Color { .white.opacity(0.08) }
     private var inputStrokeColor: Color { .white.opacity(0.18) }
 
@@ -86,21 +86,21 @@ struct SetupWindow: View {
 
                     if mode == .token {
                         ZStack(alignment: .topLeading) {
-                            if token.isEmpty {
+                            if token.isEmpty && focusedField != .token {
                                 Text("Paste your YouTrack token")
                                     .font(.system(size: 14, weight: .regular, design: .monospaced))
                                     .foregroundStyle(tertiaryTextColor)
                                     .padding(.leading, 5)
-                                    .padding(.top, 8)
+                                    .padding(.top, 5)
                                     .allowsHitTesting(false)
                             }
-                            TextEditor(text: $token)
-                                .font(.system(size: 14, weight: .regular, design: .monospaced))
-                                .foregroundStyle(primaryTextColor)
-                                .tint(accentColor)
-                                .scrollContentBackground(.hidden)
-                                .accessibilityLabel("YouTrack token")
-                                .focused($focusedField, equals: .token)
+                            TokenTextEditor(
+                                text: $token,
+                                isFocused: tokenFocusBinding,
+                                textColor: primaryTextColor,
+                                tintColor: accentColor
+                            )
+                            .accessibilityLabel("YouTrack token")
                         }
                         .padding(.horizontal, 4)
                         .padding(.vertical, 4)
@@ -177,7 +177,7 @@ struct SetupWindow: View {
         VStack(alignment: .leading, spacing: 16) {
             Text(preparingTitle)
                 .font(.callout).bold()
-            Text("YouTrek downloads as much as possible to minimize waiting time for most common tasks.")
+            Text("YouTrek pre-downloads issues to minimize waiting time for most tasks.")
                 .font(.callout)
                 .foregroundStyle(secondaryTextColor)
             if let warningMessage {
@@ -216,6 +216,19 @@ struct SetupWindow: View {
 
     private var shouldShowSetupProgress: Bool {
         isValidatingToken || hasStartedSignIn || container.appState.isSyncing
+    }
+
+    private var tokenFocusBinding: Binding<Bool> {
+        Binding(
+            get: { focusedField == .token },
+            set: { isFocused in
+                if isFocused {
+                    focusedField = .token
+                } else if focusedField == .token {
+                    focusedField = nil
+                }
+            }
+        )
     }
 
     private var setupProgressText: String {
@@ -437,11 +450,11 @@ struct SetupWindow: View {
                 isValidatingToken = true
                 defer { isValidatingToken = false }
                 do {
-                    let displayName = try await container.validateManualToken(baseURL: url, token: trimmedToken)
+                    let userProfile = try await container.validateManualToken(baseURL: url, token: trimmedToken)
                     let outcome = await container.completeManualSetup(
                         baseURL: url,
                         token: trimmedToken,
-                        userDisplayName: displayName,
+                        userProfile: userProfile,
                         allowKeychainInteraction: true
                     )
                     if !outcome.saved {
@@ -490,6 +503,84 @@ struct SetupWindow: View {
         Task { @MainActor in
             await container.cancelInitialSync()
             hasStartedSignIn = false
+        }
+    }
+}
+
+private struct TokenTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let textColor: Color
+    let tintColor: Color
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, isFocused: $isFocused)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let textView = NSTextView()
+        textView.delegate = context.coordinator
+        textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        textView.textColor = NSColor(textColor)
+        textView.insertionPointColor = NSColor(tintColor)
+        textView.backgroundColor = .clear
+        textView.drawsBackground = false
+        textView.isEditable = true
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isGrammarCheckingEnabled = false
+        textView.isContinuousSpellCheckingEnabled = false
+        textView.textContainerInset = NSSize(width: 4, height: 5)
+
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.documentView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ nsView: NSScrollView, context: Context) {
+        guard let textView = nsView.documentView as? NSTextView else { return }
+        if textView.string != text {
+            textView.string = text
+        }
+        textView.textColor = NSColor(textColor)
+        textView.insertionPointColor = NSColor(tintColor)
+        if isFocused {
+            if textView.window?.firstResponder !== textView {
+                textView.window?.makeFirstResponder(textView)
+            }
+        } else if textView.window?.firstResponder === textView {
+            textView.window?.makeFirstResponder(nil)
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        private var text: Binding<String>
+        private var isFocused: Binding<Bool>
+
+        init(text: Binding<String>, isFocused: Binding<Bool>) {
+            self.text = text
+            self.isFocused = isFocused
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            text.wrappedValue = textView.string
+        }
+
+        func textDidBeginEditing(_ notification: Notification) {
+            isFocused.wrappedValue = true
+        }
+
+        func textDidEndEditing(_ notification: Notification) {
+            isFocused.wrappedValue = false
         }
     }
 }

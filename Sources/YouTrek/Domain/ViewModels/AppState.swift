@@ -25,6 +25,8 @@ final class AppState: ObservableObject {
     @Published private(set) var hasCompletedBoardSync: Bool = false
     @Published private(set) var hasCompletedSavedSearchSync: Bool = false
     @Published private(set) var currentUserDisplayName: String? = nil
+    @Published private(set) var currentUserLogin: String? = nil
+    @Published private(set) var currentUserID: String? = nil
     @Published private(set) var boardSyncTimestamps: [String: Date] = [:]
     @Published private var boardSprintFilters: [String: BoardSprintFilter] = [:]
     @Published var activeConflict: ConflictNotice?
@@ -92,6 +94,15 @@ final class AppState: ObservableObject {
 
     func markIssueSeen(_ issue: IssueSummary) {
         issueSeenUpdates[issue.id] = issue.updatedAt
+    }
+
+    func markIssuesSeen(_ issues: [IssueSummary]) {
+        guard !issues.isEmpty else { return }
+        var updates: [IssueSummary.ID: Date] = [:]
+        for issue in issues {
+            updates[issue.id] = issue.updatedAt
+        }
+        issueSeenUpdates.merge(updates) { _, new in new }
     }
 
     func resetIssueSeenUpdates() {
@@ -216,6 +227,15 @@ final class AppState: ObservableObject {
     func setCurrentUserDisplayName(_ name: String?) {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         currentUserDisplayName = trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    func setCurrentUserProfile(displayName: String?, login: String?, id: String?) {
+        let trimmedName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLogin = login?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedID = id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        currentUserDisplayName = trimmedName?.isEmpty == false ? trimmedName : nil
+        currentUserLogin = trimmedLogin?.isEmpty == false ? trimmedLogin : nil
+        currentUserID = trimmedID?.isEmpty == false ? trimmedID : nil
     }
 
     var hasCompletedInitialSync: Bool {

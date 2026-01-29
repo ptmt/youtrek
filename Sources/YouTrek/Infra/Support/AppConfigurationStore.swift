@@ -6,6 +6,8 @@ struct AppConfigurationStore {
         static let tokenAccount = "com.potomushto.youtrek.config.token"
         static let lastSidebarSelectionID = "com.potomushto.youtrek.config.last-sidebar-selection"
         static let userDisplayName = "com.potomushto.youtrek.config.user-display-name"
+        static let userLogin = "com.potomushto.youtrek.config.user-login"
+        static let userID = "com.potomushto.youtrek.config.user-id"
     }
 
     private static let sharedSuiteName = "com.potomushto.youtrek.shared"
@@ -50,6 +52,16 @@ struct AppConfigurationStore {
            let name = source.string(forKey: Keys.userDisplayName),
            !name.isEmpty {
             target.set(name, forKey: Keys.userDisplayName)
+        }
+        if target.string(forKey: Keys.userLogin) == nil,
+           let login = source.string(forKey: Keys.userLogin),
+           !login.isEmpty {
+            target.set(login, forKey: Keys.userLogin)
+        }
+        if target.string(forKey: Keys.userID) == nil,
+           let id = source.string(forKey: Keys.userID),
+           !id.isEmpty {
+            target.set(id, forKey: Keys.userID)
         }
         if target.string(forKey: Keys.lastSidebarSelectionID) == nil,
            let selection = source.string(forKey: Keys.lastSidebarSelectionID),
@@ -134,6 +146,30 @@ struct AppConfigurationStore {
 
     func clearUserDisplayName() {
         defaults.removeObject(forKey: Keys.userDisplayName)
+    }
+
+    func loadUserLogin() -> String? {
+        defaults.string(forKey: Keys.userLogin)
+    }
+
+    func saveUserLogin(_ login: String) {
+        defaults.set(login, forKey: Keys.userLogin)
+    }
+
+    func clearUserLogin() {
+        defaults.removeObject(forKey: Keys.userLogin)
+    }
+
+    func loadUserID() -> String? {
+        defaults.string(forKey: Keys.userID)
+    }
+
+    func saveUserID(_ id: String) {
+        defaults.set(id, forKey: Keys.userID)
+    }
+
+    func clearUserID() {
+        defaults.removeObject(forKey: Keys.userID)
     }
 
     func loadLastSidebarSelectionID() -> String? {

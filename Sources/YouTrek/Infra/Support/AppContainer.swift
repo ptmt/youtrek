@@ -84,7 +84,11 @@ final class AppContainer: ObservableObject {
         let composer = IssueComposer()
         let palette = CommandPaletteCoordinator(router: router)
         let configurationStore = AppConfigurationStore()
-        state.setCurrentUserDisplayName(configurationStore.loadUserDisplayName())
+        state.setCurrentUserProfile(
+            displayName: configurationStore.loadUserDisplayName(),
+            login: configurationStore.loadUserLogin(),
+            id: configurationStore.loadUserID()
+        )
         let draftStore = IssueDraftStore()
         let networkMonitor = NetworkRequestMonitor()
         let initialRequiresSetup = AppContainer.requiresSetupOnLaunch(configurationStore: configurationStore)
@@ -206,6 +210,10 @@ final class AppContainer: ObservableObject {
             LoggingService.sync.info("Bootstrap: setup required, skipping initial sync.")
             return
         }
+        Task { [weak self] in
+            guard let self else { return }
+            await self.refreshCurrentUserProfileIfNeeded()
+        }
         if let selection = appState.selectedSidebarItem {
             LoggingService.sync.info("Bootstrap: loading initial selection \(selection.id, privacy: .public).")
             await loadIssues(for: selection)
@@ -260,6 +268,7 @@ final class AppContainer: ObservableObject {
         guard query != lastLoadedIssueQuery else { return }
         lastLoadedIssueQuery = query
         appState.setIssuesLoading(true)
+        let shouldSeedInitialRead = await syncCoordinator.hasSeenUpdates() == false
 
         let board = selection.isBoard ? (resolvedBoard ?? boardForSelection(selection)) : nil
         let sprintFilter = board.map { appState.sprintFilter(for: $0) }
@@ -278,10 +287,15 @@ final class AppContainer: ObservableObject {
                 appState.replaceIssues(with: filtered)
             }
             appState.setIssuesLoading(false)
-            await refreshIssueSeenUpdates(for: filtered)
+            await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: shouldSeedInitialRead)
         }
 
-        let syncResult = await syncCoordinator.refreshIssuesWithStatus(using: query)
+        let syncResult = await syncCoordinator.refreshIssuesWithStatus(
+            using: query,
+            currentUserID: appState.currentUserID,
+            currentUserLogin: appState.currentUserLogin,
+            currentUserDisplayName: appState.currentUserDisplayName
+        )
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
             appState.recordIssueSyncCompleted()
         }
@@ -300,7 +314,7 @@ final class AppContainer: ObservableObject {
             appState.replaceIssues(with: filtered)
         }
         appState.setIssuesLoading(false)
-        await refreshIssueSeenUpdates(for: filtered)
+        await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: shouldSeedInitialRead)
         if selection.isBoard, let boardID = selection.boardID {
             appState.recordBoardSync(boardID: boardID)
         }
@@ -348,7 +362,13 @@ final class AppContainer: ObservableObject {
         let board = resolvedBoard ?? boardForSelection(item)
         let sprintFilter = board.map { appState.sprintFilter(for: $0) }
         let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(board: board, filter: sprintFilter)
-        let syncResult = await syncCoordinator.refreshIssuesWithStatus(using: query)
+        let shouldSeedInitialRead = await syncCoordinator.hasSeenUpdates() == false
+        let syncResult = await syncCoordinator.refreshIssuesWithStatus(
+            using: query,
+            currentUserID: appState.currentUserID,
+            currentUserLogin: appState.currentUserLogin,
+            currentUserDisplayName: appState.currentUserDisplayName
+        )
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
             appState.recordIssueSyncCompleted()
         }
@@ -363,7 +383,7 @@ final class AppContainer: ObservableObject {
                 appState.replaceIssues(with: filtered)
             }
             appState.setIssuesLoading(false)
-            await refreshIssueSeenUpdates(for: filtered)
+            await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: shouldSeedInitialRead)
         }
         if let boardID = item.boardID {
             appState.recordBoardSync(boardID: boardID)
@@ -429,10 +449,23 @@ final class AppContainer: ObservableObject {
         }
     }
 
+    func markIssuesSeen(_ issues: [IssueSummary]) {
+        guard !issues.isEmpty else { return }
+        appState.markIssuesSeen(issues)
+        Task { [weak self] in
+            await self?.syncCoordinator.markIssuesSeen(issues)
+        }
+    }
+
+    func markAllIssuesSeen() {
+        markIssuesSeen(appState.issues)
+    }
+
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async {
         do {
             let updated = try await syncCoordinator.applyOptimisticUpdate(id: id, patch: patch)
             appState.updateIssue(updated)
+            markIssueSeen(updated)
         } catch {
             print("Failed to update issue locally: \(error.localizedDescription)")
         }
@@ -447,6 +480,8 @@ final class AppContainer: ObservableObject {
             try await self.issueRepositorySwitcher.addComment(issueReadableID: issue.readableID, text: trimmed)
         }
         appState.recordComment(comment, for: issue)
+        let updatedIssue = issue.updating(updatedAt: max(issue.updatedAt, comment.createdAt))
+        markIssueSeen(updatedIssue)
         return comment
     }
 
@@ -494,6 +529,7 @@ final class AppContainer: ObservableObject {
                 _ = await issueDraftStore.markDraftSubmitted(id: record.id)
                 await MainActor.run {
                     self.appState.updateIssue(created)
+                    self.markIssueSeen(created)
                 }
             } catch {
                 _ = await issueDraftStore.markDraftFailed(id: record.id, errorDescription: error.localizedDescription)
@@ -600,7 +636,7 @@ final class AppContainer: ObservableObject {
                 }
                 await self.applyOAuth(configuration: configuration, configureRepositories: false)
                 try await authRepository.signIn()
-                self.updateUserDisplayName(from: self.authRepository.currentAccount)
+                self.updateUserProfile(from: self.authRepository.currentAccount)
                 await self.applyOAuth(configuration: configuration, configureRepositories: true)
                 LoggingService.sync.info("Sign-in: completed, bootstrapping.")
                 await self.bootstrap()
@@ -628,9 +664,11 @@ final class AppContainer: ObservableObject {
 
         configurationStore.clearBaseURL()
         configurationStore.clearUserDisplayName()
+        configurationStore.clearUserLogin()
+        configurationStore.clearUserID()
         configurationStore.clearLastSidebarSelectionID()
 
-        appState.setCurrentUserDisplayName(nil)
+        appState.setCurrentUserProfile(displayName: nil, login: nil, id: nil)
         appState.updateSyncActivity(isSyncing: false, label: nil)
         appState.resetInitialSyncState()
         appState.resetBoardSyncState()
@@ -648,7 +686,7 @@ final class AppContainer: ObservableObject {
         priorityOptionsCache.removeAll()
     }
 
-    func validateManualToken(baseURL: URL, token: String) async throws -> String? {
+    func validateManualToken(baseURL: URL, token: String) async throws -> YouTrackTokenValidationUser {
         let apiBaseURL = Self.apiBaseURL(from: baseURL)
         let tokenProvider = YouTrackAPITokenProvider.constant(token)
         let configuration = YouTrackAPIConfiguration(baseURL: apiBaseURL, tokenProvider: tokenProvider)
@@ -658,7 +696,7 @@ final class AppContainer: ObservableObject {
         let data = try await client.get(path: "users/me", queryItems: queryItems)
         let user = try JSONDecoder().decode(YouTrackTokenValidationUser.self, from: data)
         LoggingService.networking.info("Token validation: success for user \(user.displayName ?? "unknown", privacy: .public).")
-        return user.displayName
+        return user
     }
 
     struct ManualTokenSaveOutcome: Sendable {
@@ -669,7 +707,7 @@ final class AppContainer: ObservableObject {
     func completeManualSetup(
         baseURL: URL,
         token: String,
-        userDisplayName: String? = nil,
+        userProfile: YouTrackTokenValidationUser? = nil,
         allowKeychainInteraction: Bool = false
     ) async -> ManualTokenSaveOutcome {
         let apiBaseURL = Self.apiBaseURL(from: baseURL)
@@ -680,16 +718,16 @@ final class AppContainer: ObservableObject {
         var tokenSaved = true
         var tokenSaveError: String?
         do {
-            try manualAuth.apply(token: token, displayName: userDisplayName)
+            try manualAuth.apply(token: token, displayName: userProfile?.displayName)
         } catch {
             tokenSaved = false
             tokenSaveError = error.localizedDescription
             LoggingService.sync.error("Manual setup: failed to save token (\(error.localizedDescription, privacy: .public)).")
         }
-        updateUserDisplayName(from: manualAuth.currentAccount)
         LoggingService.sync.info("Manual setup: repositories configured for \(apiBaseURL.absoluteString, privacy: .public).")
 
         authRepositorySwitcher.replace(with: manualAuth)
+        storeUserProfile(userProfile)
 
         let tokenProvider = YouTrackAPITokenProvider {
             try await manualAuth.currentAccessToken()
@@ -731,12 +769,68 @@ final class AppContainer: ObservableObject {
         supportsBrowserAuth
     }
 
-    private func updateUserDisplayName(from account: Account?) {
+    private func updateUserProfile(from account: Account?) {
         let trimmed = account?.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmed, !trimmed.isEmpty {
             configurationStore.saveUserDisplayName(trimmed)
         }
-        appState.setCurrentUserDisplayName(configurationStore.loadUserDisplayName())
+        appState.setCurrentUserProfile(
+            displayName: configurationStore.loadUserDisplayName(),
+            login: configurationStore.loadUserLogin(),
+            id: configurationStore.loadUserID()
+        )
+    }
+
+    private func storeUserProfile(_ profile: YouTrackTokenValidationUser?) {
+        guard let profile else {
+            updateUserProfile(from: authRepository.currentAccount)
+            return
+        }
+        if let displayName = profile.displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !displayName.isEmpty {
+            configurationStore.saveUserDisplayName(displayName)
+        }
+        if let login = profile.login?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !login.isEmpty {
+            configurationStore.saveUserLogin(login)
+        }
+        if let id = profile.id?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !id.isEmpty {
+            configurationStore.saveUserID(id)
+        }
+        appState.setCurrentUserProfile(
+            displayName: configurationStore.loadUserDisplayName(),
+            login: configurationStore.loadUserLogin(),
+            id: configurationStore.loadUserID()
+        )
+    }
+
+    private func refreshCurrentUserProfileIfNeeded() async {
+        guard !requiresSetup else { return }
+        let storedLogin = configurationStore.loadUserLogin()
+        let storedID = configurationStore.loadUserID()
+        if storedLogin?.isEmpty == false, storedID?.isEmpty == false {
+            return
+        }
+        guard let baseURL = configurationStore.loadBaseURL() else { return }
+        let token: String
+        do {
+            token = try await authRepository.currentAccessToken()
+        } catch {
+            LoggingService.sync.error("Failed to refresh user profile token: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+        let tokenProvider = YouTrackAPITokenProvider.constant(token)
+        let configuration = YouTrackAPIConfiguration(baseURL: baseURL, tokenProvider: tokenProvider)
+        let client = YouTrackAPIClient(configuration: configuration, session: .shared, monitor: networkMonitor)
+        let queryItems = [URLQueryItem(name: "fields", value: "id,login,name,fullName")]
+        do {
+            let data = try await client.get(path: "users/me", queryItems: queryItems)
+            let user = try JSONDecoder().decode(YouTrackTokenValidationUser.self, from: data)
+            storeUserProfile(user)
+        } catch {
+            LoggingService.sync.error("Failed to refresh user profile: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func configureIfNeeded() async {
@@ -763,13 +857,18 @@ final class AppContainer: ObservableObject {
         }
 
         if let baseURL, let token, !token.isEmpty {
-            var displayName = configurationStore.loadUserDisplayName()
-            if displayName == nil {
+            let needsProfile = configurationStore.loadUserDisplayName() == nil
+                || configurationStore.loadUserLogin() == nil
+                || configurationStore.loadUserID() == nil
+            let userProfile: YouTrackTokenValidationUser?
+            if needsProfile {
                 LoggingService.sync.info("Configuration: stored token found, validating user profile.")
-                displayName = try? await validateManualToken(baseURL: baseURL, token: token)
+                userProfile = try? await validateManualToken(baseURL: baseURL, token: token)
+            } else {
+                userProfile = nil
             }
             LoggingService.sync.info("Configuration: stored token found, bootstrapping.")
-            _ = await completeManualSetup(baseURL: baseURL, token: token, userDisplayName: displayName)
+            _ = await completeManualSetup(baseURL: baseURL, token: token, userProfile: userProfile)
             return
         }
 
@@ -793,7 +892,7 @@ final class AppContainer: ObservableObject {
         )
         oauthRepository = appAuthRepository
         authRepositorySwitcher.replace(with: appAuthRepository)
-        updateUserDisplayName(from: appAuthRepository.currentAccount)
+        updateUserProfile(from: appAuthRepository.currentAccount)
         supportsBrowserAuth = true
         requiresSetup = appAuthRepository.currentAccount == nil
 
@@ -820,7 +919,7 @@ final class AppContainer: ObservableObject {
     }
 }
 
-private struct YouTrackTokenValidationUser: Decodable {
+struct YouTrackTokenValidationUser: Decodable, Sendable {
     let id: String?
     let login: String?
     let name: String?
@@ -1126,10 +1225,13 @@ private extension AppContainer {
         )
     }
 
-    func refreshIssueSeenUpdates(for issues: [IssueSummary]) async {
+    func refreshIssueSeenUpdates(for issues: [IssueSummary], shouldSeedInitialRead: Bool = false) async {
         guard !issues.isEmpty else { return }
         let updates = await syncCoordinator.loadIssueSeenUpdates(for: issues.map(\.id))
         appState.updateIssueSeenUpdates(updates)
+        if shouldSeedInitialRead {
+            markIssuesSeen(issues)
+        }
     }
 
 }

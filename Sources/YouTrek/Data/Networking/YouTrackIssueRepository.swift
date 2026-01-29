@@ -236,6 +236,18 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
                 remoteID: user.id
             )
         }
+        let updatedBy = issue.updater.flatMap { user -> Person? in
+            guard let displayName = user.displayName else { return nil }
+            let avatarURL = user.avatarUrl.flatMap(URL.init(string:))
+            let identifier = user.compositeIdentifier.isEmpty ? displayName : user.compositeIdentifier
+            return Person(
+                id: Person.stableID(for: identifier),
+                displayName: displayName,
+                avatarURL: avatarURL,
+                login: user.login,
+                remoteID: user.id
+            )
+        }
 
         let statusName = statusField?.value.firstValue?.name
             ?? statusField?.value.firstValue?.localizedName
@@ -258,6 +270,7 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
             title: issue.summary,
             projectName: projectName,
             updatedAt: updatedDate,
+            updatedBy: updatedBy,
             assignee: assignee,
             reporter: reporter,
             priority: priority,
@@ -370,6 +383,7 @@ private extension YouTrackIssueRepository {
         "updated",
         "customFields($type,name,value(id,name,localizedName,fullName,login,avatarUrl))",
         "reporter(id,login,fullName,avatarUrl)",
+        "updater(id,login,fullName,avatarUrl)",
         "tags(name)"
     ].joined(separator: ",")
 
@@ -468,6 +482,7 @@ private struct YouTrackIssue: Decodable {
     let created: Int?
     let updated: Int?
     let reporter: User?
+    let updater: User?
     let comments: [Comment]?
     let customFields: [CustomField]?
     let tags: [Tag]?

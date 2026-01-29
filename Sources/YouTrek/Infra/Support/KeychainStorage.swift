@@ -78,7 +78,8 @@ struct KeychainStorage {
         }
     }
 
-    private func baseQuery(for account: String, useDataProtectionKeychain: Bool) -> [String: Any] {
+    private func identityQuery(for account: String, useDataProtectionKeychain: Bool) -> [String: Any] {
+        // Keep identity keys minimal so reads/updates match what was written.
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -91,6 +92,20 @@ struct KeychainStorage {
             if #available(macOS 10.15, *) {
                 query[kSecUseDataProtectionKeychain as String] = true
             }
+        }
+        return query
+    }
+
+    private func addQuery(
+        for account: String,
+        data: Data,
+        useDataProtectionKeychain: Bool
+    ) -> [String: Any] {
+        var query = identityQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
+        query[kSecValueData as String] = data
+        // Ensure the keychain prompt includes a stable, non-empty label if it ever appears.
+        query[kSecAttrLabel as String] = service
+        if useDataProtectionKeychain {
             query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         }
         return query
@@ -101,7 +116,7 @@ struct KeychainStorage {
         useDataProtectionKeychain: Bool,
         allowInteraction: Bool
     ) throws -> Data? {
-        var query = baseQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
+        var query = identityQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
         if #available(macOS 10.10, *) {
             let context = LAContext()
             context.interactionNotAllowed = !allowInteraction
@@ -131,7 +146,7 @@ struct KeychainStorage {
     }
 
     private func loadLegacy(account: String, allowInteraction: Bool) throws -> Data? {
-        var query = baseQuery(for: account, useDataProtectionKeychain: false)
+        var query = identityQuery(for: account, useDataProtectionKeychain: false)
         if #available(macOS 10.10, *) {
             let context = LAContext()
             context.interactionNotAllowed = !allowInteraction
@@ -161,7 +176,7 @@ struct KeychainStorage {
     }
 
     private func deleteLegacy(account: String) throws {
-        var query = baseQuery(for: account, useDataProtectionKeychain: false)
+        var query = identityQuery(for: account, useDataProtectionKeychain: false)
         if #available(macOS 10.10, *) {
             let context = LAContext()
             context.interactionNotAllowed = true
@@ -174,18 +189,13 @@ struct KeychainStorage {
     }
 
     private func saveData(_ data: Data, account: String, useDataProtectionKeychain: Bool) throws {
-        var query: [String: Any] = baseQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
-        // Remove any existing entry first so we can perform an idempotent write.
-        SecItemDelete(query as CFDictionary)
-        query[kSecValueData as String] = data
-        // Ensure the keychain prompt includes a stable, non-empty label if it ever appears.
-        query[kSecAttrLabel as String] = service
-        let status = SecItemAdd(query as CFDictionary, nil)
+        let insertQuery = addQuery(for: account, data: data, useDataProtectionKeychain: useDataProtectionKeychain)
+        let status = SecItemAdd(insertQuery as CFDictionary, nil)
         switch status {
         case errSecSuccess:
             return
         case errSecDuplicateItem:
-            let updateQuery = baseQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
+            let updateQuery = identityQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
             let attributes: [String: Any] = [
                 kSecValueData as String: data,
                 kSecAttrLabel as String: service
@@ -200,7 +210,7 @@ struct KeychainStorage {
     }
 
     private func deleteData(account: String, useDataProtectionKeychain: Bool) throws {
-        let query = baseQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
+        let query = identityQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainStorageError.operationFailed(status: status)

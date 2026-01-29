@@ -7,6 +7,7 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
     let title: String
     let projectName: String
     let updatedAt: Date
+    let updatedBy: Person?
     let assignee: Person?
     let reporter: Person?
     let priority: IssuePriority
@@ -20,6 +21,7 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
         title: String,
         projectName: String,
         updatedAt: Date = .now,
+        updatedBy: Person? = nil,
         assignee: Person? = nil,
         reporter: Person? = nil,
         priority: IssuePriority = .normal,
@@ -32,6 +34,7 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
         self.title = title
         self.projectName = projectName
         self.updatedAt = updatedAt
+        self.updatedBy = updatedBy
         self.assignee = assignee
         self.reporter = reporter
         self.priority = priority
@@ -62,6 +65,7 @@ extension IssueSummary {
             title: title,
             projectName: projectName,
             updatedAt: date,
+            updatedBy: updatedBy,
             assignee: assignee,
             reporter: reporter,
             priority: priority,

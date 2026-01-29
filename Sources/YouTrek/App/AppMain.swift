@@ -92,11 +92,8 @@ private final class WindowAccessorView: NSView {
     func scheduleWindowConfiguration() {
         guard !pendingConfiguration else { return }
         pendingConfiguration = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.pendingConfiguration = false
-            self.configureWindowIfNeeded()
-        }
+        defer { pendingConfiguration = false }
+        configureWindowIfNeeded()
     }
 
     func configureWindowIfNeeded() {

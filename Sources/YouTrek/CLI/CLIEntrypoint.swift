@@ -225,7 +225,13 @@ private enum CLIRunner {
             let issueRepository = YouTrackIssueRepository(configuration: connection.configuration)
             let issues = try await issueRepository.fetchIssues(query: query)
             let store = IssueLocalStore()
-            await store.saveRemoteIssues(issues, for: query)
+            await store.saveRemoteIssues(
+                issues,
+                for: query,
+                currentUserID: nil,
+                currentUserLogin: nil,
+                currentUserDisplayName: nil
+            )
 
             if parsed.flags.contains("--json") {
                 let output = issues.map { IssueSummaryOutput(issue: $0) }
@@ -572,7 +578,13 @@ private enum CLIRunner {
             let page = IssueQuery.Page(size: 50, offset: 0)
             let query = IssueQuery(rawQuery: nil, search: "", filters: [], sort: .updated(descending: true), page: page)
             let issues = try await issueRepository.fetchIssues(query: query)
-            await issueStore.saveRemoteIssues(issues, for: query)
+            await issueStore.saveRemoteIssues(
+                issues,
+                for: query,
+                currentUserID: nil,
+                currentUserLogin: nil,
+                currentUserDisplayName: nil
+            )
             CLIOutput.printInfo("Issues synced (\(issues.count)).")
         } catch {
             CLIOutput.printError("Issues sync failed: \(error.localizedDescription)")

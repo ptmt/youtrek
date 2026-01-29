@@ -77,7 +77,13 @@ actor IssueLocalStore {
         }
     }
 
-    func saveRemoteIssues(_ remoteIssues: [IssueSummary], for query: IssueQuery) async {
+    func saveRemoteIssues(
+        _ remoteIssues: [IssueSummary],
+        for query: IssueQuery,
+        currentUserID: String?,
+        currentUserLogin: String?,
+        currentUserDisplayName: String?
+    ) async {
         guard let db else { return }
         let key = queryKey(for: query)
         do {
@@ -90,7 +96,25 @@ actor IssueLocalStore {
                 let existingRow = try db.pluck(issues.filter(issueID == idString))
                 let isLocalDirty = existingRow?[isDirty] ?? false
                 if !isLocalDirty {
-                    try upsert(issue: issue, db: db, existingRow: existingRow, markDirty: false)
+                    let existingSeenAt = existingRow?[lastSeenUpdatedAt]
+                    let updatedByCurrentUser = matchesCurrentUser(
+                        issue.updatedBy,
+                        currentUserID: currentUserID,
+                        currentUserLogin: currentUserLogin,
+                        currentUserDisplayName: currentUserDisplayName
+                    )
+                    let resolvedSeenAt: Double?
+                    if updatedByCurrentUser {
+                        let updatedAtValue = issue.updatedAt.timeIntervalSince1970
+                        if let existingSeenAt {
+                            resolvedSeenAt = max(existingSeenAt, updatedAtValue)
+                        } else {
+                            resolvedSeenAt = updatedAtValue
+                        }
+                    } else {
+                        resolvedSeenAt = existingSeenAt
+                    }
+                    try upsert(issue: issue, db: db, markDirty: false, lastSeenUpdatedAt: resolvedSeenAt)
                 }
                 let seenAt = Date().timeIntervalSince1970
                 let insert = issueQueries.insert(or: .replace,
@@ -141,6 +165,32 @@ actor IssueLocalStore {
             try db.run(row.update(lastSeenUpdatedAt <- seenAt))
         } catch {
             return
+        }
+    }
+
+    func markIssuesSeen(_ seenIssues: [IssueSummary]) async {
+        guard let db else { return }
+        guard !seenIssues.isEmpty else { return }
+        do {
+            try db.run("BEGIN IMMEDIATE TRANSACTION")
+            for issue in seenIssues {
+                let seenAt = issue.updatedAt.timeIntervalSince1970
+                let row = issues.filter(issueID == issue.id.uuidString)
+                try db.run(row.update(lastSeenUpdatedAt <- seenAt))
+            }
+            try db.run("COMMIT")
+        } catch {
+            try? db.run("ROLLBACK")
+        }
+    }
+
+    func hasSeenUpdates() async -> Bool {
+        guard let db else { return false }
+        do {
+            let row = try db.pluck(issues.filter(lastSeenUpdatedAt != nil))
+            return row != nil
+        } catch {
+            return false
         }
     }
 
@@ -235,12 +285,17 @@ actor IssueLocalStore {
 
     private func upsert(issue: IssueSummary, db: Connection, markDirty: Bool) throws {
         let existingRow = try? db.pluck(issues.filter(issueID == issue.id.uuidString))
-        try upsert(issue: issue, db: db, existingRow: existingRow, markDirty: markDirty)
+        let seenAt = existingRow?[lastSeenUpdatedAt]
+        try upsert(issue: issue, db: db, markDirty: markDirty, lastSeenUpdatedAt: seenAt)
     }
 
-    private func upsert(issue: IssueSummary, db: Connection, existingRow: Row?, markDirty: Bool) throws {
-        let seenAt = existingRow?[lastSeenUpdatedAt]
-        let setters = issueSetters(for: issue, markDirty: markDirty, lastSeenUpdatedAt: seenAt)
+    private func upsert(
+        issue: IssueSummary,
+        db: Connection,
+        markDirty: Bool,
+        lastSeenUpdatedAt: Double?
+    ) throws {
+        let setters = issueSetters(for: issue, markDirty: markDirty, lastSeenUpdatedAt: lastSeenUpdatedAt)
         let insert = issues.insert(or: .replace, setters)
         try db.run(insert)
     }
@@ -272,6 +327,34 @@ actor IssueLocalStore {
             customFieldsJSON <- encodeCustomFields(issue.customFieldValues),
             isDirty <- markDirty
         ]
+    }
+
+    private func matchesCurrentUser(
+        _ person: Person?,
+        currentUserID: String?,
+        currentUserLogin: String?,
+        currentUserDisplayName: String?
+    ) -> Bool {
+        guard let person else { return false }
+        let trimmedPersonID = person.remoteID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedPersonLogin = person.login?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedPersonName = person.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedUserID = currentUserID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedUserLogin = currentUserLogin?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedUserName = currentUserDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !trimmedPersonID.isEmpty, !trimmedUserID.isEmpty, trimmedPersonID == trimmedUserID {
+            return true
+        }
+        if !trimmedPersonLogin.isEmpty, !trimmedUserLogin.isEmpty,
+           trimmedPersonLogin.caseInsensitiveCompare(trimmedUserLogin) == .orderedSame {
+            return true
+        }
+        if !trimmedPersonName.isEmpty, !trimmedUserName.isEmpty,
+           trimmedPersonName.caseInsensitiveCompare(trimmedUserName) == .orderedSame {
+            return true
+        }
+        return false
     }
 
     private func issueFromRow(_ row: Row) -> IssueSummary {
@@ -355,6 +438,7 @@ actor IssueLocalStore {
             title: patch.title ?? issue.title,
             projectName: resolvedProjectName,
             updatedAt: Date(),
+            updatedBy: issue.updatedBy,
             assignee: resolvedAssignee,
             reporter: issue.reporter,
             priority: resolvedPriority,

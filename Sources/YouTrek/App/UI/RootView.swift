@@ -23,6 +23,9 @@ private struct RootContentView: View {
     private var selectedIssues: [IssueSummary] {
         appState.issues.filter { appState.selectedIssueIDs.contains($0.id) }
     }
+    private var hasUnreadIssues: Bool {
+        appState.issues.contains { appState.isIssueUnread($0) }
+    }
 
     init(appState: AppState) {
         self.appState = appState
@@ -209,6 +212,17 @@ private struct RootContentView: View {
                 Label("Columns", systemImage: "tablecells")
             }
             .help("Show or hide optional columns in the issue list")
+        }
+
+        ToolbarItem(placement: .automatic) {
+            Button {
+                container.markAllIssuesSeen()
+            } label: {
+                Label("Mark All as Read", systemImage: "checkmark.circle")
+            }
+            .buttonStyle(.accessoryBar)
+            .disabled(!hasUnreadIssues)
+            .help("Mark all issues in the current list as read")
         }
 
         #if DEBUG
