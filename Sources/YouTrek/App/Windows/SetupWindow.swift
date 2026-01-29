@@ -59,7 +59,7 @@ struct SetupWindow: View {
                 .resizable()
                 .scaledToFit()
                 .frame(height: 44)
-                .padding(.bottom, 8)
+                .padding(.top, 8)
                 .accessibilityLabel("YouTrek")
 
             if isPreparingWorkspace {
@@ -90,18 +90,18 @@ struct SetupWindow: View {
                                 Text("Paste your YouTrack token")
                                     .font(.system(size: 14, weight: .regular, design: .monospaced))
                                     .foregroundStyle(tertiaryTextColor)
-                                    .padding(.leading, 4)
-                                    .padding(.top, 5)
+                                    .padding(.leading, 5)
+                                    .padding(.top, 8)
                                     .allowsHitTesting(false)
                             }
-                            TokenTextEditor(
-                                text: $token,
-                                isFocused: tokenFocusBinding,
-                                textColor: primaryTextColor,
-                                tintColor: accentColor
-                            )
-                            .accessibilityLabel("YouTrack token")
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            TextEditor(text: $token)
+                                .font(.system(size: 14, weight: .regular, design: .monospaced))
+                                .foregroundStyle(primaryTextColor)
+                                .tint(accentColor)
+                                .padding(.top, 8)
+                                .scrollContentBackground(.hidden)
+                                .accessibilityLabel("YouTrack token")
+                                .focused($focusedField, equals: .token)
                         }
                         .padding(.horizontal, 4)
                         .padding(.vertical, 4)
@@ -217,19 +217,6 @@ struct SetupWindow: View {
 
     private var shouldShowSetupProgress: Bool {
         isValidatingToken || hasStartedSignIn || container.appState.isSyncing
-    }
-
-    private var tokenFocusBinding: Binding<Bool> {
-        Binding(
-            get: { focusedField == .token },
-            set: { isFocused in
-                if isFocused {
-                    focusedField = .token
-                } else if focusedField == .token {
-                    focusedField = nil
-                }
-            }
-        )
     }
 
     private var setupProgressText: String {
@@ -509,148 +496,6 @@ struct SetupWindow: View {
 }
 
 @MainActor
-private struct TokenTextEditor: NSViewRepresentable {
-    @Binding var text: String
-    @Binding var isFocused: Bool
-    let textColor: Color
-    let tintColor: Color
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, isFocused: $isFocused)
-    }
-
-    func makeNSView(context: Context) -> TokenTextScrollView {
-        let textView = TokenTextView()
-        textView.delegate = context.coordinator
-        textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-        textView.textColor = NSColor(textColor)
-        textView.insertionPointColor = NSColor(tintColor)
-        textView.backgroundColor = .clear
-        textView.drawsBackground = false
-        textView.isEditable = true
-        textView.isSelectable = true
-        textView.isRichText = false
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
-        textView.isGrammarCheckingEnabled = false
-        textView.isContinuousSpellCheckingEnabled = false
-        textView.textContainerInset = NSSize(width: 4, height: 5)
-        textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.heightTracksTextView = false
-        textView.textContainer?.lineFragmentPadding = 0
-        textView.string = text
-        textView.onFocusChange = { [weak coordinator = context.coordinator] isFocused in
-            coordinator?.isFocused.wrappedValue = isFocused
-        }
-
-        let scrollView = TokenTextScrollView(textView: textView)
-        scrollView.drawsBackground = false
-        scrollView.borderType = .noBorder
-        scrollView.hasVerticalScroller = false
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-        return scrollView
-    }
-
-    func updateNSView(_ nsView: TokenTextScrollView, context: Context) {
-        let textView = nsView.textView
-        if textView.string != text {
-            textView.string = text
-        }
-        textView.textColor = NSColor(textColor)
-        textView.insertionPointColor = NSColor(tintColor)
-        if isFocused {
-            if textView.window?.firstResponder !== textView {
-                textView.window?.makeFirstResponder(textView)
-            }
-        }
-    }
-
-    final class Coordinator: NSObject, NSTextViewDelegate {
-        private var text: Binding<String>
-        fileprivate var isFocused: Binding<Bool>
-
-        init(text: Binding<String>, isFocused: Binding<Bool>) {
-            self.text = text
-            self.isFocused = isFocused
-        }
-
-        func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
-            text.wrappedValue = textView.string
-        }
-
-        func textDidBeginEditing(_ notification: Notification) {
-            isFocused.wrappedValue = true
-        }
-
-        func textDidEndEditing(_ notification: Notification) {
-            isFocused.wrappedValue = false
-        }
-
-        func textViewDidChangeSelection(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
-            if textView.window?.firstResponder === textView {
-                isFocused.wrappedValue = true
-            }
-        }
-    }
-}
-
-@MainActor
-private final class TokenTextView: NSTextView {
-    var onFocusChange: ((Bool) -> Void)?
-
-    override func becomeFirstResponder() -> Bool {
-        let result = super.becomeFirstResponder()
-        if result {
-            onFocusChange?(true)
-        }
-        return result
-    }
-
-    override func resignFirstResponder() -> Bool {
-        let result = super.resignFirstResponder()
-        if result {
-            onFocusChange?(false)
-        }
-        return result
-    }
-}
-
-@MainActor
-private final class TokenTextScrollView: NSScrollView {
-    let textView: TokenTextView
-
-    init(textView: TokenTextView) {
-        self.textView = textView
-        super.init(frame: .zero)
-        documentView = textView
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func layout() {
-        super.layout()
-        let bounds = contentView.bounds
-        if textView.frame != bounds {
-            textView.frame = bounds
-        }
-        if let container = textView.textContainer {
-            let containerSize = NSSize(width: bounds.width, height: CGFloat.greatestFiniteMagnitude)
-            if container.containerSize != containerSize {
-                container.containerSize = containerSize
-            }
-        }
-    }
-}
-
 private struct SetupNetworkStatusView: View {
     @ObservedObject var monitor: NetworkRequestMonitor
 

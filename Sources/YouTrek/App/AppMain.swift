@@ -20,6 +20,7 @@ struct YouTrekApp: App {
                 .environmentObject(container)
                 .preferredColorScheme(theme.colorScheme)
         }
+        .windowStyle(.hiddenTitleBar)
         .commands { AppMenus(container: container) }
 
         WindowGroup("YouTrek Issue", id: SceneID.issue.rawValue) {
@@ -105,12 +106,12 @@ private final class WindowAccessorView: NSView {
 
         if isSetup {
             if needsReconfigure {
-                window.styleMask = [.borderless, .fullSizeContentView]
+                window.styleMask = [.titled, .closable, .fullSizeContentView]
                 hasAppliedSetupPresentation = false
             }
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
-            window.standardWindowButton(.closeButton)?.isHidden = true
+            window.standardWindowButton(.closeButton)?.isHidden = false
             window.standardWindowButton(.miniaturizeButton)?.isHidden = true
             window.standardWindowButton(.zoomButton)?.isHidden = true
             if #available(macOS 11.0, *) {
