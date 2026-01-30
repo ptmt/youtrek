@@ -12,6 +12,7 @@ struct AppConfigurationStore {
 
     private static let sharedSuiteName = "com.potomushto.youtrek.shared"
     private static let sharedKeychainGroupSuffix = "com.potomushto.youtrek.shared"
+    private static let configKeychainGroupSuffix = "com.potomushto.youtrek.config"
     private static let legacyKeychainGroupSuffixes = [
         "com.potomushto.youtrek.macos",
         "com.potomushto.youtrek"
@@ -24,10 +25,8 @@ struct AppConfigurationStore {
         defaults: UserDefaults = AppConfigurationStore.defaultDefaults(),
         keychain: KeychainStorage = KeychainStorage(
             service: "com.potomushto.youtrek.config",
-            accessGroup: KeychainAccessGroupResolver.resolve(
-                matchingSuffixes: [AppConfigurationStore.sharedKeychainGroupSuffix]
-                    + AppConfigurationStore.legacyKeychainGroupSuffixes
-            )
+            accessGroup: AppConfigurationStore.resolveAccessGroup(),
+            prefersDataProtectionKeychain: false
         )
     ) {
         self.defaults = defaults
@@ -99,11 +98,24 @@ struct AppConfigurationStore {
             return (nil, message)
         }
         if let unwrapped = tokenData {
-            return (String(data: unwrapped, encoding: .utf8), nil)
+            guard let token = String(data: unwrapped, encoding: .utf8) else {
+                return (nil, "Unable to decode token data.")
+            }
+            return (token, nil)
         }
         guard keychain.accessGroup != nil else { return (nil, nil) }
         do {
-            let legacyKeychain = KeychainStorage(service: "com.potomushto.youtrek.config")
+            if let migrated = try loadFromAlternateAccessGroups(allowInteraction: allowInteraction) {
+                return (String(data: migrated, encoding: .utf8), nil)
+            }
+        } catch {
+            return (nil, error.localizedDescription)
+        }
+        do {
+            let legacyKeychain = KeychainStorage(
+                service: "com.potomushto.youtrek.config",
+                prefersDataProtectionKeychain: false
+            )
             if let legacyData = try legacyKeychain.load(
                 account: Keys.tokenAccount,
                 allowInteraction: allowInteraction
@@ -123,16 +135,22 @@ struct AppConfigurationStore {
         let data = Data(token.utf8)
         try keychain.save(data: data, account: Keys.tokenAccount)
         if keychain.accessGroup != nil {
-            try? KeychainStorage(service: "com.potomushto.youtrek.config")
-                .save(data: data, account: Keys.tokenAccount)
+            try? KeychainStorage(
+                service: "com.potomushto.youtrek.config",
+                prefersDataProtectionKeychain: false
+            )
+            .save(data: data, account: Keys.tokenAccount)
         }
     }
 
     func clearToken() throws {
         try keychain.delete(account: Keys.tokenAccount)
         if keychain.accessGroup != nil {
-            try? KeychainStorage(service: "com.potomushto.youtrek.config")
-                .delete(account: Keys.tokenAccount)
+            try? KeychainStorage(
+                service: "com.potomushto.youtrek.config",
+                prefersDataProtectionKeychain: false
+            )
+            .delete(account: Keys.tokenAccount)
         }
     }
 
@@ -182,6 +200,32 @@ struct AppConfigurationStore {
 
     func clearLastSidebarSelectionID() {
         defaults.removeObject(forKey: Keys.lastSidebarSelectionID)
+    }
+
+    private static func resolveAccessGroup() -> String? {
+        let preferredSuffixes = [sharedKeychainGroupSuffix, configKeychainGroupSuffix]
+            + legacyKeychainGroupSuffixes
+        if let match = KeychainAccessGroupResolver.resolve(matchingSuffixes: preferredSuffixes) { return match }
+        let availableGroups = KeychainAccessGroupResolver.availableGroups().sorted()
+        return availableGroups.first
+    }
+
+    private func loadFromAlternateAccessGroups(allowInteraction: Bool) throws -> Data? {
+        guard let currentGroup = keychain.accessGroup else { return nil }
+        let availableGroups = KeychainAccessGroupResolver.availableGroups()
+        let candidates = availableGroups.filter { $0 != currentGroup }
+        guard !candidates.isEmpty else { return nil }
+        for group in candidates {
+            let alternate = KeychainStorage(service: keychain.service, accessGroup: group)
+            if let data = try alternate.load(
+                account: Keys.tokenAccount,
+                allowInteraction: allowInteraction
+            ) {
+                try? keychain.save(data: data, account: Keys.tokenAccount)
+                return data
+            }
+        }
+        return nil
     }
 }
 

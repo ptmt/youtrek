@@ -5,13 +5,20 @@ import Security
 struct KeychainStorage {
     let service: String
     let accessGroup: String?
+    // When false, skip the data-protection keychain to use the legacy keychain store.
+    let prefersDataProtectionKeychain: Bool
 
-    init(service: String, accessGroup: String? = nil) {
+    init(service: String, accessGroup: String? = nil, prefersDataProtectionKeychain: Bool = true) {
         self.service = service
         self.accessGroup = accessGroup
+        self.prefersDataProtectionKeychain = prefersDataProtectionKeychain
     }
 
     func save(data: Data, account: String) throws {
+        guard prefersDataProtectionKeychain else {
+            try saveData(data, account: account, useDataProtectionKeychain: false)
+            return
+        }
         do {
             try saveData(data, account: account, useDataProtectionKeychain: true)
             let readback = try? loadData(
@@ -31,6 +38,9 @@ struct KeychainStorage {
     }
 
     func load(account: String, allowInteraction: Bool = false) throws -> Data? {
+        if !prefersDataProtectionKeychain {
+            return try loadLegacy(account: account, allowInteraction: allowInteraction)
+        }
         var dataProtectionError: Error?
         do {
             if let data = try loadData(
@@ -46,12 +56,16 @@ struct KeychainStorage {
 
         if let legacyData = try loadLegacy(account: account, allowInteraction: allowInteraction) {
             if dataProtectionError == nil {
-                try? saveData(
-                    legacyData,
-                    account: account,
-                    useDataProtectionKeychain: true
-                )
-                try? deleteLegacy(account: account)
+                do {
+                    try saveData(
+                        legacyData,
+                        account: account,
+                        useDataProtectionKeychain: true
+                    )
+                    try deleteLegacy(account: account)
+                } catch {
+                    // Ignore migration failures; legacy data is still available.
+                }
             }
             return legacyData
         }
@@ -63,6 +77,10 @@ struct KeychainStorage {
     }
 
     func delete(account: String) throws {
+        if !prefersDataProtectionKeychain {
+            try deleteLegacy(account: account)
+            return
+        }
         var dataProtectionError: Error?
         do {
             try deleteData(account: account, useDataProtectionKeychain: true)
@@ -235,19 +253,27 @@ struct KeychainStorageError: Error, LocalizedError {
 }
 
 enum KeychainAccessGroupResolver {
-    private static let entitlementKey = "com.apple.security.keychain-access-groups"
+    private static let entitlementKeys = [
+        "keychain-access-groups",
+        "com.apple.security.keychain-access-groups"
+    ]
 
     static func resolve(matchingSuffix suffix: String) -> String? {
         guard let task = SecTaskCreateFromSelf(nil) else { return nil }
-        guard let value = SecTaskCopyValueForEntitlement(
-            task,
-            entitlementKey as CFString,
-            nil
-        ) else {
-            return nil
+        for key in entitlementKeys {
+            guard let value = SecTaskCopyValueForEntitlement(
+                task,
+                key as CFString,
+                nil
+            ) else {
+                continue
+            }
+            guard let groups = value as? [String] else { continue }
+            if let match = groups.first(where: { $0.hasSuffix(suffix) }) {
+                return match
+            }
         }
-        let groups = value as? [String]
-        return groups?.first(where: { $0.hasSuffix(suffix) })
+        return nil
     }
 
     static func resolve(matchingSuffixes suffixes: [String]) -> String? {
@@ -261,13 +287,19 @@ enum KeychainAccessGroupResolver {
 
     static func availableGroups() -> [String] {
         guard let task = SecTaskCreateFromSelf(nil) else { return [] }
-        guard let value = SecTaskCopyValueForEntitlement(
-            task,
-            entitlementKey as CFString,
-            nil
-        ) else {
-            return []
+        var groups: [String] = []
+        for key in entitlementKeys {
+            guard let value = SecTaskCopyValueForEntitlement(
+                task,
+                key as CFString,
+                nil
+            ) else {
+                continue
+            }
+            if let values = value as? [String] {
+                groups.append(contentsOf: values)
+            }
         }
-        return value as? [String] ?? []
+        return Array(Set(groups))
     }
 }
