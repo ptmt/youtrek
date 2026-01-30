@@ -292,6 +292,7 @@ private struct BoardContentView: View {
             projectNames: []
         )
         let sprintFilter = container.sprintFilter(for: board)
+        let diagnosticEvents = appState.boardDataSourceEvents(for: board.id)
         IssueBoardView(
             board: board,
             issues: appState.filteredIssues(searchQuery: searchQuery),
@@ -299,6 +300,7 @@ private struct BoardContentView: View {
             isLoading: appState.isLoadingIssues,
             sprintFilter: sprintFilter,
             showDiagnostics: showDiagnostics,
+            diagnosticEvents: diagnosticEvents,
             onSelectSprint: { filter in
                 Task {
                     await container.updateSprintFilter(filter, for: board)

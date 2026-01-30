@@ -28,10 +28,12 @@ final class AppState: ObservableObject {
     @Published private(set) var currentUserLogin: String? = nil
     @Published private(set) var currentUserID: String? = nil
     @Published private(set) var boardSyncTimestamps: [String: Date] = [:]
+    @Published private(set) var boardDataSourceEvents: [String: [BoardDataSourceEvent]] = [:]
     @Published private var boardSprintFilters: [String: BoardSprintFilter] = [:]
     @Published var activeConflict: ConflictNotice?
     @Published var activeNewIssueDialog: NewIssueDialogState?
     private var didLogIssueListRendered = false
+    private let boardDataSourceEventLimit = 60
 
     init(issues: [IssueSummary] = []) {
         self.launchUptime = ProcessInfo.processInfo.systemUptime
@@ -223,6 +225,7 @@ final class AppState: ObservableObject {
     func resetBoardSyncState() {
         boardSyncTimestamps = [:]
         boardSprintFilters = [:]
+        boardDataSourceEvents = [:]
     }
 
     func resetInitialSyncState() {
@@ -261,18 +264,27 @@ final class AppState: ObservableObject {
         boardSyncTimestamps[boardID] = date
     }
 
+    func recordBoardDataSourceEvent(boardID: String, message: String, at date: Date = Date()) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var events = boardDataSourceEvents[boardID, default: []]
+        events.append(BoardDataSourceEvent(timestamp: date, message: trimmed))
+        if events.count > boardDataSourceEventLimit {
+            events.removeFirst(events.count - boardDataSourceEventLimit)
+        }
+        boardDataSourceEvents[boardID] = events
+    }
+
+    func boardDataSourceEvents(for boardID: String) -> [BoardDataSourceEvent] {
+        boardDataSourceEvents[boardID] ?? []
+    }
+
     func sprintFilter(for board: IssueBoard) -> BoardSprintFilter {
         if let existing = boardSprintFilters[board.id] {
-            let resolved = board.resolveSprintFilter(existing)
-            if resolved != existing {
-                boardSprintFilters[board.id] = resolved
-            }
-            return resolved
+            return board.resolveSprintFilter(existing)
         }
 
-        let fallback = board.defaultSprintFilter
-        boardSprintFilters[board.id] = fallback
-        return fallback
+        return board.defaultSprintFilter
     }
 
     func updateSprintFilter(_ filter: BoardSprintFilter, for boardID: String) {
@@ -400,6 +412,18 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
         self.assigneeOption = assigneeOption
         self.labels = labels
         self.createMore = createMore
+    }
+}
+
+struct BoardDataSourceEvent: Identifiable, Hashable, Sendable {
+    let id: UUID
+    let timestamp: Date
+    let message: String
+
+    init(id: UUID = UUID(), timestamp: Date, message: String) {
+        self.id = id
+        self.timestamp = timestamp
+        self.message = message
     }
 }
 

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct IssueBoardView: View {
@@ -7,6 +8,7 @@ struct IssueBoardView: View {
     let isLoading: Bool
     let sprintFilter: BoardSprintFilter
     let showDiagnostics: Bool
+    let diagnosticEvents: [BoardDataSourceEvent]
     let onSelectSprint: (BoardSprintFilter) -> Void
 
     @State private var collapsedGroups: Set<String> = []
@@ -252,14 +254,45 @@ struct IssueBoardView: View {
         let fieldName = board.columnFieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "—"
         let swimlaneField = board.swimlaneSettings.fieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "—"
         let issuesWithColumnValues = issuesWithColumnFieldValues
+        let events = diagnosticEvents
+        let displayEvents = Array(events.reversed())
 
         return VStack(alignment: .leading, spacing: 6) {
-            Text("Board diagnostics")
-                .font(.caption.weight(.semibold))
+            HStack(spacing: 6) {
+                Text("Board diagnostics")
+                    .font(.caption.weight(.semibold))
+                Spacer()
+                Button {
+                    copyDiagnostics()
+                } label: {
+                    Label("Copy diagnostics", systemImage: "doc.on.doc")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .font(.caption2)
+                .help("Copy board diagnostics")
+            }
             Text("Issues: \(issues.count)  Matched: \(matched)  Unmatched: \(unmatched)")
             Text("Column field: \(fieldName)")
             Text("Issues w/ column values: \(issuesWithColumnValues)")
             Text("Columns: \(baseColumnDescriptors.count)  Swimlanes: \(swimlaneField)")
+            if events.isEmpty {
+                Text("Data source events: none")
+            } else {
+                Divider()
+                Text("Data source events (\(events.count))")
+                    .font(.caption2.weight(.semibold))
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(displayEvents) { event in
+                            Text("\(formattedDiagnosticsTimestamp(event.timestamp))  \(event.message)")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 160)
+            }
         }
         .font(.caption2)
         .padding(8)
@@ -267,6 +300,55 @@ struct IssueBoardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .padding(.trailing, 12)
         .padding(.top, 8)
+        .textSelection(.enabled)
+    }
+
+    private static let diagnosticsDisplayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    private static let diagnosticsCopyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        return formatter
+    }()
+
+    private func formattedDiagnosticsTimestamp(_ date: Date) -> String {
+        Self.diagnosticsDisplayFormatter.string(from: date)
+    }
+
+    private func diagnosticsCopyText() -> String {
+        let matched = matchedIssueCount
+        let unmatched = max(0, issues.count - matched)
+        let fieldName = board.columnFieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "—"
+        let swimlaneField = board.swimlaneSettings.fieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "—"
+        let issuesWithColumnValues = issuesWithColumnFieldValues
+        var lines: [String] = []
+        lines.append("Board: \(board.name) (\(board.id))")
+        lines.append("Issues: \(issues.count)  Matched: \(matched)  Unmatched: \(unmatched)")
+        lines.append("Column field: \(fieldName)")
+        lines.append("Issues w/ column values: \(issuesWithColumnValues)")
+        lines.append("Columns: \(baseColumnDescriptors.count)  Swimlanes: \(swimlaneField)")
+        if diagnosticEvents.isEmpty {
+            lines.append("Data source events: none")
+        } else {
+            lines.append("Data source events:")
+            for event in diagnosticEvents {
+                let stamp = Self.diagnosticsCopyFormatter.string(from: event.timestamp)
+                lines.append("\(stamp)  \(event.message)")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func copyDiagnostics() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(diagnosticsCopyText(), forType: .string)
     }
 
     private var matchedIssueCount: Int {

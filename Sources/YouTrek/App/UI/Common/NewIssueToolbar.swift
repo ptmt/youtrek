@@ -18,20 +18,22 @@ struct NewIssueToolbar: View {
                 .frame(minWidth: 200)
                 .submitLabel(.done)
                 .onSubmit {
-                    openDialog()
+                    createDraft()
                 }
-            Button(action: openDialog) {
+            Button(action: createDraft) {
                 Image(systemName: "plus.circle.fill")
             }
             .buttonStyle(.accessoryBar)
-            .keyboardShortcut("n", modifiers: [.command])
+            .keyboardShortcut(.return, modifiers: [.command])
+            .disabled(draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .help("Create a new issue (Cmd+N)")
+        .help("Quickly capture a new issue from anywhere in the app")
     }
 
-    private func openDialog() {
+    private func createDraft() {
         let trimmed = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        container.presentNewIssueDialog(title: trimmed)
+        guard !trimmed.isEmpty else { return }
+        container.beginNewIssue(withTitle: trimmed)
         draftTitle = ""
     }
 }

@@ -275,6 +275,7 @@ final class AppContainer: ObservableObject {
             LoggingService.sync.info("Initial sync: loading issues for \(selection.id, privacy: .public).")
         }
         let resolvedBoard = await resolveBoardDetailsIfNeeded(for: selection)
+        let boardID = boardIdentifier(for: selection, resolvedBoard: resolvedBoard)
         let query: IssueQuery
         if selection.isBoard {
             let page = selection.query.page
@@ -295,18 +296,33 @@ final class AppContainer: ObservableObject {
             appState.selectedSidebarItem = SidebarItem.board(resolvedBoard, page: selection.query.page)
         }
 
-        guard query != lastLoadedIssueQuery else { return }
+        if query == lastLoadedIssueQuery {
+            recordBoardDataEvent("Load issues skipped (same query).", boardID: boardID)
+            return
+        }
+        recordBoardDataEvent("Load issues started.", boardID: boardID)
         lastLoadedIssueQuery = query
         appState.setIssuesLoading(true)
         let shouldSeedInitialRead = await syncCoordinator.hasSeenUpdates() == false
 
         let board = selection.isBoard ? (resolvedBoard ?? boardForSelection(selection)) : nil
         let sprintFilter = board.map { appState.sprintFilter(for: $0) }
-        let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(board: board, filter: sprintFilter)
+        if let board, let sprintFilter {
+            let sprintLabel = sprintFilter.isBacklog
+                ? "Backlog"
+                : (board.sprintName(for: sprintFilter) ?? "Sprint \(sprintFilter.sprintID ?? "-")")
+            recordBoardDataEvent("Sprint filter: \(sprintLabel).", boardID: boardID)
+        }
+        let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(
+            board: board,
+            filter: sprintFilter,
+            boardID: boardID
+        )
 
         let cachedIssues = await syncCoordinator.loadCachedIssues(for: query)
         if !cachedIssues.isEmpty {
             LoggingService.sync.info("Initial sync: loaded cached issues (\(cachedIssues.count, privacy: .public)).")
+            recordBoardDataEvent("Cached issues loaded: \(cachedIssues.count).", boardID: boardID)
             let filtered = applySprintFilterIfNeeded(
                 cachedIssues,
                 board: board,
@@ -318,6 +334,8 @@ final class AppContainer: ObservableObject {
             }
             appState.setIssuesLoading(false)
             await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: shouldSeedInitialRead)
+        } else {
+            recordBoardDataEvent("Cached issues empty.", boardID: boardID)
         }
 
         let syncResult = await syncCoordinator.refreshIssuesWithStatus(
@@ -331,8 +349,15 @@ final class AppContainer: ObservableObject {
         }
         if syncResult.didSyncRemote {
             LoggingService.sync.info("Initial sync: issues synced from remote (\(syncResult.issues.count, privacy: .public)).")
+            recordBoardDataEvent("Remote sync loaded: \(syncResult.issues.count) issues.", boardID: boardID)
         } else if !syncResult.issues.isEmpty {
             LoggingService.sync.info("Initial sync: issues loaded from cache (\(syncResult.issues.count, privacy: .public)).")
+            let reason = AppDebugSettings.disableSyncing
+                ? "Sync disabled; using cache"
+                : "Remote sync unavailable; using cache"
+            recordBoardDataEvent("\(reason): \(syncResult.issues.count) issues.", boardID: boardID)
+        } else {
+            recordBoardDataEvent("No issues returned after refresh.", boardID: boardID)
         }
         let filtered = applySprintFilterIfNeeded(
             syncResult.issues,
@@ -376,6 +401,7 @@ final class AppContainer: ObservableObject {
             appState.setIssuesLoading(true)
         }
         let resolvedBoard = await resolveBoardDetailsIfNeeded(for: item)
+        let boardID = boardIdentifier(for: item, resolvedBoard: resolvedBoard)
         let boardForQuery = resolvedBoard ?? boardForSelection(item) ?? IssueBoard(
             id: item.boardID ?? item.id,
             name: item.title,
@@ -391,7 +417,18 @@ final class AppContainer: ObservableObject {
 
         let board = resolvedBoard ?? boardForSelection(item)
         let sprintFilter = board.map { appState.sprintFilter(for: $0) }
-        let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(board: board, filter: sprintFilter)
+        if let board, let sprintFilter {
+            let sprintLabel = sprintFilter.isBacklog
+                ? "Backlog"
+                : (board.sprintName(for: sprintFilter) ?? "Sprint \(sprintFilter.sprintID ?? "-")")
+            recordBoardDataEvent("Refresh sprint filter: \(sprintLabel).", boardID: boardID)
+        }
+        recordBoardDataEvent("Refresh board started.", boardID: boardID)
+        let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(
+            board: board,
+            filter: sprintFilter,
+            boardID: boardID
+        )
         let shouldSeedInitialRead = await syncCoordinator.hasSeenUpdates() == false
         let syncResult = await syncCoordinator.refreshIssuesWithStatus(
             using: query,
@@ -401,6 +438,16 @@ final class AppContainer: ObservableObject {
         )
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
             recordIssueSyncCompleted()
+        }
+        if syncResult.didSyncRemote {
+            recordBoardDataEvent("Refresh remote sync loaded: \(syncResult.issues.count) issues.", boardID: boardID)
+        } else if !syncResult.issues.isEmpty {
+            let reason = AppDebugSettings.disableSyncing
+                ? "Refresh sync disabled; using cache"
+                : "Refresh remote sync unavailable; using cache"
+            recordBoardDataEvent("\(reason): \(syncResult.issues.count) issues.", boardID: boardID)
+        } else {
+            recordBoardDataEvent("Refresh returned no issues.", boardID: boardID)
         }
         if isSelected {
             let filtered = applySprintFilterIfNeeded(
@@ -1208,6 +1255,15 @@ private extension AppContainer {
         )
     }
 
+    private func boardIdentifier(for selection: SidebarItem, resolvedBoard: IssueBoard? = nil) -> String? {
+        resolvedBoard?.id ?? selection.boardID ?? selection.board?.id
+    }
+
+    private func recordBoardDataEvent(_ message: String, boardID: String?) {
+        guard let boardID else { return }
+        appState.recordBoardDataSourceEvent(boardID: boardID, message: message)
+    }
+
     private func resolveBoardDetailsIfNeeded(for selection: SidebarItem) async -> IssueBoard? {
         guard selection.isBoard else { return selection.board }
         let current = selection.board
@@ -1215,11 +1271,14 @@ private extension AppContainer {
         guard let boardID = selection.boardID ?? current?.id else { return current }
 
         do {
+            recordBoardDataEvent("Board details fetch started.", boardID: boardID)
             let detail = try await boardRepositorySwitcher.fetchBoard(id: boardID)
             let resolved = applyingFavorite(current?.isFavorite, to: detail)
             await boardLocalStore.saveBoard(resolved)
+            recordBoardDataEvent("Board details fetched.", boardID: boardID)
             return resolved
         } catch {
+            recordBoardDataEvent("Board details fetch failed: \(error.localizedDescription)", boardID: boardID)
             return current
         }
     }
@@ -1239,14 +1298,18 @@ private extension AppContainer {
 
     private func fetchSprintIssueIDsIfNeeded(
         board: IssueBoard?,
-        filter: BoardSprintFilter?
+        filter: BoardSprintFilter?,
+        boardID: String?
     ) async -> Set<String>? {
         guard let board, let filter, case .sprint(let sprintID) = filter else { return nil }
         do {
+            recordBoardDataEvent("Sprint issue IDs fetch started (sprintID: \(sprintID)).", boardID: boardID)
             let ids = try await issueRepositorySwitcher.fetchSprintIssueIDs(agileID: board.id, sprintID: sprintID)
             guard !ids.isEmpty else { return nil }
+            recordBoardDataEvent("Sprint issue IDs fetched: \(ids.count).", boardID: boardID)
             return Set(ids)
         } catch {
+            recordBoardDataEvent("Sprint issue IDs fetch failed: \(error.localizedDescription)", boardID: boardID)
             return nil
         }
     }
