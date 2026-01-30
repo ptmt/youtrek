@@ -220,9 +220,6 @@ struct SetupWindow: View {
     }
 
     private var setupProgressText: String {
-        if isValidatingToken {
-            return "Validating token..."
-        }
         return syncStatusText
     }
 
