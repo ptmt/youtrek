@@ -71,7 +71,7 @@ struct AppMenus: Commands {
     }
 
     private func openNewIssue() {
-        container.beginNewIssue(withTitle: "")
+        container.presentNewIssueDialog()
     }
 
     private func showAlert(title: String, message: String, style: NSAlert.Style) {

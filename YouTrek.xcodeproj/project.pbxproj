@@ -35,6 +35,7 @@
 		6B9DC658B0707436F4A51EB7 /* Issue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603472AD6E49B166DD1EAE1E /* Issue.swift */; };
 		711FBBDF964284FEE9060EA9 /* IssueFieldRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF2DFD58E618AA42ED5A0EBF /* IssueFieldRepository.swift */; };
 		778FF05D4EAC43E62857C01D /* NewIssueToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FA72E4D9ACF4E1772ABD7F /* NewIssueToolbar.swift */; };
+		778FF05D4EAC43E62857C01E /* NewIssueDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FA72E4D9ACF4E1772ABD80 /* NewIssueDialog.swift */; };
 		7FE5F2F122F937FE6C8833DD /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96F1E15A048870421DA67DD8 /* SidebarView.swift */; };
 		879DC3DC38B8CC95B2F99F90 /* YouTrekTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67EE0549798C5BB97F80099A /* YouTrekTests.swift */; };
 		90DD2022BD6F618D47EB07C3 /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41A20A5EA468A3FDD6C766F3 /* SyncCoordinator.swift */; };
@@ -145,6 +146,7 @@
 		F0D1C2B3A4E5968778695A4E /* IssueDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDetail.swift; sourceTree = "<group>"; };
 		F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackAPIClient.swift; sourceTree = "<group>"; };
 		F6FA72E4D9ACF4E1772ABD7F /* NewIssueToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewIssueToolbar.swift; sourceTree = "<group>"; };
+		F6FA72E4D9ACF4E1772ABD80 /* NewIssueDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewIssueDialog.swift; sourceTree = "<group>"; };
 		FD57D8CD24C08703B24D3C86 /* TelemetryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryService.swift; sourceTree = "<group>"; };
 		FF2DFD58E618AA42ED5A0EBF /* IssueFieldRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueFieldRepository.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -402,6 +404,7 @@
 				AE4E28048614444791892CC7 /* ConflictResolutionDialog.swift */,
 				F0D1C2B3A4E5968778695A4C /* UserAvatarView.swift */,
 				F6FA72E4D9ACF4E1772ABD7F /* NewIssueToolbar.swift */,
+				F6FA72E4D9ACF4E1772ABD80 /* NewIssueDialog.swift */,
 				96D7F507180F29C1DBEBFD1A /* SettingsView.swift */,
 				A9B8C7D6E5F40123456789AD /* NetworkRequestFooterView.swift */,
 			);
@@ -627,6 +630,7 @@
 				A9B8C7D6E5F40123456789AE /* NetworkRequestFooterView.swift in Sources */,
 				F0D1C2B3A4E5968778695A4B /* UserAvatarView.swift in Sources */,
 				778FF05D4EAC43E62857C01D /* NewIssueToolbar.swift in Sources */,
+				778FF05D4EAC43E62857C01E /* NewIssueDialog.swift in Sources */,
 				ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */,
 				EA94D7A93E3499BBFB64C3CE /* SettingsView.swift in Sources */,
 				2A3B4C5D6E7F8091A2B3C4D5 /* SavedQuery.swift in Sources */,

@@ -89,6 +89,12 @@ final class AppContainer: ObservableObject {
             login: configurationStore.loadUserLogin(),
             id: configurationStore.loadUserID()
         )
+        let initialSyncState = configurationStore.loadInitialSyncState()
+        state.prefillInitialSyncState(
+            issues: initialSyncState.issues,
+            boards: initialSyncState.boards,
+            savedSearches: initialSyncState.savedSearches
+        )
         let draftStore = IssueDraftStore()
         let networkMonitor = NetworkRequestMonitor()
         let initialRequiresSetup = AppContainer.requiresSetupOnLaunch(configurationStore: configurationStore)
@@ -239,6 +245,30 @@ final class AppContainer: ObservableObject {
         }
     }
 
+    private func recordIssueSyncCompleted() {
+        appState.recordIssueSyncCompleted()
+        configurationStore.saveInitialIssueSyncCompleted(true)
+    }
+
+    private func recordBoardListSyncCompleted() {
+        appState.recordBoardListSyncCompleted()
+        configurationStore.saveInitialBoardSyncCompleted(true)
+    }
+
+    private func recordSavedSearchSyncCompleted() {
+        appState.recordSavedSearchSyncCompleted()
+        configurationStore.saveInitialSavedSearchSyncCompleted(true)
+    }
+
+    private func resetInitialSyncState() {
+        appState.resetInitialSyncState()
+        configurationStore.clearInitialSyncState()
+    }
+
+    private func clearPersistedInitialSyncState() {
+        configurationStore.clearInitialSyncState()
+    }
+
     func loadIssues(for selection: SidebarItem) async {
         guard !selection.isDraft else { return }
         if !appState.hasCompletedInitialSync {
@@ -297,7 +327,7 @@ final class AppContainer: ObservableObject {
             currentUserDisplayName: appState.currentUserDisplayName
         )
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
-            appState.recordIssueSyncCompleted()
+            recordIssueSyncCompleted()
         }
         if syncResult.didSyncRemote {
             LoggingService.sync.info("Initial sync: issues synced from remote (\(syncResult.issues.count, privacy: .public)).")
@@ -370,7 +400,7 @@ final class AppContainer: ObservableObject {
             currentUserDisplayName: appState.currentUserDisplayName
         )
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
-            appState.recordIssueSyncCompleted()
+            recordIssueSyncCompleted()
         }
         if isSelected {
             let filtered = applySprintFilterIfNeeded(
@@ -421,6 +451,7 @@ final class AppContainer: ObservableObject {
     }
 
     func clearCacheAndRefetch() {
+        clearPersistedInitialSyncState()
         Task { [weak self] in
             guard let self else { return }
             await syncCoordinator.clearCachedIssues()
@@ -506,6 +537,35 @@ final class AppContainer: ObservableObject {
                 appState.selectedDraftID = record.id
                 appState.selectedSidebarItem = nil
                 rebuildSidebar(preferredSelectionID: "draft:\(record.id.uuidString)")
+            }
+        }
+    }
+
+    func presentNewIssueDialog(title: String = "") {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        appState.presentNewIssueDialog(state: NewIssueDialogState(title: trimmedTitle))
+    }
+
+    func submitDraftFromDialog(_ draft: IssueDraft) {
+        Task { [weak self] in
+            guard let self else { return }
+            let record = await issueDraftStore.saveDraft(draft)
+            do {
+                let created = try await syncCoordinator.enqueue(label: "Create issue") {
+                    try await self.issueRepositorySwitcher.createIssue(draft: draft)
+                }
+                _ = await issueDraftStore.markDraftSubmitted(id: record.id)
+                await MainActor.run {
+                    self.appState.updateIssue(created)
+                    self.markIssueSeen(created)
+                }
+            } catch {
+                _ = await issueDraftStore.markDraftFailed(id: record.id, errorDescription: error.localizedDescription)
+                await MainActor.run {
+                    if let failedRecord = self.appState.draftRecord(id: record.id) {
+                        self.appState.updateDraft(failedRecord)
+                    }
+                }
             }
         }
     }
@@ -629,7 +689,7 @@ final class AppContainer: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             do {
-                self.appState.resetInitialSyncState()
+                self.resetInitialSyncState()
                 LoggingService.sync.info("Sign-in: starting.")
                 guard let configuration = try? YouTrackOAuthConfiguration.loadFromEnvironment() else {
                     throw AuthError.configurationMissing("Missing OAuth environment configuration.")
@@ -670,7 +730,7 @@ final class AppContainer: ObservableObject {
 
         appState.setCurrentUserProfile(displayName: nil, login: nil, id: nil)
         appState.updateSyncActivity(isSyncing: false, label: nil)
-        appState.resetInitialSyncState()
+        resetInitialSyncState()
         appState.resetBoardSyncState()
         appState.updateSearch(query: "")
         appState.activeConflict = nil
@@ -712,7 +772,7 @@ final class AppContainer: ObservableObject {
     ) async -> ManualTokenSaveOutcome {
         let apiBaseURL = Self.apiBaseURL(from: baseURL)
 
-        appState.resetInitialSyncState()
+        resetInitialSyncState()
         configurationStore.save(baseURL: apiBaseURL)
         let manualAuth = ManualTokenAuthRepository(configurationStore: configurationStore)
         var tokenSaved = true
@@ -884,7 +944,7 @@ final class AppContainer: ObservableObject {
 
     @MainActor
     private func applyOAuth(configuration: YouTrackOAuthConfiguration, configureRepositories: Bool) async {
-        appState.resetInitialSyncState()
+        resetInitialSyncState()
         oauthConfiguration = configuration
         let appAuthRepository = oauthRepository ?? AppAuthRepository(
             configuration: configuration,
@@ -969,9 +1029,9 @@ private extension AppContainer {
         async let boardsResult: [IssueBoard] = loadBoardsForSidebar()
 
         let resolvedSavedQueries = await savedQueriesResult
-        appState.recordSavedSearchSyncCompleted()
+        recordSavedSearchSyncCompleted()
         let resolvedBoards = await boardsResult
-        appState.recordBoardListSyncCompleted()
+        recordBoardListSyncCompleted()
         cachedSavedQueries = resolvedSavedQueries
         cachedBoards = resolvedBoards
         let duration = Date().timeIntervalSince(startTime)
@@ -1062,7 +1122,7 @@ private extension AppContainer {
     func loadBoardsForSidebar() async -> [IssueBoard] {
         let cachedBoards = await boardLocalStore.loadBoards()
         defer {
-            appState.recordBoardListSyncCompleted()
+            recordBoardListSyncCompleted()
         }
         do {
             LoggingService.sync.info("Board sync: fetching remote boards.")

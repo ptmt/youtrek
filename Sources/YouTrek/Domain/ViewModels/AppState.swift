@@ -30,6 +30,7 @@ final class AppState: ObservableObject {
     @Published private(set) var boardSyncTimestamps: [String: Date] = [:]
     @Published private var boardSprintFilters: [String: BoardSprintFilter] = [:]
     @Published var activeConflict: ConflictNotice?
+    @Published var activeNewIssueDialog: NewIssueDialogState?
     private var didLogIssueListRendered = false
 
     init(issues: [IssueSummary] = []) {
@@ -213,6 +214,12 @@ final class AppState: ObservableObject {
         hasCompletedSavedSearchSync = true
     }
 
+    func prefillInitialSyncState(issues: Bool, boards: Bool, savedSearches: Bool) {
+        hasCompletedIssueSync = issues
+        hasCompletedBoardSync = boards
+        hasCompletedSavedSearchSync = savedSearches
+    }
+
     func resetBoardSyncState() {
         boardSyncTimestamps = [:]
         boardSprintFilters = [:]
@@ -239,7 +246,7 @@ final class AppState: ObservableObject {
     }
 
     var hasCompletedInitialSync: Bool {
-        hasCompletedIssueSync && hasCompletedBoardSync
+        hasCompletedIssueSync && hasCompletedBoardSync && hasCompletedSavedSearchSync
     }
 
     var initialSyncProgress: Double {
@@ -288,6 +295,14 @@ final class AppState: ObservableObject {
 
     func presentConflict(_ conflict: ConflictNotice) {
         activeConflict = conflict
+    }
+
+    func presentNewIssueDialog(state: NewIssueDialogState = NewIssueDialogState()) {
+        activeNewIssueDialog = state
+    }
+
+    func dismissNewIssueDialog() {
+        activeNewIssueDialog = nil
     }
 
     func recordIssueListRendered(issueCount: Int) {
@@ -351,6 +366,40 @@ struct ConflictNotice: Identifiable, Hashable, Sendable {
         self.title = title
         self.message = message
         self.localChanges = localChanges
+    }
+}
+
+struct NewIssueDialogState: Identifiable, Hashable, Sendable {
+    let id: UUID
+    var projectID: String?
+    var title: String
+    var description: String
+    var statusOption: IssueFieldOption?
+    var priorityOption: IssueFieldOption?
+    var assigneeOption: IssueFieldOption?
+    var labels: [String]
+    var createMore: Bool
+
+    init(
+        id: UUID = UUID(),
+        projectID: String? = nil,
+        title: String = "",
+        description: String = "",
+        statusOption: IssueFieldOption? = nil,
+        priorityOption: IssueFieldOption? = nil,
+        assigneeOption: IssueFieldOption? = nil,
+        labels: [String] = [],
+        createMore: Bool = false
+    ) {
+        self.id = id
+        self.projectID = projectID
+        self.title = title
+        self.description = description
+        self.statusOption = statusOption
+        self.priorityOption = priorityOption
+        self.assigneeOption = assigneeOption
+        self.labels = labels
+        self.createMore = createMore
     }
 }
 

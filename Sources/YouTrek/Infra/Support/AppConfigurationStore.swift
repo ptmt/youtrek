@@ -8,6 +8,9 @@ struct AppConfigurationStore {
         static let userDisplayName = "com.potomushto.youtrek.config.user-display-name"
         static let userLogin = "com.potomushto.youtrek.config.user-login"
         static let userID = "com.potomushto.youtrek.config.user-id"
+        static let initialIssueSyncCompleted = "com.potomushto.youtrek.config.initial-sync-issues"
+        static let initialBoardSyncCompleted = "com.potomushto.youtrek.config.initial-sync-boards"
+        static let initialSavedSearchSyncCompleted = "com.potomushto.youtrek.config.initial-sync-saved-searches"
     }
 
     private static let sharedSuiteName = "com.potomushto.youtrek.shared"
@@ -200,6 +203,32 @@ struct AppConfigurationStore {
 
     func clearLastSidebarSelectionID() {
         defaults.removeObject(forKey: Keys.lastSidebarSelectionID)
+    }
+
+    func loadInitialSyncState() -> (issues: Bool, boards: Bool, savedSearches: Bool) {
+        (
+            issues: defaults.bool(forKey: Keys.initialIssueSyncCompleted),
+            boards: defaults.bool(forKey: Keys.initialBoardSyncCompleted),
+            savedSearches: defaults.bool(forKey: Keys.initialSavedSearchSyncCompleted)
+        )
+    }
+
+    func saveInitialIssueSyncCompleted(_ value: Bool) {
+        defaults.set(value, forKey: Keys.initialIssueSyncCompleted)
+    }
+
+    func saveInitialBoardSyncCompleted(_ value: Bool) {
+        defaults.set(value, forKey: Keys.initialBoardSyncCompleted)
+    }
+
+    func saveInitialSavedSearchSyncCompleted(_ value: Bool) {
+        defaults.set(value, forKey: Keys.initialSavedSearchSyncCompleted)
+    }
+
+    func clearInitialSyncState() {
+        defaults.removeObject(forKey: Keys.initialIssueSyncCompleted)
+        defaults.removeObject(forKey: Keys.initialBoardSyncCompleted)
+        defaults.removeObject(forKey: Keys.initialSavedSearchSyncCompleted)
     }
 
     private static func resolveAccessGroup() -> String? {

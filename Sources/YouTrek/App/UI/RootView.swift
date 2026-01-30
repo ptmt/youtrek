@@ -112,6 +112,16 @@ private struct RootContentView: View {
         .sheet(item: $appState.activeConflict) { conflict in
             ConflictResolutionDialog(conflict: conflict)
         }
+        .sheet(item: $appState.activeNewIssueDialog) { _ in
+            NewIssueDialog(state: newIssueDialogBinding)
+        }
+    }
+
+    private var newIssueDialogBinding: Binding<NewIssueDialogState> {
+        Binding(
+            get: { appState.activeNewIssueDialog ?? NewIssueDialogState() },
+            set: { appState.activeNewIssueDialog = $0 }
+        )
     }
 
     private var sidebarContent: some View {
