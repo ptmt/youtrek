@@ -43,6 +43,9 @@ final class AppState: ObservableObject {
     func replaceIssues(with newIssues: [IssueSummary]) {
         guard issues != newIssues else { return }
         issues = newIssues
+        if selectedIssue?.isDraft == true {
+            return
+        }
         if let first = newIssues.first {
             selectedIssue = first
             selectedIssueIDs = [first.id]
@@ -73,6 +76,10 @@ final class AppState: ObservableObject {
         draftRecords.removeAll { $0.id == id }
         if selectedDraftID == id {
             selectedDraftID = nil
+        }
+        selectedIssueIDs.remove(id)
+        if selectedIssue?.draftID == id {
+            selectedIssue = nil
         }
     }
 
@@ -168,14 +175,19 @@ final class AppState: ObservableObject {
         }
     }
 
-    func filteredIssues(searchQuery: String) -> [IssueSummary] {
-        guard !searchQuery.isEmpty else { return issues }
-        let lowercased = searchQuery.lowercased()
+    func filteredIssues(_ issues: [IssueSummary], searchQuery: String) -> [IssueSummary] {
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return issues }
+        let lowercased = trimmed.lowercased()
         return issues.filter { issue in
             issue.title.lowercased().contains(lowercased) ||
             issue.readableID.lowercased().contains(lowercased) ||
             issue.projectName.lowercased().contains(lowercased)
         }
+    }
+
+    func filteredIssues(searchQuery: String) -> [IssueSummary] {
+        filteredIssues(issues, searchQuery: searchQuery)
     }
 
     func updateSearch(query: String) {

@@ -77,6 +77,34 @@ actor IssueLocalStore {
         }
     }
 
+    func loadIssues(readableIDs: [String]) async -> [IssueSummary] {
+        guard let db else { return [] }
+        let normalized = readableIDs
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !normalized.isEmpty else { return [] }
+
+        var results: [IssueSummary] = []
+        results.reserveCapacity(normalized.count)
+        for chunk in chunked(normalized, size: 200) {
+            var predicate = Expression<Bool>(value: false)
+            for value in chunk {
+                predicate = predicate || (readableID == value)
+            }
+            let query = issues.filter(predicate)
+            do {
+                results.append(contentsOf: try db.prepare(query).compactMap { row in
+                    issueFromRow(row)
+                })
+            } catch {
+                continue
+            }
+        }
+
+        let unique = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0) })
+        return unique.values.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
     func saveRemoteIssues(
         _ remoteIssues: [IssueSummary],
         for query: IssueQuery,
@@ -548,6 +576,19 @@ actor IssueLocalStore {
             sortKey,
             "page:\(query.page.size):\(query.page.offset)"
         ].joined(separator: "||")
+    }
+
+    private func chunked<T>(_ items: [T], size: Int) -> [[T]] {
+        guard size > 0 else { return [items] }
+        var chunks: [[T]] = []
+        chunks.reserveCapacity((items.count / size) + 1)
+        var index = 0
+        while index < items.count {
+            let end = min(items.count, index + size)
+            chunks.append(Array(items[index..<end]))
+            index = end
+        }
+        return chunks
     }
 
     private static func databaseURL() throws -> URL {

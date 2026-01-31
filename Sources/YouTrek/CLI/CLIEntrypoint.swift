@@ -412,9 +412,8 @@ private enum CLIRunner {
 
             let board = try await boardRepository.fetchBoard(id: resolvedID)
             let sprintSelection = try resolveSprintSelection(parsed, board: board)
-            let sprintName = sprintSelection.filter.isBacklog ? nil : board.sprintName(for: sprintSelection.filter)
             let query = IssueQuery(
-                rawQuery: IssueQuery.boardQuery(boardName: board.name, sprintName: sprintName),
+                rawQuery: IssueQuery.boardQuery(boardName: board.name, sprintName: nil),
                 search: "",
                 filters: [],
                 sort: .updated(descending: true),

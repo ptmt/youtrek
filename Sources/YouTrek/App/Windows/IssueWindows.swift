@@ -7,7 +7,17 @@ struct IssueDetailWindow: View {
     @EnvironmentObject private var container: AppContainer
 
     var body: some View {
-        if let issue = container.appState.selectedIssue {
+        if let draftID = container.appState.selectedDraftID,
+           let record = container.appState.draftRecord(id: draftID) {
+            DraftIssueDetailView(record: record)
+        } else if container.appState.selectedDraftID != nil {
+            ContentUnavailableView(
+                "Draft not found",
+                systemImage: "square.and.pencil",
+                description: Text("The selected draft is no longer available.")
+            )
+            .frame(minWidth: 480, minHeight: 400)
+        } else if let issue = container.appState.selectedIssue {
             IssueDetailView(
                 issue: issue,
                 detail: container.appState.issueDetail(for: issue),

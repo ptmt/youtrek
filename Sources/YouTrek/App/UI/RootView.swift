@@ -26,9 +26,23 @@ private struct RootContentView: View {
     private var hasUnreadIssues: Bool {
         appState.issues.contains { appState.isIssueUnread($0) }
     }
+    private var showsDraftsInList: Bool {
+        guard let selection = appState.selectedSidebarItem else { return false }
+        return selectionShowsDrafts(selection)
+    }
+    private var visibleIssues: [IssueSummary] {
+        let baseIssues = showsDraftsInList
+            ? appState.issues + appState.draftRecords.map { IssueSummary.draft($0) }
+            : appState.issues
+        return appState.filteredIssues(baseIssues, searchQuery: searchQuery)
+    }
 
     init(appState: AppState) {
         self.appState = appState
+    }
+
+    private func selectionShowsDrafts(_ selection: SidebarItem) -> Bool {
+        selection.isInbox || selection.title.caseInsensitiveCompare("Inbox") == .orderedSame
     }
 
     var body: some View {
@@ -85,12 +99,23 @@ private struct RootContentView: View {
             isInspectorVisible = newValue
         }
         .onChange(of: appState.selectedIssue) { _, issue in
-            guard let issue else { return }
+            guard let issue else {
+                appState.selectedDraftID = nil
+                return
+            }
             Task { @MainActor in
                 if appState.selectedIssueIDs != [issue.id] {
                     appState.selectedIssueIDs = [issue.id]
                 }
             }
+            if issue.isDraft, let draftID = issue.draftID {
+                appState.selectedDraftID = draftID
+                if appState.draftRecord(id: draftID) != nil {
+                    container.selectDraft(recordID: draftID)
+                }
+                return
+            }
+            appState.selectedDraftID = nil
             container.markIssueSeen(issue)
             Task {
                 await container.loadIssueDetail(for: issue)
@@ -99,14 +124,13 @@ private struct RootContentView: View {
         .onChange(of: appState.selectedSidebarItem) { _, selection in
             guard let selection else { return }
             container.recordSidebarSelection(selection)
-            if selection.isDraft, let draftID = selection.draftID {
-                appState.selectedDraftID = draftID
-                container.selectDraft(recordID: draftID)
-            } else {
+            if !selectionShowsDrafts(selection), appState.selectedIssue?.isDraft == true {
                 appState.selectedDraftID = nil
-                Task {
-                    await container.loadIssues(for: selection)
-                }
+                appState.selectedIssue = nil
+                appState.selectedIssueIDs.removeAll()
+            }
+            Task {
+                await container.loadIssues(for: selection)
             }
         }
         .sheet(item: $appState.activeConflict) { conflict in
@@ -151,18 +175,7 @@ private struct RootContentView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        if let selection = appState.selectedSidebarItem, selection.isDraft {
-            if let draftID = selection.draftID,
-               let record = appState.draftRecord(id: draftID) {
-                DraftIssueDetailView(record: record)
-            } else {
-                ContentUnavailableView(
-                    "Draft not found",
-                    systemImage: "square.and.pencil",
-                    description: Text("The selected draft is no longer available.")
-                )
-            }
-        } else if let selection = appState.selectedSidebarItem, selection.isBoard {
+        if let selection = appState.selectedSidebarItem, selection.isBoard {
             BoardContentView(
                 appState: appState,
                 selection: selection,
@@ -171,7 +184,7 @@ private struct RootContentView: View {
             )
         } else {
             IssueListView(
-                issues: appState.filteredIssues(searchQuery: searchQuery),
+                issues: visibleIssues,
                 selection: $appState.selectedIssue,
                 selectedIDs: $appState.selectedIssueIDs,
                 showAssigneeColumn: showAssigneeColumn,
@@ -255,7 +268,16 @@ private struct RootContentView: View {
 
     private var inspectorContent: some View {
         Group {
-            if selectedIssues.count > 1 {
+            if let draftID = appState.selectedDraftID,
+               let record = appState.draftRecord(id: draftID) {
+                DraftIssueDetailView(record: record)
+            } else if appState.selectedDraftID != nil {
+                ContentUnavailableView(
+                    "Draft not found",
+                    systemImage: "square.and.pencil",
+                    description: Text("The selected draft is no longer available.")
+                )
+            } else if selectedIssues.count > 1 {
                 MultiIssueSelectionView(issues: selectedIssues)
             } else if let issue = appState.selectedIssue ?? selectedIssues.first {
                 IssueDetailView(

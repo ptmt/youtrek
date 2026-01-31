@@ -296,6 +296,10 @@ final class AppContainer: ObservableObject {
             appState.selectedSidebarItem = SidebarItem.board(resolvedBoard, page: selection.query.page)
         }
 
+        if let rawQuery = query.rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rawQuery.isEmpty {
+            recordBoardDataEvent("Issue query: \(rawQuery).", boardID: boardID)
+        }
         if query == lastLoadedIssueQuery {
             recordBoardDataEvent("Load issues skipped (same query).", boardID: boardID)
             return
@@ -359,8 +363,20 @@ final class AppContainer: ObservableObject {
         } else {
             recordBoardDataEvent("No issues returned after refresh.", boardID: boardID)
         }
+        var resolvedIssues = syncResult.issues
+        if resolvedIssues.isEmpty,
+           let sprintIssueIDs,
+           !sprintIssueIDs.isEmpty {
+            let fallback = await syncCoordinator.loadIssues(readableIDs: Array(sprintIssueIDs))
+            if !fallback.isEmpty {
+                recordBoardDataEvent("Fallback to local sprint issues: \(fallback.count).", boardID: boardID)
+                resolvedIssues = fallback
+            } else {
+                recordBoardDataEvent("Fallback to local sprint issues empty.", boardID: boardID)
+            }
+        }
         let filtered = applySprintFilterIfNeeded(
-            syncResult.issues,
+            resolvedIssues,
             board: board,
             filter: sprintFilter,
             sprintIssueIDs: sprintIssueIDs
@@ -416,6 +432,10 @@ final class AppContainer: ObservableObject {
         }
 
         let board = resolvedBoard ?? boardForSelection(item)
+        if let rawQuery = query.rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rawQuery.isEmpty {
+            recordBoardDataEvent("Issue query: \(rawQuery).", boardID: boardID)
+        }
         let sprintFilter = board.map { appState.sprintFilter(for: $0) }
         if let board, let sprintFilter {
             let sprintLabel = sprintFilter.isBacklog
@@ -450,8 +470,20 @@ final class AppContainer: ObservableObject {
             recordBoardDataEvent("Refresh returned no issues.", boardID: boardID)
         }
         if isSelected {
+            var resolvedIssues = syncResult.issues
+            if resolvedIssues.isEmpty,
+               let sprintIssueIDs,
+               !sprintIssueIDs.isEmpty {
+                let fallback = await syncCoordinator.loadIssues(readableIDs: Array(sprintIssueIDs))
+                if !fallback.isEmpty {
+                    recordBoardDataEvent("Refresh fallback to local sprint issues: \(fallback.count).", boardID: boardID)
+                    resolvedIssues = fallback
+                } else {
+                    recordBoardDataEvent("Refresh fallback to local sprint issues empty.", boardID: boardID)
+                }
+            }
             let filtered = applySprintFilterIfNeeded(
-                syncResult.issues,
+                resolvedIssues,
                 board: board,
                 filter: sprintFilter,
                 sprintIssueIDs: sprintIssueIDs
@@ -582,8 +614,12 @@ final class AppContainer: ObservableObject {
                 appState.addDraft(record)
                 issueComposer.applyDraft(record.draft)
                 appState.selectedDraftID = record.id
-                appState.selectedSidebarItem = nil
-                rebuildSidebar(preferredSelectionID: "draft:\(record.id.uuidString)")
+                let draftSummary = IssueSummary.draft(record)
+                appState.selectedIssue = draftSummary
+                appState.selectedIssueIDs = [draftSummary.id]
+                if let inbox = inboxSidebarItem() {
+                    appState.selectedSidebarItem = inbox
+                }
             }
         }
     }
@@ -652,12 +688,8 @@ final class AppContainer: ObservableObject {
 
     func updateDraft(recordID: UUID, draft: IssueDraft) {
         guard var record = appState.draftRecord(id: recordID) else { return }
-        let previousTitle = record.draft.title
         record.draft = draft
         appState.updateDraft(record)
-        if previousTitle != draft.title {
-            rebuildSidebar()
-        }
 
         draftSaveTask?.cancel()
         draftSaveTask = Task { [weak self] in
@@ -674,7 +706,6 @@ final class AppContainer: ObservableObject {
             await MainActor.run {
                 let wasSelected = appState.selectedDraftID == recordID
                 appState.removeDraft(id: recordID)
-                rebuildSidebar()
                 if wasSelected {
                     issueComposer.resetDraft()
                 }
@@ -696,7 +727,6 @@ final class AppContainer: ObservableObject {
                 await MainActor.run {
                     self.appState.updateIssue(created)
                     self.appState.removeDraft(id: recordID)
-                    self.rebuildSidebar()
                     self.issueComposer.resetDraft()
                 }
             } catch {
@@ -704,7 +734,6 @@ final class AppContainer: ObservableObject {
                 await MainActor.run {
                     if let record {
                         self.appState.updateDraft(record)
-                        self.rebuildSidebar()
                     }
                 }
             }
@@ -1137,7 +1166,6 @@ private extension AppContainer {
         smartItems.append(.assignedToMe(page: page))
         smartItems.append(.createdByMe(page: page))
 
-        let draftItems = appState.draftRecords.map { SidebarItem.draft($0, page: page) }
         let savedItems = visibleSavedQueries.map { SidebarItem.savedSearch($0, page: page) }
         let favoriteBoards = boards.filter(\.isFavorite)
         let boardItems = favoriteBoards.map { SidebarItem.board($0, page: page) }
@@ -1146,14 +1174,6 @@ private extension AppContainer {
         if !smartItems.isEmpty {
             sections.append(SidebarSection(id: "smart", title: "Smart Filters", items: smartItems))
         }
-        sections.append(
-            SidebarSection(
-                id: "drafts",
-                title: "Drafts",
-                items: draftItems,
-                emptyMessage: draftItems.isEmpty ? "No drafts yet" : nil
-            )
-        )
         let boardEmptyMessage = appState.hasCompletedBoardSync ? "No favorite boards" : nil
         sections.append(
             SidebarSection(
@@ -1167,6 +1187,13 @@ private extension AppContainer {
             sections.append(SidebarSection(id: "saved", title: "Saved Searches", items: savedItems))
         }
         return sections
+    }
+
+    private func inboxSidebarItem() -> SidebarItem? {
+        let items = appState.sidebarSections.flatMap(\.items)
+        return items.first { item in
+            item.isInbox || item.title.caseInsensitiveCompare("Inbox") == .orderedSame
+        }
     }
 
     func rebuildSidebar(preferredSelectionID: SidebarItem.ID? = nil) {
@@ -1364,8 +1391,7 @@ private extension AppContainer {
         if resolved != filter {
             appState.updateSprintFilter(resolved, for: board.id)
         }
-        let sprintName = resolved.isBacklog ? nil : board.sprintName(for: resolved)
-        let rawQuery = IssueQuery.boardQuery(boardName: board.name, sprintName: sprintName)
+        let rawQuery = IssueQuery.boardQuery(boardName: board.name, sprintName: nil)
         return IssueQuery(
             rawQuery: rawQuery,
             search: "",

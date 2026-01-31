@@ -14,6 +14,7 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
     let status: IssueStatus
     let tags: [String]
     let customFieldValues: [String: [String]]
+    let draftID: UUID?
 
     init(
         id: UUID = UUID(),
@@ -27,7 +28,8 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
         priority: IssuePriority = .normal,
         status: IssueStatus = .open,
         tags: [String] = [],
-        customFieldValues: [String: [String]] = [:]
+        customFieldValues: [String: [String]] = [:],
+        draftID: UUID? = nil
     ) {
         self.id = id
         self.readableID = readableID
@@ -41,6 +43,7 @@ struct IssueSummary: Identifiable, Hashable, Sendable, Codable {
         self.status = status
         self.tags = tags
         self.customFieldValues = customFieldValues
+        self.draftID = draftID
     }
 
     var assigneeDisplayName: String {
@@ -71,7 +74,35 @@ extension IssueSummary {
             priority: priority,
             status: status,
             tags: tags,
-            customFieldValues: customFieldValues
+            customFieldValues: customFieldValues,
+            draftID: draftID
+        )
+    }
+}
+
+extension IssueSummary {
+    var isDraft: Bool { draftID != nil }
+
+    static func draft(_ record: IssueDraftRecord) -> IssueSummary {
+        let trimmedTitle = record.draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = trimmedTitle.isEmpty ? "Untitled Draft" : trimmedTitle
+        let trimmedProject = record.draft.projectID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let projectName = trimmedProject.isEmpty ? "No Project" : trimmedProject
+        let statusLabel = record.status == .failed ? "Draft Failed" : "Draft"
+        return IssueSummary(
+            id: record.id,
+            readableID: "Draft",
+            title: title,
+            projectName: projectName,
+            updatedAt: record.createdAt,
+            updatedBy: nil,
+            assignee: nil,
+            reporter: nil,
+            priority: record.draft.priority,
+            status: .custom(statusLabel),
+            tags: [],
+            customFieldValues: [:],
+            draftID: record.id
         )
     }
 }
