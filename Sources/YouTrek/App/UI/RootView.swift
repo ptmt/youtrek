@@ -1,4 +1,7 @@
 import SwiftUI
+#if DEBUG
+import Combine
+#endif
 
 struct RootView: View {
     @EnvironmentObject private var container: AppContainer
@@ -139,12 +142,25 @@ private struct RootContentView: View {
         .sheet(item: $appState.activeNewIssueDialog) { _ in
             NewIssueDialog(state: newIssueDialogBinding)
         }
+        .sheet(item: $appState.activeCommandPalette) { _ in
+            CommandPaletteDialog(state: commandPaletteBinding)
+        }
+        #if DEBUG
+        .background(RootDebugStateTracker(appState: appState, container: container))
+        #endif
     }
 
     private var newIssueDialogBinding: Binding<NewIssueDialogState> {
         Binding(
             get: { appState.activeNewIssueDialog ?? NewIssueDialogState() },
             set: { appState.activeNewIssueDialog = $0 }
+        )
+    }
+
+    private var commandPaletteBinding: Binding<CommandPaletteState> {
+        Binding(
+            get: { appState.activeCommandPalette ?? CommandPaletteState() },
+            set: { appState.activeCommandPalette = $0 }
         )
     }
 
@@ -262,6 +278,292 @@ private struct RootContentView: View {
 
 }
 
+#if DEBUG
+private struct RootDebugStateTracker: View {
+    @ObservedObject var appState: AppState
+    let container: AppContainer
+    @StateObject private var observer: RootDebugStateObserver
+
+    init(appState: AppState, container: AppContainer) {
+        self.appState = appState
+        self.container = container
+        _observer = StateObject(wrappedValue: RootDebugStateObserver(appState: appState, container: container))
+    }
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .onAppear {
+                observer.start()
+            }
+    }
+}
+
+@MainActor
+private final class RootDebugStateObserver: ObservableObject {
+    private let appState: AppState
+    private let container: AppContainer
+    private var cancellables: Set<AnyCancellable> = []
+    private var hasStarted = false
+
+    init(appState: AppState, container: AppContainer) {
+        self.appState = appState
+        self.container = container
+    }
+
+    func start() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        logSnapshot("initial")
+        observeAppState()
+        observeContainer()
+    }
+
+    private func observeAppState() {
+        var lastColumnVisibility = appState.columnVisibility
+        appState.$columnVisibility
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange(
+                    "appState.columnVisibility",
+                    old: String(describing: lastColumnVisibility),
+                    new: String(describing: newValue)
+                )
+                lastColumnVisibility = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastSidebarVisible = appState.isSidebarVisible
+        appState.$isSidebarVisible
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange("appState.isSidebarVisible", old: lastSidebarVisible, new: newValue)
+                lastSidebarVisible = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastSidebarSections = appState.sidebarSections
+        appState.$sidebarSections
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange(
+                    "appState.sidebarSections",
+                    old: self.sidebarSectionsSummary(lastSidebarSections),
+                    new: self.sidebarSectionsSummary(newValue)
+                )
+                lastSidebarSections = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastSidebarSelection = appState.selectedSidebarItem
+        appState.$selectedSidebarItem
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange(
+                    "appState.selectedSidebarItem",
+                    old: self.sidebarItemSummary(lastSidebarSelection),
+                    new: self.sidebarItemSummary(newValue)
+                )
+                lastSidebarSelection = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastIssuesCount = appState.issues.count
+        appState.$issues
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                let newCount = newValue.count
+                self.logStateChange("appState.issues.count", old: lastIssuesCount, new: newCount)
+                lastIssuesCount = newCount
+            }
+            .store(in: &cancellables)
+
+        var lastSelectedIssue = appState.selectedIssue
+        appState.$selectedIssue
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange(
+                    "appState.selectedIssue",
+                    old: self.issueSummary(lastSelectedIssue),
+                    new: self.issueSummary(newValue)
+                )
+                lastSelectedIssue = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastSelectedIDs = appState.selectedIssueIDs
+        appState.$selectedIssueIDs
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange(
+                    "appState.selectedIssueIDs",
+                    old: self.selectionSummary(lastSelectedIDs),
+                    new: self.selectionSummary(newValue)
+                )
+                lastSelectedIDs = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastInspectorVisible = appState.isInspectorVisible
+        appState.$isInspectorVisible
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange("appState.isInspectorVisible", old: lastInspectorVisible, new: newValue)
+                lastInspectorVisible = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastLoadingIssues = appState.isLoadingIssues
+        appState.$isLoadingIssues
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange("appState.isLoadingIssues", old: lastLoadingIssues, new: newValue)
+                lastLoadingIssues = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastSyncing = appState.isSyncing
+        appState.$isSyncing
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange("appState.isSyncing", old: lastSyncing, new: newValue)
+                lastSyncing = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastSyncStatus = appState.syncStatusMessage
+        appState.$syncStatusMessage
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange(
+                    "appState.syncStatusMessage",
+                    old: lastSyncStatus ?? "nil",
+                    new: newValue ?? "nil"
+                )
+                lastSyncStatus = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastIssueSync = appState.hasCompletedIssueSync
+        appState.$hasCompletedIssueSync
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange("appState.hasCompletedIssueSync", old: lastIssueSync, new: newValue)
+                lastIssueSync = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastBoardSync = appState.hasCompletedBoardSync
+        appState.$hasCompletedBoardSync
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange("appState.hasCompletedBoardSync", old: lastBoardSync, new: newValue)
+                lastBoardSync = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastSavedSync = appState.hasCompletedSavedSearchSync
+        appState.$hasCompletedSavedSearchSync
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange("appState.hasCompletedSavedSearchSync", old: lastSavedSync, new: newValue)
+                lastSavedSync = newValue
+            }
+            .store(in: &cancellables)
+
+        var lastInitialSync = appState.hasCompletedInitialSync
+        Publishers.CombineLatest3(
+            appState.$hasCompletedIssueSync,
+            appState.$hasCompletedBoardSync,
+            appState.$hasCompletedSavedSearchSync
+        )
+        .dropFirst()
+        .sink { [weak self] _, _, _ in
+            guard let self else { return }
+            let newValue = self.appState.hasCompletedInitialSync
+            self.logStateChange("appState.hasCompletedInitialSync", old: lastInitialSync, new: newValue)
+            lastInitialSync = newValue
+        }
+        .store(in: &cancellables)
+    }
+
+    private func observeContainer() {
+        var lastRequiresSetup = container.requiresSetup
+        container.$requiresSetup
+            .dropFirst()
+            .sink { [weak self] newValue in
+                guard let self else { return }
+                self.logStateChange("container.requiresSetup", old: lastRequiresSetup, new: newValue)
+                lastRequiresSetup = newValue
+            }
+            .store(in: &cancellables)
+    }
+
+    private func logStateChange(_ label: String, old: Any, new: Any) {
+        let uptime = ProcessInfo.processInfo.systemUptime
+        let formatted = String(format: "%.2f", uptime)
+        LoggingService.general.info(
+            "RootView state: \(label, privacy: .public) \(String(describing: old), privacy: .public) -> \(String(describing: new), privacy: .public) @\(formatted, privacy: .public)s"
+        )
+    }
+
+    private func logSnapshot(_ reason: String) {
+        let uptime = ProcessInfo.processInfo.systemUptime
+        let formatted = String(format: "%.2f", uptime)
+        LoggingService.general.info(
+            """
+            RootView snapshot (\(reason, privacy: .public)) @\(formatted, privacy: .public)s \
+            column=\(String(describing: self.appState.columnVisibility), privacy: .public) \
+            sidebar=\(self.sidebarSectionsSummary(self.appState.sidebarSections), privacy: .public) \
+            selectedSidebar=\(self.sidebarItemSummary(self.appState.selectedSidebarItem), privacy: .public) \
+            issues=\(self.appState.issues.count, privacy: .public) \
+            selectedIssue=\(self.issueSummary(self.appState.selectedIssue), privacy: .public) \
+            selectedIDs=\(self.selectionSummary(self.appState.selectedIssueIDs), privacy: .public) \
+            inspector=\(self.appState.isInspectorVisible, privacy: .public) \
+            loadingIssues=\(self.appState.isLoadingIssues, privacy: .public) \
+            initialSync=\(self.appState.hasCompletedInitialSync, privacy: .public) \
+            requiresSetup=\(self.container.requiresSetup, privacy: .public)
+            """
+        )
+    }
+
+    private func sidebarSectionsSummary(_ sections: [SidebarSection]) -> String {
+        let itemCount = sections.reduce(0) { $0 + $1.items.count }
+        return "sections=\(sections.count) items=\(itemCount)"
+    }
+
+    private func sidebarItemSummary(_ item: SidebarItem?) -> String {
+        guard let item else { return "nil" }
+        return "\(item.id) [\(item.kind.rawValue)]"
+    }
+
+    private func issueSummary(_ issue: IssueSummary?) -> String {
+        guard let issue else { return "nil" }
+        return "\(issue.readableID)"
+    }
+
+    private func selectionSummary(_ ids: Set<IssueSummary.ID>) -> String {
+        guard !ids.isEmpty else { return "count=0" }
+        let sample = ids.map(\.uuidString).sorted().prefix(3).joined(separator: ",")
+        return "count=\(ids.count) sample=[\(sample)]"
+    }
+}
+#endif
+
 private struct SearchToolbarField: View {
     @Binding var text: String
     @Binding var showAssigneeColumn: Bool
@@ -294,7 +596,7 @@ private struct SearchToolbarField: View {
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.accessoryBar)
-            .keyboardShortcut("p", modifiers: [.command, .shift])
+            .keyboardShortcut("k", modifiers: [.command])
             .help("Command palette")
 
             Menu {

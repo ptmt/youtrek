@@ -107,6 +107,13 @@ private final class WindowAccessorView: NSView {
             lastConfiguredForSetup = isSetup
         }
 
+        #if DEBUG
+        let initialSize = window.frame.size
+        LoggingService.general.info(
+            "WindowAccessor: configure start isSetup=\(self.isSetup, privacy: .public) needsReconfigure=\(needsReconfigure, privacy: .public) size=\(Double(initialSize.width), privacy: .public)x\(Double(initialSize.height), privacy: .public)"
+        )
+        #endif
+
         if isSetup {
             if needsReconfigure {
                 window.styleMask = [.titled, .closable, .fullSizeContentView]
@@ -164,6 +171,13 @@ private final class WindowAccessorView: NSView {
             window.center()
             hasAppliedSetupPresentation = false
         }
+
+        #if DEBUG
+        let finalSize = window.frame.size
+        LoggingService.general.info(
+            "WindowAccessor: configure end isSetup=\(self.isSetup, privacy: .public) size=\(Double(finalSize.width), privacy: .public)x\(Double(finalSize.height), privacy: .public)"
+        )
+        #endif
     }
 }
 

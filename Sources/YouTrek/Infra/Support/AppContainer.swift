@@ -85,7 +85,7 @@ final class AppContainer: ObservableObject {
         let state = AppState()
         let router = WindowRouter()
         let composer = IssueComposer()
-        let palette = CommandPaletteCoordinator(router: router)
+        let palette = CommandPaletteCoordinator(router: router, appState: state)
         let configurationStore = AppConfigurationStore()
         state.setCurrentUserProfile(
             displayName: configurationStore.loadUserDisplayName(),
@@ -155,7 +155,7 @@ final class AppContainer: ObservableObject {
         let state = AppState()
         let router = WindowRouter()
         let composer = IssueComposer()
-        let palette = CommandPaletteCoordinator(router: router)
+        let palette = CommandPaletteCoordinator(router: router, appState: state)
         let authRepository = PreviewAuthRepository()
         let issueRepository = PreviewIssueRepository()
         let store = AppConfigurationStore()
@@ -813,6 +813,15 @@ final class AppContainer: ObservableObject {
         }
     }
 
+    func signOut() async {
+        await signOutAndClearLocalState()
+        requiresSetup = true
+    }
+
+    func resyncWorkspace() async {
+        await refreshSidebarData()
+    }
+
     func cancelInitialSync() async {
         LoggingService.sync.info("Initial sync: cancel requested.")
         await signOutAndClearLocalState()
@@ -1154,8 +1163,16 @@ private extension AppContainer {
             return (cached, false)
         }
     }
+}
 
+extension AppContainer {
     func refreshSidebarData() async {
+        await refreshSidebarDataInternal()
+    }
+}
+
+private extension AppContainer {
+    func refreshSidebarDataInternal() async {
         let startTime = Date()
         LoggingService.sync.info("Sidebar refresh: start.")
         async let savedQueriesResult = loadSavedQueriesForSidebar()
@@ -1879,13 +1896,15 @@ final class IssueComposer: ObservableObject {
 @MainActor
 final class CommandPaletteCoordinator {
     private let router: WindowRouter
+    private let appState: AppState
 
-    init(router: WindowRouter) {
+    init(router: WindowRouter, appState: AppState) {
         self.router = router
+        self.appState = appState
     }
 
     func open() {
-        print("Command palette requested")
+        appState.presentCommandPalette()
     }
 }
 

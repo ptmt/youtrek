@@ -32,6 +32,7 @@ final class AppState: ObservableObject {
     @Published private var boardSprintFilters: [String: BoardSprintFilter] = [:]
     @Published var activeConflict: ConflictNotice?
     @Published var activeNewIssueDialog: NewIssueDialogState?
+    @Published var activeCommandPalette: CommandPaletteState?
     private var didLogIssueListRendered = false
     private let boardDataSourceEventLimit = 60
 
@@ -329,6 +330,14 @@ final class AppState: ObservableObject {
         activeNewIssueDialog = nil
     }
 
+    func presentCommandPalette(state: CommandPaletteState = CommandPaletteState()) {
+        activeCommandPalette = state
+    }
+
+    func dismissCommandPalette() {
+        activeCommandPalette = nil
+    }
+
     func recordIssueListRendered(issueCount: Int) {
         guard issueCount > 0, !didLogIssueListRendered else { return }
         didLogIssueListRendered = true
@@ -424,6 +433,16 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
         self.assigneeOption = assigneeOption
         self.labels = labels
         self.createMore = createMore
+    }
+}
+
+struct CommandPaletteState: Identifiable, Hashable, Sendable {
+    let id: UUID
+    var query: String
+
+    init(id: UUID = UUID(), query: String = "") {
+        self.id = id
+        self.query = query
     }
 }
 
