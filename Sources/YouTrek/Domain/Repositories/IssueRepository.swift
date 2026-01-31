@@ -36,28 +36,20 @@ extension IssueQuery {
     static func boardQuery(boardName: String, sprintName: String?, sprintFieldName: String? = nil) -> String {
         let trimmedBoard = boardName.trimmingCharacters(in: .whitespacesAndNewlines)
         let escapedBoard = escapeQueryValue(trimmedBoard)
-        let boardValue = quoteValue(escapedBoard)
+        let boardAttribute = trimmedBoard.isEmpty ? "Board" : "Board \(escapedBoard)"
+        let boardAttributeToken = wrapIdentifier(boardAttribute)
         guard let sprintName else {
-            return "Board: {\(boardValue)}"
+            return "has: \(boardAttributeToken)"
         }
 
         let trimmedSprint = sprintName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedSprint.isEmpty else {
-            return "Board: {\(boardValue)}"
+            return "has: \(boardAttributeToken)"
         }
 
         let escapedSprint = escapeQueryValue(trimmedSprint)
-        let sprintValue = quoteValue(escapedSprint)
-        let boardClause = "Board: {\(boardValue)}"
-        let fieldCandidate = sprintFieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        if !fieldCandidate.isEmpty {
-            let fieldName = quoteIdentifierIfNeeded(escapeQueryValue(fieldCandidate))
-            return "\(boardClause) \(fieldName): {\(sprintValue)}"
-        }
-
-        let boardAttributeName = trimmedBoard.isEmpty ? "Board" : "Board \(boardValue)"
-        return "\(boardAttributeName): {\(sprintValue)}"
+        let sprintValue = wrapValue(escapedSprint)
+        return "\(boardAttributeToken): \(sprintValue)"
     }
 
     private static func escapeQueryValue(_ value: String) -> String {
@@ -68,15 +60,19 @@ extension IssueQuery {
         return escaped
     }
 
-    private static func quoteValue(_ value: String) -> String {
-        "\"\(value)\""
+    private static func wrapIdentifier(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        if trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) != nil {
+            return "{\(trimmed)}"
+        }
+        return trimmed
     }
 
-    private static func quoteIdentifierIfNeeded(_ value: String) -> String {
-        if value.rangeOfCharacter(from: .whitespacesAndNewlines) != nil {
-            return "\"\(value)\""
-        }
-        return value
+    private static func wrapValue(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        return "{\(trimmed)}"
     }
 }
 

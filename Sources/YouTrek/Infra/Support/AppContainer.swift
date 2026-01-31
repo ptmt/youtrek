@@ -90,6 +90,7 @@ final class AppContainer: ObservableObject {
             id: configurationStore.loadUserID()
         )
         let initialSyncState = configurationStore.loadInitialSyncState()
+        print("initialSyncState", initialSyncState)
         state.prefillInitialSyncState(
             issues: initialSyncState.issues,
             boards: initialSyncState.boards,
@@ -142,7 +143,6 @@ final class AppContainer: ObservableObject {
         )
         container.requiresSetup = initialRequiresSetup
         Task { await container.configureIfNeeded() }
-        Task { await container.bootstrap() }
         return container
     }()
 
@@ -741,10 +741,18 @@ final class AppContainer: ObservableObject {
                 guard let configuration = try? YouTrackOAuthConfiguration.loadFromEnvironment() else {
                     throw AuthError.configurationMissing("Missing OAuth environment configuration.")
                 }
-                await self.applyOAuth(configuration: configuration, configureRepositories: false)
+                await self.applyOAuth(
+                    configuration: configuration,
+                    configureRepositories: false,
+                    shouldResetInitialSyncState: false
+                )
                 try await authRepository.signIn()
                 self.updateUserProfile(from: self.authRepository.currentAccount)
-                await self.applyOAuth(configuration: configuration, configureRepositories: true)
+                await self.applyOAuth(
+                    configuration: configuration,
+                    configureRepositories: true,
+                    shouldResetInitialSyncState: false
+                )
                 LoggingService.sync.info("Sign-in: completed, bootstrapping.")
                 await self.bootstrap()
             } catch {
@@ -815,11 +823,14 @@ final class AppContainer: ObservableObject {
         baseURL: URL,
         token: String,
         userProfile: YouTrackTokenValidationUser? = nil,
-        allowKeychainInteraction: Bool = false
+        allowKeychainInteraction: Bool = false,
+        shouldResetInitialSyncState: Bool = true
     ) async -> ManualTokenSaveOutcome {
         let apiBaseURL = Self.apiBaseURL(from: baseURL)
 
-        resetInitialSyncState()
+        if shouldResetInitialSyncState {
+            resetInitialSyncState()
+        }
         configurationStore.save(baseURL: apiBaseURL)
         let manualAuth = ManualTokenAuthRepository(configurationStore: configurationStore)
         var tokenSaved = true
@@ -946,7 +957,11 @@ final class AppContainer: ObservableObject {
 
         if let oauthConfiguration {
             LoggingService.sync.info("Configuration: OAuth environment detected.")
-            await applyOAuth(configuration: oauthConfiguration, configureRepositories: hasOAuthState)
+            await applyOAuth(
+                configuration: oauthConfiguration,
+                configureRepositories: hasOAuthState,
+                shouldResetInitialSyncState: false
+            )
             if hasOAuthState, authRepository.currentAccount != nil {
                 await bootstrap()
                 return
@@ -975,7 +990,12 @@ final class AppContainer: ObservableObject {
                 userProfile = nil
             }
             LoggingService.sync.info("Configuration: stored token found, bootstrapping.")
-            _ = await completeManualSetup(baseURL: baseURL, token: token, userProfile: userProfile)
+            _ = await completeManualSetup(
+                baseURL: baseURL,
+                token: token,
+                userProfile: userProfile,
+                shouldResetInitialSyncState: false
+            )
             return
         }
 
@@ -990,8 +1010,14 @@ final class AppContainer: ObservableObject {
     }
 
     @MainActor
-    private func applyOAuth(configuration: YouTrackOAuthConfiguration, configureRepositories: Bool) async {
-        resetInitialSyncState()
+    private func applyOAuth(
+        configuration: YouTrackOAuthConfiguration,
+        configureRepositories: Bool,
+        shouldResetInitialSyncState: Bool = true
+    ) async {
+        if shouldResetInitialSyncState {
+            resetInitialSyncState()
+        }
         oauthConfiguration = configuration
         let appAuthRepository = oauthRepository ?? AppAuthRepository(
             configuration: configuration,
@@ -1338,7 +1364,8 @@ private extension AppContainer {
         if resolved != filter {
             appState.updateSprintFilter(resolved, for: board.id)
         }
-        let rawQuery = IssueQuery.boardQuery(boardName: board.name, sprintName: nil)
+        let sprintName = resolved.isBacklog ? nil : board.sprintName(for: resolved)
+        let rawQuery = IssueQuery.boardQuery(boardName: board.name, sprintName: sprintName)
         return IssueQuery(
             rawQuery: rawQuery,
             search: "",
