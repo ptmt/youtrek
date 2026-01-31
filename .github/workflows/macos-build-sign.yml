@@ -1,13 +1,18 @@
-name: Build and Sign macOS App
+name: Build and Release macOS App
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.2.3). Leave blank to use the tag."
+        required: false
+        type: string
   push:
     tags:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   APP_NAME: YouTrek
@@ -24,6 +29,23 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: "latest-stable"
+
+      - name: Resolve version
+        id: version
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#v}"
+          elif [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION}"
+          else
+            echo "Version is required when running manually." >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Run tests
         run: |
@@ -71,8 +93,11 @@ jobs:
             -project YouTrek.xcodeproj \
             -scheme "$XCODE_SCHEME" \
             -configuration Release \
+            -destination "generic/platform=macOS" \
             -archivePath "$RUNNER_TEMP/${APP_NAME}.xcarchive" \
-            archive
+            archive \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="arm64 x86_64"
 
       - name: Export signed app
         env:
@@ -109,28 +134,50 @@ PLIST
             -exportOptionsPlist "$EXPORT_PLIST" \
             -exportPath "$RUNNER_TEMP/export"
 
-      - name: Notarize and staple
+      - name: Notarize, staple, and package
+        id: package
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           APP_PATH="$RUNNER_TEMP/export/${APP_NAME}.app"
-          ZIP_PATH="$RUNNER_TEMP/${APP_NAME}.zip"
+          WORK_ZIP="$RUNNER_TEMP/${APP_NAME}-notary.zip"
+          RELEASE_ZIP="$RUNNER_TEMP/youtrek-${VERSION}-macos-universal.zip"
 
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$WORK_ZIP"
 
-          xcrun notarytool submit "$ZIP_PATH" \
+          xcrun notarytool submit "$WORK_ZIP" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_SPECIFIC_PASSWORD" \
             --wait
 
           xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$RELEASE_ZIP"
+
+          SHA256="$(shasum -a 256 "$RELEASE_ZIP" | awk '{print $1}')"
+          {
+            echo "Release asset: $(basename "$RELEASE_ZIP")"
+            echo "SHA-256: $SHA256"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "zip=$RELEASE_ZIP" >> "$GITHUB_OUTPUT"
 
       - name: Upload app artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-app
           path: ${{ runner.temp }}/export/${{ env.APP_NAME }}.app
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "YouTrek v${{ steps.version.outputs.version }}"
+          target_commitish: ${{ github.sha }}
+          files: ${{ steps.package.outputs.zip }}
+          generate_release_notes: true

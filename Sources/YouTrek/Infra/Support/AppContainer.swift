@@ -1233,10 +1233,11 @@ private extension AppContainer {
             let remoteBoards = try await syncCoordinator.enqueue(label: "Sync agile boards") {
                 try await self.boardRepositorySwitcher.fetchBoards()
             }
-            await boardLocalStore.saveRemoteBoards(remoteBoards)
+            let mergedBoards = mergeBoardSummaries(remoteBoards: remoteBoards, cachedBoards: cachedBoards)
+            await boardLocalStore.saveRemoteBoards(mergedBoards)
             LoggingService.sync.info("Board sync: fetched \(remoteBoards.count, privacy: .public) boards.")
             let syncDate = Date()
-            for board in remoteBoards {
+            for board in mergedBoards {
                 appState.recordBoardSync(boardID: board.id, at: syncDate)
             }
             return await boardLocalStore.loadBoards()
@@ -1301,6 +1302,33 @@ private extension AppContainer {
         let needsSwimlaneField = board.swimlaneSettings.isEnabled &&
             (board.swimlaneSettings.fieldName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
         return needsColumns || needsProjects || needsSwimlaneField
+    }
+
+    private func mergeBoardSummaries(
+        remoteBoards: [IssueBoard],
+        cachedBoards: [IssueBoard]
+    ) -> [IssueBoard] {
+        guard !cachedBoards.isEmpty else { return remoteBoards }
+        let cachedByID = Dictionary(uniqueKeysWithValues: cachedBoards.map { ($0.id, $0) })
+
+        return remoteBoards.map { remote in
+            guard let cached = cachedByID[remote.id] else { return remote }
+            let detailSource = boardNeedsDetail(cached) ? remote : cached
+            return IssueBoard(
+                id: remote.id,
+                name: remote.name,
+                isFavorite: remote.isFavorite,
+                projectNames: detailSource.projectNames,
+                sprints: detailSource.sprints,
+                currentSprintID: detailSource.currentSprintID,
+                sprintFieldName: detailSource.sprintFieldName,
+                columnFieldName: detailSource.columnFieldName,
+                columns: detailSource.columns,
+                swimlaneSettings: detailSource.swimlaneSettings,
+                orphansAtTheTop: detailSource.orphansAtTheTop,
+                hideOrphansSwimlane: detailSource.hideOrphansSwimlane
+            )
+        }
     }
 
     private func applyingFavorite(_ isFavorite: Bool?, to board: IssueBoard) -> IssueBoard {

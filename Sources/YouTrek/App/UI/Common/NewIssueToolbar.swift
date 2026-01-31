@@ -10,11 +10,15 @@ struct NewIssueToolbar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            TextField("New issue title", text: $draftTitle)
+            TextField("New issue...", text: $draftTitle)
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                .background(.bar, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(.separator.opacity(0.6), lineWidth: 1)
+                )
                 .frame(minWidth: 200)
                 .submitLabel(.done)
                 .onSubmit {

@@ -206,15 +206,13 @@ private struct RootContentView: View {
     @ToolbarContentBuilder
     private var mainToolbar: some ToolbarContent {
         ToolbarItem(placement: .principal) {
-            SearchToolbarField(text: $searchQuery)
-        }
-
-        ToolbarItem(placement: .confirmationAction) {
-            Button(action: container.commandPalette.open) {
-                Label("Command Palette", systemImage: "command.square")
-            }
-            .buttonStyle(.accessoryBar)
-            .keyboardShortcut("p", modifiers: [.command, .shift])
+            SearchToolbarField(
+                text: $searchQuery,
+                showAssigneeColumn: $showAssigneeColumn,
+                hasUnreadIssues: hasUnreadIssues,
+                onOpenCommandPalette: container.commandPalette.open,
+                onMarkAllRead: container.markAllIssuesSeen
+            )
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
@@ -229,27 +227,6 @@ private struct RootContentView: View {
             .buttonStyle(.accessoryBar)
             .help("Show or hide the inspector column")
         }
-
-        ToolbarItem(placement: .automatic) {
-            Menu {
-                Toggle("Assignee as Column", isOn: $showAssigneeColumn)
-            } label: {
-                Label("Columns", systemImage: "tablecells")
-            }
-            .help("Show or hide optional columns in the issue list")
-        }
-
-        ToolbarItem(placement: .automatic) {
-            Button {
-                container.markAllIssuesSeen()
-            } label: {
-                Label("Mark All as Read", systemImage: "checkmark.circle")
-            }
-            .buttonStyle(.accessoryBar)
-            .disabled(!hasUnreadIssues)
-            .help("Mark all issues in the current list as read")
-        }
-
     }
 
     private var inspectorContent: some View {
@@ -287,21 +264,56 @@ private struct RootContentView: View {
 
 private struct SearchToolbarField: View {
     @Binding var text: String
+    @Binding var showAssigneeColumn: Bool
+    let hasUnreadIssues: Bool
+    let onOpenCommandPalette: () -> Void
+    let onMarkAllRead: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search issues", text: $text)
-                .textFieldStyle(.plain)
-                .submitLabel(.search)
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Search issues", text: $text)
+                    .textFieldStyle(.plain)
+                    .submitLabel(.search)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.bar, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(.separator.opacity(0.6), lineWidth: 1)
+            )
+            .frame(minWidth: 150, idealWidth: 190, maxWidth: 230)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Search issues")
+
+            Button(action: onOpenCommandPalette) {
+                Label("Command Palette", systemImage: "command.square")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.accessoryBar)
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+            .help("Command palette")
+
+            Menu {
+                Toggle("Assignee as Column", isOn: $showAssigneeColumn)
+            } label: {
+                Label("Columns", systemImage: "tablecells")
+                    .labelStyle(.iconOnly)
+            }
+            .help("Show or hide optional columns in the issue list")
+
+            Button(action: onMarkAllRead) {
+                Label("Mark All as Read", systemImage: "checkmark.circle")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.accessoryBar)
+            .disabled(!hasUnreadIssues)
+            .help("Mark all issues in the current list as read")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .frame(minWidth: 260, idealWidth: 360, maxWidth: 420)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Search issues")
+        .frame(minWidth: 240, idealWidth: 330, maxWidth: 390)
     }
 }
 
