@@ -55,12 +55,12 @@ final class AppState: ObservableObject {
     }
 
     func setDrafts(_ drafts: [IssueDraftRecord]) {
-        draftRecords = drafts.sorted { $0.createdAt > $1.createdAt }
+        draftRecords = drafts.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     func addDraft(_ record: IssueDraftRecord) {
         draftRecords.append(record)
-        draftRecords.sort { $0.createdAt > $1.createdAt }
+        draftRecords.sort { $0.updatedAt > $1.updatedAt }
     }
 
     func updateDraft(_ record: IssueDraftRecord) {
@@ -69,7 +69,7 @@ final class AppState: ObservableObject {
         } else {
             draftRecords.append(record)
         }
-        draftRecords.sort { $0.createdAt > $1.createdAt }
+        draftRecords.sort { $0.updatedAt > $1.updatedAt }
     }
 
     func removeDraft(id: UUID) {

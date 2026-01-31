@@ -31,9 +31,15 @@ private struct RootContentView: View {
         return selectionShowsDrafts(selection)
     }
     private var visibleIssues: [IssueSummary] {
-        let baseIssues = showsDraftsInList
-            ? appState.issues + appState.draftRecords.map { IssueSummary.draft($0) }
-            : appState.issues
+        let baseIssues: [IssueSummary]
+        if showsDraftsInList {
+            let drafts = appState.draftRecords
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .map { IssueSummary.draft($0) }
+            baseIssues = drafts + appState.issues
+        } else {
+            baseIssues = appState.issues
+        }
         return appState.filteredIssues(baseIssues, searchQuery: searchQuery)
     }
 
@@ -196,6 +202,9 @@ private struct RootContentView: View {
                 },
                 onIssuesRendered: { count in
                     appState.recordIssueListRendered(issueCount: count)
+                },
+                onDeleteDraft: { draftID in
+                    container.discardDraft(recordID: draftID)
                 }
             )
         }

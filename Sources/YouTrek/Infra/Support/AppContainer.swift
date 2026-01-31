@@ -689,6 +689,7 @@ final class AppContainer: ObservableObject {
     func updateDraft(recordID: UUID, draft: IssueDraft) {
         guard var record = appState.draftRecord(id: recordID) else { return }
         record.draft = draft
+        record.updatedAt = Date()
         appState.updateDraft(record)
 
         draftSaveTask?.cancel()

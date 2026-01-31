@@ -94,7 +94,7 @@ extension IssueSummary {
             readableID: "Draft",
             title: title,
             projectName: projectName,
-            updatedAt: record.createdAt,
+            updatedAt: record.updatedAt,
             updatedBy: nil,
             assignee: nil,
             reporter: nil,

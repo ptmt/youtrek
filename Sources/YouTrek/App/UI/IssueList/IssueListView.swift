@@ -10,6 +10,7 @@ struct IssueListView: View {
     let hasCompletedSync: Bool
     let isIssueUnread: (IssueSummary) -> Bool
     let onIssuesRendered: ((Int) -> Void)?
+    let onDeleteDraft: ((UUID) -> Void)?
     @State private var sortOrder: [KeyPathComparator<IssueSummary>] = [
         .init(\IssueSummary.updatedAt, order: .reverse)
     ]
@@ -84,9 +85,10 @@ struct IssueListView: View {
         }
     }
 
+    @ViewBuilder
     private func titleCell(for issue: IssueSummary) -> some View {
         let unread = isIssueUnread(issue)
-        return HStack(alignment: .top, spacing: 10) {
+        let row = HStack(alignment: .top, spacing: 10) {
             UserAvatarView(person: issue.assignee, size: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(issue.title)
@@ -97,6 +99,15 @@ struct IssueListView: View {
         }
         .padding(.vertical, 4)
         .textSelection(.enabled)
+        if let draftID = issue.draftID {
+            row.contextMenu {
+                Button("Delete", role: .destructive) {
+                    onDeleteDraft?(draftID)
+                }
+            }
+        } else {
+            row
+        }
     }
 
     private func assigneeCell(for issue: IssueSummary) -> some View {

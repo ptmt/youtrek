@@ -11,6 +11,7 @@ struct IssueDraftRecord: Identifiable, Codable, Equatable {
     var draft: IssueDraft
     var status: Status
     let createdAt: Date
+    var updatedAt: Date
     var submittedAt: Date?
     var lastError: String?
 
@@ -19,6 +20,7 @@ struct IssueDraftRecord: Identifiable, Codable, Equatable {
         draft: IssueDraft,
         status: Status = .pending,
         createdAt: Date = Date(),
+        updatedAt: Date? = nil,
         submittedAt: Date? = nil,
         lastError: String? = nil
     ) {
@@ -26,8 +28,41 @@ struct IssueDraftRecord: Identifiable, Codable, Equatable {
         self.draft = draft
         self.status = status
         self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
         self.submittedAt = submittedAt
         self.lastError = lastError
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case draft
+        case status
+        case createdAt
+        case updatedAt
+        case submittedAt
+        case lastError
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        draft = try container.decode(IssueDraft.self, forKey: .draft)
+        status = try container.decode(Status.self, forKey: .status)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        submittedAt = try container.decodeIfPresent(Date.self, forKey: .submittedAt)
+        lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(draft, forKey: .draft)
+        try container.encode(status, forKey: .status)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(submittedAt, forKey: .submittedAt)
+        try container.encodeIfPresent(lastError, forKey: .lastError)
     }
 }
 
@@ -88,6 +123,7 @@ actor IssueDraftStore {
         var records = loadRecords()
         guard let index = records.firstIndex(where: { $0.id == id }) else { return nil }
         records[index].draft = draft
+        records[index].updatedAt = Date()
         persist(records)
         return records[index]
     }
@@ -104,6 +140,7 @@ actor IssueDraftStore {
         records[index].status = status
         records[index].submittedAt = status == .submitted ? Date() : records[index].submittedAt
         records[index].lastError = error
+        records[index].updatedAt = Date()
         persist(records)
         return records[index]
     }

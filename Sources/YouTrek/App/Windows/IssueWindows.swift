@@ -328,7 +328,7 @@ struct DraftIssueDetailView: View {
             readableID: "DRAFT",
             title: container.issueComposer.draftTitle,
             projectName: container.issueComposer.draftProjectID,
-            updatedAt: record.createdAt,
+            updatedAt: record.updatedAt,
             priority: container.issueComposer.draftPriority
         )
     }
