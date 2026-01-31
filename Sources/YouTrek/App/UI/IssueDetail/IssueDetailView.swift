@@ -80,7 +80,7 @@ struct IssueDetailView: View {
         VStack(alignment: .leading, spacing: 6) {
             AssigneeEditor(issue: issue)
             metadataRow(systemImage: "clock") {
-                Text("Updated \(issue.updatedAt.formatted(.relative(presentation: .named)))")
+                Text("Updated \(IssueTimestampFormatter.label(for: issue.updatedAt))")
             }
             ProjectEditor(
                 issue: issue,

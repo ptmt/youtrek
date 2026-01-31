@@ -346,7 +346,8 @@ final class AppContainer: ObservableObject {
             using: query,
             currentUserID: appState.currentUserID,
             currentUserLogin: appState.currentUserLogin,
-            currentUserDisplayName: appState.currentUserDisplayName
+            currentUserDisplayName: appState.currentUserDisplayName,
+            paginate: selection.isBoard
         )
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
             recordIssueSyncCompleted()
@@ -454,7 +455,8 @@ final class AppContainer: ObservableObject {
             using: query,
             currentUserID: appState.currentUserID,
             currentUserLogin: appState.currentUserLogin,
-            currentUserDisplayName: appState.currentUserDisplayName
+            currentUserDisplayName: appState.currentUserDisplayName,
+            paginate: item.isBoard
         )
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
             recordIssueSyncCompleted()
@@ -1157,19 +1159,20 @@ private extension AppContainer {
 
     func buildSidebarSections(savedQueries: [SavedQuery], boards: [IssueBoard]) -> [SidebarSection] {
         let visibleSavedQueries = limitedSavedQueries(from: savedQueries)
-        let page = IssueQuery.Page(size: 50, offset: 0)
+        let listPage = IssueQuery.Page(size: 50, offset: 0)
+        let boardPage = IssueQuery.Page(size: 0, offset: 0)
         let savedInbox = visibleSavedQueries.first { $0.name.caseInsensitiveCompare("Inbox") == .orderedSame }
 
         var smartItems: [SidebarItem] = []
         if savedInbox == nil {
-            smartItems.append(.inbox(page: page))
+            smartItems.append(.inbox(page: listPage))
         }
-        smartItems.append(.assignedToMe(page: page))
-        smartItems.append(.createdByMe(page: page))
+        smartItems.append(.assignedToMe(page: listPage))
+        smartItems.append(.createdByMe(page: listPage))
 
-        let savedItems = visibleSavedQueries.map { SidebarItem.savedSearch($0, page: page) }
+        let savedItems = visibleSavedQueries.map { SidebarItem.savedSearch($0, page: listPage) }
         let favoriteBoards = boards.filter(\.isFavorite)
-        let boardItems = favoriteBoards.map { SidebarItem.board($0, page: page) }
+        let boardItems = favoriteBoards.map { SidebarItem.board($0, page: boardPage) }
 
         var sections: [SidebarSection] = []
         if !smartItems.isEmpty {
@@ -1244,15 +1247,24 @@ private extension AppContainer {
     }
 
     func startBoardPrefetch(_ boards: [IssueBoard]) {
-        let page = IssueQuery.Page(size: 50, offset: 0)
+        let page = IssueQuery.Page(size: 0, offset: 0)
         let queries = boards
             .filter(\.isFavorite)
             .map { boardIssueQuery(for: $0, page: page) }
         guard !queries.isEmpty else { return }
         let coordinator = syncCoordinator
+        let currentUserID = appState.currentUserID
+        let currentUserLogin = appState.currentUserLogin
+        let currentUserDisplayName = appState.currentUserDisplayName
         Task.detached(priority: .background) {
             for query in queries {
-                _ = try? await coordinator.refreshIssues(using: query)
+                _ = await coordinator.refreshIssuesWithStatus(
+                    using: query,
+                    currentUserID: currentUserID,
+                    currentUserLogin: currentUserLogin,
+                    currentUserDisplayName: currentUserDisplayName,
+                    paginate: true
+                )
             }
         }
     }

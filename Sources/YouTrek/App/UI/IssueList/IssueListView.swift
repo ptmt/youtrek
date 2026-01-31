@@ -119,7 +119,7 @@ struct IssueListView: View {
 
     private func updatedCell(for issue: IssueSummary) -> some View {
         let unread = isIssueUnread(issue)
-        return Text(issue.updatedAt.formatted(.relative(presentation: .named)))
+        return Text(IssueTimestampFormatter.label(for: issue.updatedAt))
             .font(.subheadline.weight(unread ? .semibold : .regular))
             .textSelection(.enabled)
     }
@@ -190,6 +190,32 @@ private struct IssueMetaDotLabel: View {
             Text(text)
                 .foregroundStyle(Color.primary.opacity(textOpacity))
         }
+    }
+}
+
+enum IssueTimestampFormatter {
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.dateFormat = "h:mm"
+        return formatter
+    }()
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
+
+    static func label(for date: Date, calendar: Calendar = .current) -> String {
+        if calendar.isDateInToday(date) {
+            return timeFormatter.string(from: date)
+        }
+        if calendar.isDateInYesterday(date) {
+            return "Yesterday"
+        }
+        return dateFormatter.string(from: date)
     }
 }
 

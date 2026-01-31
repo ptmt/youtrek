@@ -526,6 +526,9 @@ actor IssueLocalStore {
     }
 
     private func applyPaging(_ issues: [IssueSummary], page: IssueQuery.Page) -> [IssueSummary] {
+        if page.size <= 0 {
+            return issues
+        }
         guard page.offset < issues.count else { return [] }
         let start = max(0, page.offset)
         let end = min(issues.count, start + page.size)

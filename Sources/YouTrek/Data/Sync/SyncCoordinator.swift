@@ -37,7 +37,8 @@ actor SyncCoordinator {
         using query: IssueQuery,
         currentUserID: String?,
         currentUserLogin: String?,
-        currentUserDisplayName: String?
+        currentUserDisplayName: String?,
+        paginate: Bool = false
     ) async -> IssueSyncResult {
         if AppDebugSettings.disableSyncing {
             let cached = await localStore.loadIssues(for: query)
@@ -47,7 +48,7 @@ actor SyncCoordinator {
         do {
             LoggingService.sync.info("Issue sync: fetching remote issues.")
             let issues = try await enqueue(label: "Sync issues") {
-                let remote = try await self.issueRepository.fetchIssues(query: query)
+                let remote = try await self.fetchIssues(query: query, paginate: paginate)
                 await self.localStore.saveRemoteIssues(
                     remote,
                     for: query,
@@ -65,6 +66,40 @@ actor SyncCoordinator {
             LoggingService.sync.error("Issue sync: failed (\(error.localizedDescription, privacy: .public)), loaded \(cached.count, privacy: .public) cached issues.")
             return IssueSyncResult(issues: cached, didSyncRemote: false)
         }
+    }
+
+    private func fetchIssues(query: IssueQuery, paginate: Bool) async throws -> [IssueSummary] {
+        guard paginate else {
+            return try await issueRepository.fetchIssues(query: query)
+        }
+
+        let defaultPageSize = 200
+        let pageSize = query.page.size > 0 ? query.page.size : defaultPageSize
+        let maxPages = 50
+        var offset = query.page.offset
+        var aggregated: [IssueSummary] = []
+        aggregated.reserveCapacity(pageSize)
+
+        for pageIndex in 0..<maxPages {
+            var pagedQuery = query
+            pagedQuery.page = IssueQuery.Page(size: pageSize, offset: offset)
+            let page = try await issueRepository.fetchIssues(query: pagedQuery)
+            if page.isEmpty {
+                break
+            }
+            aggregated.append(contentsOf: page)
+            if page.count < pageSize {
+                break
+            }
+            offset += pageSize
+            if pageIndex == maxPages - 1 {
+                LoggingService.sync.info(
+                    "Issue sync: pagination cap reached (\(aggregated.count, privacy: .public) issues)."
+                )
+            }
+        }
+
+        return aggregated
     }
 
     func loadCachedIssues(for query: IssueQuery) async -> [IssueSummary] {
