@@ -15,11 +15,14 @@ private struct RootContentView: View {
     @State private var searchQuery: String = ""
     @State private var isInspectorVisible: Bool = true
     @AppStorage("issueList.showAssigneeColumn") private var showAssigneeColumn: Bool = false
-    @AppStorage("issueList.showUpdatedColumn") private var showUpdatedColumn: Bool = true
-    @State private var simulateSlowResponses: Bool = AppDebugSettings.simulateSlowResponses
-    @State private var showNetworkFooter: Bool = AppDebugSettings.showNetworkFooter
-    @State private var disableSyncing: Bool = AppDebugSettings.disableSyncing
-    @State private var showBoardDiagnostics: Bool = AppDebugSettings.showBoardDiagnostics
+    #if DEBUG
+    @AppStorage(AppDebugSettings.Keys.simulateSlowResponses) private var simulateSlowResponses: Bool = false
+    @AppStorage(AppDebugSettings.Keys.showNetworkFooter) private var showNetworkFooter: Bool = false
+    @AppStorage(AppDebugSettings.Keys.disableSyncing) private var disableSyncing: Bool = false
+    @AppStorage(AppDebugSettings.Keys.showBoardDiagnostics) private var showBoardDiagnostics: Bool = false
+    #else
+    private let showBoardDiagnostics: Bool = false
+    #endif
     private var selectedIssues: [IssueSummary] {
         appState.issues.filter { appState.selectedIssueIDs.contains($0.id) }
     }
@@ -74,7 +77,6 @@ private struct RootContentView: View {
         .inspector(isPresented: $isInspectorVisible) {
             inspectorContent
         }
-        .searchable(text: $searchQuery, placement: .toolbar, prompt: Text("Search issues"))
         .navigationSplitViewStyle(.prominentDetail)
         #if DEBUG
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -86,18 +88,6 @@ private struct RootContentView: View {
         .task {
             isInspectorVisible = appState.isInspectorVisible
         }
-        .onChange(of: simulateSlowResponses) { _, newValue in
-            AppDebugSettings.setSimulateSlowResponses(newValue)
-        }
-        .onChange(of: showNetworkFooter) { _, newValue in
-            AppDebugSettings.setShowNetworkFooter(newValue)
-        }
-        .onChange(of: disableSyncing) { _, newValue in
-            AppDebugSettings.setDisableSyncing(newValue)
-        }
-        .onChange(of: showBoardDiagnostics) { _, newValue in
-            AppDebugSettings.setShowBoardDiagnostics(newValue)
-        }
         .onChange(of: searchQuery) { _, query in
             appState.updateSearch(query: query)
         }
@@ -108,6 +98,10 @@ private struct RootContentView: View {
             guard let issue else {
                 appState.selectedDraftID = nil
                 return
+            }
+            if !isInspectorVisible {
+                isInspectorVisible = true
+                appState.setInspectorVisible(true)
             }
             Task { @MainActor in
                 if appState.selectedIssueIDs != [issue.id] {
@@ -194,7 +188,6 @@ private struct RootContentView: View {
                 selection: $appState.selectedIssue,
                 selectedIDs: $appState.selectedIssueIDs,
                 showAssigneeColumn: showAssigneeColumn,
-                showUpdatedColumn: showUpdatedColumn,
                 isLoading: appState.isLoadingIssues,
                 hasCompletedSync: appState.hasCompletedIssueSync,
                 isIssueUnread: { issue in
@@ -212,9 +205,8 @@ private struct RootContentView: View {
 
     @ToolbarContentBuilder
     private var mainToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .automatic) {
-            NewIssueToolbar(container: container)
-                .frame(maxWidth: 280)
+        ToolbarItem(placement: .principal) {
+            SearchToolbarField(text: $searchQuery)
         }
 
         ToolbarItem(placement: .confirmationAction) {
@@ -225,7 +217,9 @@ private struct RootContentView: View {
             .keyboardShortcut("p", modifiers: [.command, .shift])
         }
 
-        ToolbarItem(placement: .primaryAction) {
+        ToolbarItemGroup(placement: .primaryAction) {
+            NewIssueToolbar(container: container)
+                .frame(maxWidth: 280)
             Button {
                 isInspectorVisible.toggle()
                 appState.setInspectorVisible(isInspectorVisible)
@@ -239,7 +233,6 @@ private struct RootContentView: View {
         ToolbarItem(placement: .automatic) {
             Menu {
                 Toggle("Assignee as Column", isOn: $showAssigneeColumn)
-                Toggle("Updated as Column", isOn: $showUpdatedColumn)
             } label: {
                 Label("Columns", systemImage: "tablecells")
             }
@@ -257,22 +250,6 @@ private struct RootContentView: View {
             .help("Mark all issues in the current list as read")
         }
 
-        #if DEBUG
-                ToolbarItem(placement: .automatic) {
-                    Menu {
-                        Toggle("Simulate slow responses", isOn: $simulateSlowResponses)
-                        Toggle("Show network footer", isOn: $showNetworkFooter)
-                        Toggle("Disable syncing", isOn: $disableSyncing)
-                        Toggle("Show board diagnostics", isOn: $showBoardDiagnostics)
-                        Divider()
-                        Button("Clear cache and refetch") {
-                            container.clearCacheAndRefetch()
-                        }
-                    } label: {
-                        Label("Developer", systemImage: "wrench.and.screwdriver")
-                    }
-                }
-        #endif
     }
 
     private var inspectorContent: some View {
@@ -306,6 +283,26 @@ private struct RootContentView: View {
         .background(.ultraThinMaterial)
     }
 
+}
+
+private struct SearchToolbarField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search issues", text: $text)
+                .textFieldStyle(.plain)
+                .submitLabel(.search)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .frame(minWidth: 260, idealWidth: 360, maxWidth: 420)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Search issues")
+    }
 }
 
 private struct BoardContentView: View {

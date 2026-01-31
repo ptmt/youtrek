@@ -5,7 +5,6 @@ struct IssueListView: View {
     @Binding var selection: IssueSummary?
     @Binding var selectedIDs: Set<IssueSummary.ID>
     let showAssigneeColumn: Bool
-    let showUpdatedColumn: Bool
     let isLoading: Bool
     let hasCompletedSync: Bool
     let isIssueUnread: (IssueSummary) -> Bool
@@ -72,12 +71,6 @@ struct IssueListView: View {
                 }
                 .width(min: 160, ideal: 200)
             }
-            if showUpdatedColumn {
-                TableColumn("Updated") { issue in
-                    updatedCell(for: issue)
-                }
-                .width(140)
-            }
         }
         .tableStyle(.inset)
         .onAppear {
@@ -117,13 +110,6 @@ struct IssueListView: View {
             .fontWeight(unread ? .semibold : .regular)
     }
 
-    private func updatedCell(for issue: IssueSummary) -> some View {
-        let unread = isIssueUnread(issue)
-        return Text(IssueTimestampFormatter.label(for: issue.updatedAt))
-            .font(.subheadline.weight(unread ? .semibold : .regular))
-            .textSelection(.enabled)
-    }
-
     private func metadataRow(for issue: IssueSummary, isUnread: Bool) -> some View {
         return HStack(spacing: 8) {
             Text(issue.projectName)
@@ -136,6 +122,9 @@ struct IssueListView: View {
                     textOpacity: 0.78
                 )
             }
+            Spacer(minLength: 0)
+            Text(IssueTimestampFormatter.label(for: issue.updatedAt))
+                .foregroundStyle(.secondary)
         }
         .font(.caption.weight(isUnread ? .medium : .regular))
         .lineLimit(1)

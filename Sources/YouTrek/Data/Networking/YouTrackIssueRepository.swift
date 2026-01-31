@@ -211,7 +211,18 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         }
         let priorityField = customFields.first { $0.name.caseInsensitiveCompare("Priority") == .orderedSame }
 
-        let assignee = assigneeField?.value.firstValue.flatMap { value -> Person? in
+        let assignee = issue.assignee.flatMap { user -> Person? in
+            guard let displayName = user.displayName else { return nil }
+            let avatarURL = user.avatarUrl.flatMap(URL.init(string:))
+            let identifier = user.compositeIdentifier.isEmpty ? displayName : user.compositeIdentifier
+            return Person(
+                id: Person.stableID(for: identifier),
+                displayName: displayName,
+                avatarURL: avatarURL,
+                login: user.login,
+                remoteID: user.id
+            )
+        } ?? assigneeField?.value.firstValue.flatMap { value -> Person? in
             guard let displayName = value.displayName ?? value.fullName ?? value.login ?? value.id else { return nil }
             let avatarURL = value.avatarUrl.flatMap(URL.init(string:))
             let identifier = value.compositeIdentifier.isEmpty ? displayName : value.compositeIdentifier
@@ -262,6 +273,14 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
            !sprintValues.isEmpty {
             addCustomFieldValues(&customFieldValues, key: "sprint", values: sprintValues)
             addCustomFieldValues(&customFieldValues, key: "sprints", values: sprintValues)
+        }
+        if let assignee {
+            let assigneeValues = [assignee.displayName, assignee.login ?? "", assignee.remoteID ?? ""]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !assigneeValues.isEmpty {
+                addCustomFieldValues(&customFieldValues, key: "assignee", values: assigneeValues)
+            }
         }
 
         return IssueSummary(
@@ -381,6 +400,7 @@ private extension YouTrackIssueRepository {
         "summary",
         "project(shortName,name)",
         "updated",
+        "assignee(id,login,fullName,avatarUrl)",
         "customFields($type,name,value(id,name,localizedName,fullName,login,avatarUrl))",
         "reporter(id,login,fullName,avatarUrl)",
         "updater(id,login,fullName,avatarUrl)",
@@ -404,6 +424,7 @@ private extension YouTrackIssueRepository {
         "description",
         "created",
         "updated",
+        "assignee(id,login,fullName,avatarUrl)",
         "reporter(id,login,fullName,avatarUrl)",
         "comments(id,text,created,author(id,login,fullName,avatarUrl))"
     ].joined(separator: ",")
@@ -481,6 +502,7 @@ private struct YouTrackIssue: Decodable {
     let description: String?
     let created: Int?
     let updated: Int?
+    let assignee: User?
     let reporter: User?
     let updater: User?
     let comments: [Comment]?

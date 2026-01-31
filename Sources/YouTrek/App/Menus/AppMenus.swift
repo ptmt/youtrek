@@ -3,6 +3,12 @@ import SwiftUI
 
 struct AppMenus: Commands {
     @ObservedObject var container: AppContainer
+    #if DEBUG
+    @AppStorage(AppDebugSettings.Keys.simulateSlowResponses) private var simulateSlowResponses: Bool = false
+    @AppStorage(AppDebugSettings.Keys.showNetworkFooter) private var showNetworkFooter: Bool = false
+    @AppStorage(AppDebugSettings.Keys.disableSyncing) private var disableSyncing: Bool = false
+    @AppStorage(AppDebugSettings.Keys.showBoardDiagnostics) private var showBoardDiagnostics: Bool = false
+    #endif
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -35,6 +41,19 @@ struct AppMenus: Commands {
                 installCLI()
             }
         }
+
+        #if DEBUG
+        CommandMenu("Developer") {
+            Toggle("Simulate slow responses", isOn: $simulateSlowResponses)
+            Toggle("Show network footer", isOn: $showNetworkFooter)
+            Toggle("Disable syncing", isOn: $disableSyncing)
+            Toggle("Show board diagnostics", isOn: $showBoardDiagnostics)
+            Divider()
+            Button("Clear cache and refetch") {
+                container.clearCacheAndRefetch()
+            }
+        }
+        #endif
     }
 
     private func installCLI() {
