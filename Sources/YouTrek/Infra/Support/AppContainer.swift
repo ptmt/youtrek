@@ -23,6 +23,7 @@ final class AppContainer: ObservableObject {
     private let issueFieldRepositorySwitcher: SwitchableIssueFieldRepository
     private let peopleRepositorySwitcher: SwitchablePeopleRepository
     private let boardLocalStore: IssueBoardLocalStore
+    private let savedQueryLocalStore: SavedQueryLocalStore
     private var lastLoadedIssueQuery: IssueQuery?
     private var cachedProjects: [IssueProject] = []
     private var cachedSavedQueries: [SavedQuery] = []
@@ -54,7 +55,8 @@ final class AppContainer: ObservableObject {
         projectRepositorySwitcher: SwitchableProjectRepository,
         issueFieldRepositorySwitcher: SwitchableIssueFieldRepository,
         peopleRepositorySwitcher: SwitchablePeopleRepository,
-        boardLocalStore: IssueBoardLocalStore
+        boardLocalStore: IssueBoardLocalStore,
+        savedQueryLocalStore: SavedQueryLocalStore
     ) {
         self.appState = appState
         self.issueComposer = issueComposer
@@ -73,6 +75,7 @@ final class AppContainer: ObservableObject {
         self.issueFieldRepositorySwitcher = issueFieldRepositorySwitcher
         self.peopleRepositorySwitcher = peopleRepositorySwitcher
         self.boardLocalStore = boardLocalStore
+        self.savedQueryLocalStore = savedQueryLocalStore
         self.appStateCancellable = appState.objectWillChange.sink { [weak self] in
             self?.objectWillChange.send()
         }
@@ -108,6 +111,7 @@ final class AppContainer: ObservableObject {
         let fieldSwitcher = SwitchableIssueFieldRepository(initial: EmptyIssueFieldRepository())
         let peopleSwitcher = SwitchablePeopleRepository(initial: EmptyPeopleRepository())
         let boardStore = IssueBoardLocalStore()
+        let savedQueryStore = SavedQueryLocalStore()
         let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
             await MainActor.run {
                 state?.updateSyncActivity(isSyncing: pendingCount > 0, label: label)
@@ -139,7 +143,8 @@ final class AppContainer: ObservableObject {
             projectRepositorySwitcher: projectSwitcher,
             issueFieldRepositorySwitcher: fieldSwitcher,
             peopleRepositorySwitcher: peopleSwitcher,
-            boardLocalStore: boardStore
+            boardLocalStore: boardStore,
+            savedQueryLocalStore: savedQueryStore
         )
         container.requiresSetup = initialRequiresSetup
         Task { await container.configureIfNeeded() }
@@ -164,6 +169,7 @@ final class AppContainer: ObservableObject {
         let fieldSwitcher = SwitchableIssueFieldRepository(initial: PreviewIssueFieldRepository())
         let peopleSwitcher = SwitchablePeopleRepository(initial: PreviewPeopleRepository())
         let boardStore = IssueBoardLocalStore()
+        let savedQueryStore = SavedQueryLocalStore()
         let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
             await MainActor.run {
                 state?.updateSyncActivity(isSyncing: pendingCount > 0, label: label)
@@ -195,7 +201,8 @@ final class AppContainer: ObservableObject {
             projectRepositorySwitcher: projectSwitcher,
             issueFieldRepositorySwitcher: fieldSwitcher,
             peopleRepositorySwitcher: peopleSwitcher,
-            boardLocalStore: boardStore
+            boardLocalStore: boardStore,
+            savedQueryLocalStore: savedQueryStore
         )
     }()
 
@@ -206,10 +213,13 @@ final class AppContainer: ObservableObject {
             appState.setDrafts(drafts)
         }
         let cachedBoards = await boardLocalStore.loadBoards()
+        let cachedSavedQueries = await savedQueryLocalStore.loadSavedQueries()
         self.cachedBoards = cachedBoards
+        self.cachedSavedQueries = cachedSavedQueries
         LoggingService.sync.info("Bootstrap: cached boards loaded (\(cachedBoards.count, privacy: .public)).")
-        let initialSections = buildSidebarSections(savedQueries: [], boards: cachedBoards)
-        let initialPreferredSelectionID = storedSidebarSelectionID() ?? preferredSelectionID(from: [])
+        LoggingService.sync.info("Bootstrap: cached saved searches loaded (\(cachedSavedQueries.count, privacy: .public)).")
+        let initialSections = buildSidebarSections(savedQueries: cachedSavedQueries, boards: cachedBoards)
+        let initialPreferredSelectionID = storedSidebarSelectionID() ?? preferredSelectionID(from: cachedSavedQueries)
 
         appState.updateSidebar(sections: initialSections, preferredSelectionID: initialPreferredSelectionID)
         if requiresSetup {
@@ -537,6 +547,7 @@ final class AppContainer: ObservableObject {
             guard let self else { return }
             await syncCoordinator.clearCachedIssues()
             await boardLocalStore.clearCache()
+            await savedQueryLocalStore.clearCache()
             await MainActor.run {
                 appState.replaceIssues(with: [])
                 appState.resetIssueSeenUpdates()
@@ -544,6 +555,8 @@ final class AppContainer: ObservableObject {
                 appState.selectedIssue = nil
                 appState.setIssuesLoading(true)
                 self.lastLoadedIssueQuery = nil
+                self.cachedSavedQueries = []
+                self.cachedBoards = []
                 self.statusOptionsCache.removeAll()
                 self.priorityOptionsCache.removeAll()
             }
@@ -753,9 +766,16 @@ final class AppContainer: ObservableObject {
             return
         }
 
-        let savedQueries = (try? await syncCoordinator.enqueue(label: "Sync saved searches") {
-            try await self.savedQueryRepositorySwitcher.fetchSavedQueries()
-        }) ?? []
+        let savedQueries: [SavedQuery]
+        do {
+            let remote = try await syncCoordinator.enqueue(label: "Sync saved searches") {
+                try await self.savedQueryRepositorySwitcher.fetchSavedQueries()
+            }
+            await savedQueryLocalStore.saveRemoteSavedQueries(remote)
+            savedQueries = remote
+        } catch {
+            savedQueries = await savedQueryLocalStore.loadSavedQueries()
+        }
         let boards = await boardLocalStore.loadBoards()
         cachedSavedQueries = savedQueries
         cachedBoards = boards
@@ -808,6 +828,7 @@ final class AppContainer: ObservableObject {
 
         await syncCoordinator.clearCachedIssues()
         await boardLocalStore.clearCache()
+        await savedQueryLocalStore.clearCache()
 
         configurationStore.clearBaseURL()
         configurationStore.clearUserDisplayName()
@@ -831,6 +852,8 @@ final class AppContainer: ObservableObject {
         lastLoadedIssueQuery = nil
         statusOptionsCache.removeAll()
         priorityOptionsCache.removeAll()
+        cachedSavedQueries = []
+        cachedBoards = []
     }
 
     func validateManualToken(baseURL: URL, token: String) async throws -> YouTrackTokenValidationUser {
@@ -1119,22 +1142,30 @@ private extension AppContainer {
 }
 
 private extension AppContainer {
+    func loadSavedQueriesForSidebar() async -> (queries: [SavedQuery], didSyncRemote: Bool) {
+        do {
+            let remote = try await syncCoordinator.enqueue(label: "Sync saved searches") {
+                try await self.savedQueryRepositorySwitcher.fetchSavedQueries()
+            }
+            await savedQueryLocalStore.saveRemoteSavedQueries(remote)
+            return (remote, true)
+        } catch {
+            let cached = await savedQueryLocalStore.loadSavedQueries()
+            return (cached, false)
+        }
+    }
+
     func refreshSidebarData() async {
         let startTime = Date()
         LoggingService.sync.info("Sidebar refresh: start.")
-        async let savedQueriesResult: [SavedQuery] = {
-            do {
-                return try await syncCoordinator.enqueue(label: "Sync saved searches") {
-                    try await self.savedQueryRepositorySwitcher.fetchSavedQueries()
-                }
-            } catch {
-                return []
-            }
-        }()
+        async let savedQueriesResult = loadSavedQueriesForSidebar()
         async let boardsResult: [IssueBoard] = loadBoardsForSidebar()
 
-        let resolvedSavedQueries = await savedQueriesResult
-        recordSavedSearchSyncCompleted()
+        let savedQueriesOutcome = await savedQueriesResult
+        if savedQueriesOutcome.didSyncRemote {
+            recordSavedSearchSyncCompleted()
+        }
+        let resolvedSavedQueries = savedQueriesOutcome.queries
         let resolvedBoards = await boardsResult
         recordBoardListSyncCompleted()
         cachedSavedQueries = resolvedSavedQueries

@@ -55,6 +55,7 @@
 		B1F0E1B28F16D4C39B3F8A07 /* SetupWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A06 /* SetupWindow.swift */; };
 		B22B33C44D55E66F778899AA /* IssueBoardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22B33C44D55E66F778899AA /* IssueBoardRepository.swift */; };
 		B33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift */; };
+		B9C0A1D2E3F4A5B6C7D8E9F1 /* SavedQueryLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C0A1D2E3F4A5B6C7D8E9F1 /* SavedQueryLocalStore.swift */; };
 		B44B55C66D77E88F99AABBCC /* YouTrackIssueBoardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44B55C66D77E88F99AABBCC /* YouTrackIssueBoardRepository.swift */; };
 		B5E95DA444F525E699F17F2F /* AppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 79FB59A8C56FB49F29358D40 /* AppAuth */; };
 		B8AB6665E8494092BAD781CD /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E4FEE5B968D4FFFBC1197E1 /* AppTheme.swift */; };
@@ -127,6 +128,7 @@
 		A22B33C44D55E66F778899AA /* IssueBoardRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueBoardRepository.swift; sourceTree = "<group>"; };
 		A2B3C4D5E6F708192A3B4C5D /* IssueDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDraftStore.swift; sourceTree = "<group>"; };
 		A33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueBoardLocalStore.swift; sourceTree = "<group>"; };
+		A9C0A1D2E3F4A5B6C7D8E9F1 /* SavedQueryLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedQueryLocalStore.swift; sourceTree = "<group>"; };
 		A44B55C66D77E88F99AABBCC /* YouTrackIssueBoardRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueBoardRepository.swift; sourceTree = "<group>"; };
 		A9B8C7D6E5F40123456789AB /* NetworkRequestMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkRequestMonitor.swift; sourceTree = "<group>"; };
 		A9B8C7D6E5F40123456789AD /* NetworkRequestFooterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkRequestFooterView.swift; sourceTree = "<group>"; };
@@ -416,6 +418,7 @@
 			children = (
 				DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */,
 				A33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift */,
+				A9C0A1D2E3F4A5B6C7D8E9F1 /* SavedQueryLocalStore.swift */,
 			);
 			path = DB;
 			sourceTree = "<group>";
@@ -617,6 +620,7 @@
 				C2D3E4F5060708090A0B0C0D /* IssueDraftStore.swift in Sources */,
 				17484CD88BC62E1E13CF6D9D /* IssueLocalStore.swift in Sources */,
 				B33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift in Sources */,
+				B9C0A1D2E3F4A5B6C7D8E9F1 /* SavedQueryLocalStore.swift in Sources */,
 				00FEB9220801E5364D578CD8 /* IssueRepository.swift in Sources */,
 				9ABF8CA24DA93B1795EDF5E7 /* ProjectRepository.swift in Sources */,
 				711FBBDF964284FEE9060EA9 /* IssueFieldRepository.swift in Sources */,
