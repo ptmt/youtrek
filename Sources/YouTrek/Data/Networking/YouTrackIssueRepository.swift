@@ -196,6 +196,33 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         return mapComment(comment, fallbackText: trimmedText)
     }
 
+    func uploadAttachments(issueReadableID: String, attachments: [IssueAttachmentDraft]) async throws -> [IssueAttachment] {
+        let readableID = issueReadableID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !readableID.isEmpty else {
+            throw YouTrackAPIError.http(statusCode: 400, body: "Missing issue identifier for attachments")
+        }
+        guard !attachments.isEmpty else { return [] }
+
+        let parts: [YouTrackAPIClient.MultipartPart] = try attachments.map { draft in
+            let data = try loadAttachmentData(from: draft.fileURL)
+            let mimeType = draft.mimeType ?? "application/octet-stream"
+            return YouTrackAPIClient.MultipartPart(
+                name: "upload",
+                filename: draft.fileName,
+                mimeType: mimeType,
+                data: data
+            )
+        }
+
+        let response = try await client.postMultipart(
+            path: "issues/\(readableID)/attachments",
+            queryItems: [URLQueryItem(name: "fields", value: Self.issueAttachmentFields)],
+            parts: parts
+        )
+        let decoded = try decoder.decode([YouTrackIssue.Attachment].self, from: response)
+        return decoded.compactMap(mapAttachment(_:))
+    }
+
     private static func makeDecoder() -> JSONDecoder {
         JSONDecoder()
     }
@@ -354,6 +381,8 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
             )
         } ?? []
 
+        let attachments = issue.attachments?.compactMap(mapAttachment(_:)) ?? []
+
         return IssueDetail(
             id: fallback.id,
             readableID: issue.idReadable,
@@ -362,7 +391,8 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
             reporter: reporter ?? fallback.reporter,
             createdAt: createdDate,
             updatedAt: updatedDate,
-            comments: comments
+            comments: comments,
+            attachments: attachments
         )
     }
 
@@ -391,6 +421,54 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         )
     }
 
+    private func mapAttachment(_ attachment: YouTrackIssue.Attachment) -> IssueAttachment? {
+        let trimmedID = attachment.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedID.isEmpty else { return nil }
+        let name = attachment.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = (name?.isEmpty == false) ? name! : "Attachment"
+        let createdAt = attachment.created.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) }
+        let author = attachment.author.flatMap { user -> Person? in
+            guard let displayName = user.displayName else { return nil }
+            let avatarURL = user.avatarUrl.flatMap(URL.init(string:))
+            let identifier = user.compositeIdentifier.isEmpty ? displayName : user.compositeIdentifier
+            return Person(
+                id: Person.stableID(for: identifier),
+                displayName: displayName,
+                avatarURL: avatarURL,
+                login: user.login,
+                remoteID: user.id
+            )
+        }
+        let url = resolveAttachmentURL(attachment.url)
+        return IssueAttachment(
+            id: trimmedID,
+            name: resolvedName,
+            size: attachment.size,
+            mimeType: attachment.mimeType,
+            url: url,
+            createdAt: createdAt,
+            author: author
+        )
+    }
+
+    private func resolveAttachmentURL(_ raw: String?) -> URL? {
+        guard let raw, !raw.isEmpty else { return nil }
+        if let url = URL(string: raw), url.scheme != nil {
+            return url
+        }
+        return URL(string: raw, relativeTo: client.baseURL)?.absoluteURL
+    }
+
+    private func loadAttachmentData(from url: URL) throws -> Data {
+        let didStart = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStart {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        return try Data(contentsOf: url)
+    }
+
 }
 
 private extension YouTrackIssueRepository {
@@ -417,6 +495,16 @@ private extension YouTrackIssueRepository {
         issueListFieldsBase
     ]
 
+    static let issueAttachmentFields = [
+        "id",
+        "name",
+        "url",
+        "mimeType",
+        "size",
+        "created",
+        "author(id,login,fullName,avatarUrl)"
+    ].joined(separator: ",")
+
     static let issueDetailFields = [
         "id",
         "idReadable",
@@ -426,7 +514,8 @@ private extension YouTrackIssueRepository {
         "updated",
         "assignee(id,login,fullName,avatarUrl)",
         "reporter(id,login,fullName,avatarUrl)",
-        "comments(id,text,created,author(id,login,fullName,avatarUrl))"
+        "comments(id,text,created,author(id,login,fullName,avatarUrl))",
+        "attachments(\(issueAttachmentFields))"
     ].joined(separator: ",")
 
     static let issueCommentFields = [
@@ -506,6 +595,7 @@ private struct YouTrackIssue: Decodable {
     let reporter: User?
     let updater: User?
     let comments: [Comment]?
+    let attachments: [Attachment]?
     let customFields: [CustomField]?
     let tags: [Tag]?
     let sprints: [Sprint]?
@@ -527,6 +617,16 @@ private struct YouTrackIssue: Decodable {
     struct Comment: Decodable {
         let id: String?
         let text: String?
+        let created: Int?
+        let author: User?
+    }
+
+    struct Attachment: Decodable {
+        let id: String?
+        let name: String?
+        let url: String?
+        let mimeType: String?
+        let size: Int?
         let created: Int?
         let author: User?
     }

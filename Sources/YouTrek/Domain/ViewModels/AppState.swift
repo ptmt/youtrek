@@ -140,6 +140,11 @@ final class AppState: ObservableObject {
         updateIssue(issue.updating(updatedAt: updatedAt))
     }
 
+    func appendAttachments(_ attachments: [IssueAttachment], to issueID: IssueSummary.ID) {
+        guard !attachments.isEmpty, let detail = issueDetails[issueID] else { return }
+        issueDetails[issueID] = detail.appending(attachments: attachments)
+    }
+
     func setIssueDetailLoading(_ id: IssueSummary.ID, isLoading: Bool) {
         if isLoading {
             issueDetailLoadingIDs.insert(id)
@@ -416,6 +421,7 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
     var assigneeOption: IssueFieldOption?
     var labels: [String]
     var createMore: Bool
+    var attachments: [IssueAttachmentDraft]
 
     init(
         id: UUID = UUID(),
@@ -426,7 +432,8 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
         priorityOption: IssueFieldOption? = nil,
         assigneeOption: IssueFieldOption? = nil,
         labels: [String] = [],
-        createMore: Bool = false
+        createMore: Bool = false,
+        attachments: [IssueAttachmentDraft] = []
     ) {
         self.id = id
         self.projectID = projectID
@@ -437,6 +444,7 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
         self.assigneeOption = assigneeOption
         self.labels = labels
         self.createMore = createMore
+        self.attachments = attachments
     }
 }
 

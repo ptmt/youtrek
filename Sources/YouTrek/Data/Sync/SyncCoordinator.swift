@@ -106,6 +106,14 @@ actor SyncCoordinator {
         await localStore.loadIssues(for: query)
     }
 
+    func loadCachedSprintIssueIDs(agileID: String, sprintID: String) async -> [String]? {
+        await localStore.loadSprintIssueIDs(agileID: agileID, sprintID: sprintID)
+    }
+
+    func saveSprintIssueIDs(agileID: String, sprintID: String, issueIDs: [String]) async {
+        await localStore.saveSprintIssueIDs(agileID: agileID, sprintID: sprintID, issueIDs: issueIDs)
+    }
+
     func loadIssues(readableIDs: [String]) async -> [IssueSummary] {
         await localStore.loadIssues(readableIDs: readableIDs)
     }

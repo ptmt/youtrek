@@ -32,6 +32,8 @@ struct NewIssueDialog: View {
             Divider()
             metadataChipsRow
             Divider()
+            attachmentsSection
+            Divider()
             dialogFooter
         }
         .frame(minWidth: 520, idealWidth: 600, maxWidth: 720)
@@ -150,6 +152,12 @@ struct NewIssueDialog: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
+    }
+
+    private var attachmentsSection: some View {
+        DraftAttachmentPicker(attachments: $state.attachments, showEmptyState: false)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
     }
 
     private var statusChip: some View {
@@ -422,7 +430,8 @@ struct NewIssueDialog: View {
             module: nil,
             priority: priority,
             assigneeID: assigneeID,
-            customFields: customFields
+            customFields: customFields,
+            attachments: state.attachments
         )
 
         container.submitDraftFromDialog(draft)

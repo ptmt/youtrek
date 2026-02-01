@@ -327,11 +327,19 @@ final class AppContainer: ObservableObject {
                 : (board.sprintName(for: sprintFilter) ?? "Sprint \(sprintFilter.sprintID ?? "-")")
             recordBoardDataEvent("Sprint filter: \(sprintLabel).", boardID: boardID)
         }
-        let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(
+        var sprintIssueIDs = await loadCachedSprintIssueIDsIfNeeded(
             board: board,
             filter: sprintFilter,
             boardID: boardID
         )
+        let shouldFetchSprintIssueIDs = sprintIssueIDs == nil && !AppDebugSettings.disableSyncing
+        async let remoteSprintIssueIDs: Set<String>? = shouldFetchSprintIssueIDs
+            ? fetchSprintIssueIDsFromRemoteIfNeeded(
+                board: board,
+                filter: sprintFilter,
+                boardID: boardID
+            )
+            : nil
 
         let cachedLoadStart = ProcessInfo.processInfo.systemUptime
         let cachedIssues = await syncCoordinator.loadCachedIssues(for: query)
@@ -370,6 +378,9 @@ final class AppContainer: ObservableObject {
             currentUserDisplayName: appState.currentUserDisplayName,
             paginate: selection.isBoard
         )
+        if let remoteIDs = await remoteSprintIssueIDs {
+            sprintIssueIDs = remoteIDs
+        }
         let syncDuration = durationText(since: syncStart)
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
             recordIssueSyncCompleted()
@@ -488,11 +499,19 @@ final class AppContainer: ObservableObject {
             recordBoardDataEvent("Refresh sprint filter: \(sprintLabel).", boardID: boardID)
         }
         recordBoardDataEvent("Refresh board started.", boardID: boardID)
-        let sprintIssueIDs = await fetchSprintIssueIDsIfNeeded(
+        var sprintIssueIDs = await loadCachedSprintIssueIDsIfNeeded(
             board: board,
             filter: sprintFilter,
             boardID: boardID
         )
+        let shouldFetchSprintIssueIDs = sprintIssueIDs == nil && !AppDebugSettings.disableSyncing
+        async let remoteSprintIssueIDs: Set<String>? = shouldFetchSprintIssueIDs
+            ? fetchSprintIssueIDsFromRemoteIfNeeded(
+                board: board,
+                filter: sprintFilter,
+                boardID: boardID
+            )
+            : nil
         let shouldSeedInitialRead = await syncCoordinator.hasSeenUpdates() == false
         let syncStart = ProcessInfo.processInfo.systemUptime
         let syncResult = await syncCoordinator.refreshIssuesWithStatus(
@@ -502,6 +521,9 @@ final class AppContainer: ObservableObject {
             currentUserDisplayName: appState.currentUserDisplayName,
             paginate: item.isBoard
         )
+        if let remoteIDs = await remoteSprintIssueIDs {
+            sprintIssueIDs = remoteIDs
+        }
         let syncDuration = durationText(since: syncStart)
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
             recordIssueSyncCompleted()
@@ -671,6 +693,18 @@ final class AppContainer: ObservableObject {
         return comment
     }
 
+    func addAttachments(to issue: IssueSummary, attachments: [IssueAttachmentDraft]) async throws -> [IssueAttachment] {
+        guard !attachments.isEmpty else { return [] }
+        let uploaded = try await syncCoordinator.enqueue(label: "Upload attachments") {
+            try await self.issueRepositorySwitcher.uploadAttachments(
+                issueReadableID: issue.readableID,
+                attachments: attachments
+            )
+        }
+        appState.appendAttachments(uploaded, to: issue.id)
+        return uploaded
+    }
+
     func beginNewIssue(withTitle title: String) {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let draft = IssueDraft(
@@ -718,6 +752,7 @@ final class AppContainer: ObservableObject {
                     self.appState.updateIssue(created)
                     self.markIssueSeen(created)
                 }
+                await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
             } catch {
                 _ = await issueDraftStore.markDraftFailed(id: record.id, errorDescription: error.localizedDescription)
                 await MainActor.run {
@@ -750,6 +785,7 @@ final class AppContainer: ObservableObject {
                     self.appState.updateIssue(created)
                     self.markIssueSeen(created)
                 }
+                await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
             } catch {
                 _ = await issueDraftStore.markDraftFailed(id: record.id, errorDescription: error.localizedDescription)
             }
@@ -806,6 +842,7 @@ final class AppContainer: ObservableObject {
                     self.appState.removeDraft(id: recordID)
                     self.issueComposer.resetDraft()
                 }
+                await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
             } catch {
                 let record = await issueDraftStore.markDraftFailed(id: recordID, errorDescription: error.localizedDescription)
                 await MainActor.run {
@@ -814,6 +851,15 @@ final class AppContainer: ObservableObject {
                     }
                 }
             }
+        }
+    }
+
+    private func uploadDraftAttachmentsIfNeeded(draft: IssueDraft, issue: IssueSummary) async {
+        guard !draft.attachments.isEmpty else { return }
+        do {
+            _ = try await addAttachments(to: issue, attachments: draft.attachments)
+        } catch {
+            print("Failed to upload attachments: \(error.localizedDescription)")
         }
     }
 
@@ -1517,7 +1563,33 @@ private extension AppContainer {
         )
     }
 
-    private func fetchSprintIssueIDsIfNeeded(
+    private func loadCachedSprintIssueIDsIfNeeded(
+        board: IssueBoard?,
+        filter: BoardSprintFilter?,
+        boardID: String?
+    ) async -> Set<String>? {
+        guard let board, let filter, case .sprint(let sprintID) = filter else { return nil }
+        let loadStart = ProcessInfo.processInfo.systemUptime
+        if let cached = await syncCoordinator.loadCachedSprintIssueIDs(agileID: board.id, sprintID: sprintID) {
+            let durationLabel = durationText(since: loadStart)
+            LoggingService.sync.info(
+                "Local DB: sprint issue IDs loaded (\(cached.count, privacy: .public)) in \(durationLabel, privacy: .public) for \(board.id, privacy: .public)."
+            )
+            recordBoardDataEvent(
+                "Local DB sprint issue IDs loaded: \(cached.count) in \(durationLabel).",
+                boardID: boardID
+            )
+            return Set(cached)
+        }
+        let durationLabel = durationText(since: loadStart)
+        LoggingService.sync.info(
+            "Local DB: sprint issue IDs cache miss in \(durationLabel, privacy: .public) for \(board.id, privacy: .public)."
+        )
+        recordBoardDataEvent("Local DB sprint issue IDs cache miss (\(durationLabel)).", boardID: boardID)
+        return nil
+    }
+
+    private func fetchSprintIssueIDsFromRemoteIfNeeded(
         board: IssueBoard?,
         filter: BoardSprintFilter?,
         boardID: String?
@@ -1527,7 +1599,12 @@ private extension AppContainer {
         do {
             recordBoardDataEvent("Sprint issue IDs fetch started (sprintID: \(sprintID)).", boardID: boardID)
             let ids = try await issueRepositorySwitcher.fetchSprintIssueIDs(agileID: board.id, sprintID: sprintID)
-            guard !ids.isEmpty else { return nil }
+            await syncCoordinator.saveSprintIssueIDs(agileID: board.id, sprintID: sprintID, issueIDs: ids)
+            guard !ids.isEmpty else {
+                let durationLabel = durationText(since: fetchStart)
+                recordBoardDataEvent("Sprint issue IDs fetched: 0 in \(durationLabel).", boardID: boardID)
+                return Set<String>()
+            }
             let durationLabel = durationText(since: fetchStart)
             recordBoardDataEvent("Sprint issue IDs fetched: \(ids.count) in \(durationLabel).", boardID: boardID)
             return Set(ids)
@@ -1800,6 +1877,7 @@ final class IssueComposer: ObservableObject {
     @Published var draftAssigneeID: String = ""
     @Published var draftPriority: IssuePriority = .normal
     @Published var draftFields: [IssueDraftField] = []
+    @Published var draftAttachments: [IssueAttachmentDraft] = []
 
     var canSubmit: Bool {
         !draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
@@ -1814,6 +1892,7 @@ final class IssueComposer: ObservableObject {
         draftAssigneeID = ""
         draftPriority = .normal
         draftFields = []
+        draftAttachments = []
     }
 
     func applyDraft(_ draft: IssueDraft) {
@@ -1824,6 +1903,7 @@ final class IssueComposer: ObservableObject {
         draftAssigneeID = draft.assigneeID ?? ""
         draftPriority = draft.priority
         draftFields = draft.customFields
+        draftAttachments = draft.attachments
     }
 
     func applyDefaults(from draft: IssueDraft) {
@@ -1858,7 +1938,8 @@ final class IssueComposer: ObservableObject {
             module: trimmedModule.isEmpty ? nil : trimmedModule,
             priority: draftPriority,
             assigneeID: trimmedAssignee.isEmpty ? nil : trimmedAssignee,
-            customFields: normalizedDraftFields(excluding: ["priority", "assignee", "subsystem", "module"])
+            customFields: normalizedDraftFields(excluding: ["priority", "assignee", "subsystem", "module"]),
+            attachments: draftAttachments
         )
     }
 
@@ -1876,7 +1957,8 @@ final class IssueComposer: ObservableObject {
             module: trimmedModule.isEmpty ? nil : trimmedModule,
             priority: draftPriority,
             assigneeID: trimmedAssignee.isEmpty ? nil : trimmedAssignee,
-            customFields: normalizedDraftFields(excluding: ["priority", "assignee", "subsystem", "module"])
+            customFields: normalizedDraftFields(excluding: ["priority", "assignee", "subsystem", "module"]),
+            attachments: draftAttachments
         )
     }
 
@@ -1888,6 +1970,7 @@ final class IssueComposer: ObservableObject {
         draftAssigneeID = ""
         draftPriority = .normal
         draftFields = []
+        draftAttachments = []
     }
 
     func updateDraftFields(using fields: [IssueField]) {
@@ -2049,6 +2132,10 @@ private struct PreviewIssueRepository: IssueRepository {
     func addComment(issueReadableID: String, text: String) async throws -> IssueComment {
         throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support mutations")
     }
+
+    func uploadAttachments(issueReadableID: String, attachments: [IssueAttachmentDraft]) async throws -> [IssueAttachment] {
+        throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support mutations")
+    }
 }
 
 private struct EmptyIssueRepository: IssueRepository {
@@ -2073,6 +2160,10 @@ private struct EmptyIssueRepository: IssueRepository {
     }
 
     func addComment(issueReadableID: String, text: String) async throws -> IssueComment {
+        throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
+    }
+
+    func uploadAttachments(issueReadableID: String, attachments: [IssueAttachmentDraft]) async throws -> [IssueAttachment] {
         throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
     }
 }

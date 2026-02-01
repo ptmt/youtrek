@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct IssueDetailView: View {
     @EnvironmentObject private var container: AppContainer
@@ -12,6 +13,10 @@ struct IssueDetailView: View {
     @State private var commentText: String = ""
     @State private var isSubmittingComment: Bool = false
     @State private var commentError: String?
+    @State private var isPickingAttachment = false
+    @State private var isPickingImage = false
+    @State private var isUploadingAttachments = false
+    @State private var attachmentError: String?
 
     var body: some View {
         ScrollView {
@@ -29,6 +34,8 @@ struct IssueDetailView: View {
                     }
                 }
                 descriptionSection
+                Divider()
+                attachmentsSection
                 Divider()
                 timelineSection
                 Divider()
@@ -132,6 +139,70 @@ struct IssueDetailView: View {
         }
     }
 
+    private var attachmentsSection: some View {
+        let attachments = detail?.attachments ?? []
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Attachments")
+                    .font(.headline)
+                Spacer()
+                if isUploadingAttachments {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+                Button {
+                    isPickingAttachment = true
+                } label: {
+                    Label("Add file", systemImage: "paperclip")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .help("Attach file")
+
+                Button {
+                    isPickingImage = true
+                } label: {
+                    Label("Add image", systemImage: "photo")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .help("Attach image")
+            }
+
+            if let attachmentError {
+                Text(attachmentError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            if attachments.isEmpty {
+                Text(isLoadingDetail ? "Loading attachments…" : "No attachments yet.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(attachments) { attachment in
+                        IssueAttachmentRow(attachment: attachment) {
+                            openAttachment(attachment)
+                        }
+                    }
+                }
+            }
+        }
+        .fileImporter(
+            isPresented: $isPickingAttachment,
+            allowedContentTypes: [.data],
+            allowsMultipleSelection: true,
+            onCompletion: handleAttachmentImport
+        )
+        .fileImporter(
+            isPresented: $isPickingImage,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: true,
+            onCompletion: handleAttachmentImport
+        )
+    }
+
     private var timelineSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Timeline")
@@ -152,6 +223,40 @@ struct IssueDetailView: View {
         guard let detail else { return nil }
         let trimmed = detail.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func handleAttachmentImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            uploadAttachments(from: urls)
+        case .failure(let error):
+            attachmentError = error.localizedDescription
+        }
+    }
+
+    private func uploadAttachments(from urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        let drafts = urls.map { IssueAttachmentDraft.fromFileURL($0) }
+        isUploadingAttachments = true
+        attachmentError = nil
+        Task {
+            do {
+                _ = try await container.addAttachments(to: issue, attachments: drafts)
+                await MainActor.run {
+                    isUploadingAttachments = false
+                }
+            } catch {
+                await MainActor.run {
+                    isUploadingAttachments = false
+                    attachmentError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func openAttachment(_ attachment: IssueAttachment) {
+        guard let url = attachment.url else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private var timelineEntries: [TimelineEntry] {

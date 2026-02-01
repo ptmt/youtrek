@@ -53,6 +53,10 @@ struct NewIssueWindow: View {
                         .lineLimit(4...8)
                 }
 
+                Section("Attachments") {
+                    DraftAttachmentPicker(attachments: draftAttachmentsBinding)
+                }
+
                 Section("AI Assist") {
                     IssueAIAssistSection(
                         viewModel: aiAssistViewModel,
@@ -134,6 +138,13 @@ struct NewIssueWindow: View {
         }
     }
 
+    private var draftAttachmentsBinding: Binding<[IssueAttachmentDraft]> {
+        Binding(
+            get: { container.issueComposer.draftAttachments },
+            set: { container.issueComposer.draftAttachments = $0 }
+        )
+    }
+
     private func submitDisabled(missingFields: [IssueField]) -> Bool {
         viewModel.isLoadingFields || !container.issueComposer.canSubmit || !missingFields.isEmpty
     }
@@ -197,6 +208,10 @@ struct DraftIssueDetailView: View {
                     projectRow
                     TextField("Description", text: draftDescriptionBinding, axis: .vertical)
                         .lineLimit(4...8)
+                }
+
+                Section("Attachments") {
+                    DraftAttachmentPicker(attachments: draftAttachmentsBinding)
                 }
 
                 Section("Fields") {
@@ -271,6 +286,9 @@ struct DraftIssueDetailView: View {
         .onChange(of: container.issueComposer.draftFields) { _, _ in
             persistDraft()
         }
+        .onChange(of: container.issueComposer.draftAttachments) { _, _ in
+            persistDraft()
+        }
     }
 
     private var footer: some View {
@@ -291,6 +309,13 @@ struct DraftIssueDetailView: View {
             .keyboardShortcut(.defaultAction)
             .disabled(submitDisabled(missingFields: missingFields))
         }
+    }
+
+    private var draftAttachmentsBinding: Binding<[IssueAttachmentDraft]> {
+        Binding(
+            get: { container.issueComposer.draftAttachments },
+            set: { container.issueComposer.draftAttachments = $0 }
+        )
     }
 
     private func submitDisabled(missingFields: [IssueField]) -> Bool {

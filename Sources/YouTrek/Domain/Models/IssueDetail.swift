@@ -65,4 +65,25 @@ extension IssueDetail {
             attachments: attachments
         )
     }
+
+    func appending(attachments newAttachments: [IssueAttachment]) -> IssueDetail {
+        guard !newAttachments.isEmpty else { return self }
+        var merged = attachments
+        for attachment in newAttachments where !merged.contains(attachment) {
+            merged.append(attachment)
+        }
+        let latestAttachmentDate = newAttachments.compactMap(\.createdAt).max() ?? updatedAt
+        let resolvedUpdatedAt = max(updatedAt, latestAttachmentDate)
+        return IssueDetail(
+            id: id,
+            readableID: readableID,
+            title: title,
+            description: description,
+            reporter: reporter,
+            createdAt: createdAt,
+            updatedAt: resolvedUpdatedAt,
+            comments: comments,
+            attachments: merged
+        )
+    }
 }

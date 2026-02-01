@@ -63,6 +63,10 @@ actor SwitchableIssueRepository: IssueRepository {
     func addComment(issueReadableID: String, text: String) async throws -> IssueComment {
         try await current.addComment(issueReadableID: issueReadableID, text: text)
     }
+
+    func uploadAttachments(issueReadableID: String, attachments: [IssueAttachmentDraft]) async throws -> [IssueAttachment] {
+        try await current.uploadAttachments(issueReadableID: issueReadableID, attachments: attachments)
+    }
 }
 
 actor SwitchableSavedQueryRepository: SavedQueryRepository {

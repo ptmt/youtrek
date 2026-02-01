@@ -46,6 +46,12 @@ actor IssueLocalStore {
     private let mutationRetryCount = Expression<Int>("retry_count")
     private let mutationLastError = Expression<String?>("last_error")
 
+    private let sprintIssueCache = Table("sprint_issue_cache")
+    private let sprintCacheAgileID = Expression<String>("agile_id")
+    private let sprintCacheSprintID = Expression<String>("sprint_id")
+    private let sprintCacheIssueIDsJSON = Expression<String>("issue_ids_json")
+    private let sprintCacheFetchedAt = Expression<Double>("fetched_at")
+
     init() {
         do {
             let dbURL = try Self.databaseURL()
@@ -103,6 +109,47 @@ actor IssueLocalStore {
 
         let unique = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0) })
         return unique.values.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    func loadSprintIssueIDs(agileID: String, sprintID: String) async -> [String]? {
+        guard let db else { return nil }
+        let trimmedAgile = agileID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSprint = sprintID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAgile.isEmpty, !trimmedSprint.isEmpty else { return nil }
+        let query = sprintIssueCache
+            .filter(sprintCacheAgileID == trimmedAgile && sprintCacheSprintID == trimmedSprint)
+        do {
+            guard let row = try db.pluck(query) else { return nil }
+            let json = row[sprintCacheIssueIDsJSON]
+            guard let data = json.data(using: .utf8) else { return [] }
+            return (try? decoder.decode([String].self, from: data)) ?? []
+        } catch {
+            return nil
+        }
+    }
+
+    func saveSprintIssueIDs(agileID: String, sprintID: String, issueIDs: [String]) async {
+        guard let db else { return }
+        let trimmedAgile = agileID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSprint = sprintID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAgile.isEmpty, !trimmedSprint.isEmpty else { return }
+        let normalized = issueIDs
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let unique = Array(Set(normalized)).sorted()
+        guard let data = try? encoder.encode(unique),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        do {
+            let insert = sprintIssueCache.insert(or: .replace,
+                                                 sprintCacheAgileID <- trimmedAgile,
+                                                 sprintCacheSprintID <- trimmedSprint,
+                                                 sprintCacheIssueIDsJSON <- json,
+                                                 sprintCacheFetchedAt <- Date().timeIntervalSince1970)
+            try db.run(insert)
+        } catch {
+            return
+        }
     }
 
     func saveRemoteIssues(
@@ -166,6 +213,7 @@ actor IssueLocalStore {
             try db.run("BEGIN IMMEDIATE TRANSACTION")
             try db.run(issueQueries.delete())
             try db.run(issues.delete())
+            try db.run(sprintIssueCache.delete())
             try db.run("COMMIT")
         } catch {
             try? db.run("ROLLBACK")
@@ -647,6 +695,12 @@ actor IssueLocalStore {
         let mutationRetryCountColumn = Expression<Int>("retry_count")
         let mutationLastErrorColumn = Expression<String?>("last_error")
 
+        let sprintIssueCacheTable = Table("sprint_issue_cache")
+        let sprintCacheAgileIDColumn = Expression<String>("agile_id")
+        let sprintCacheSprintIDColumn = Expression<String>("sprint_id")
+        let sprintCacheIssueIDsJSONColumn = Expression<String>("issue_ids_json")
+        let sprintCacheFetchedAtColumn = Expression<Double>("fetched_at")
+
         try db.run(issuesTable.create(ifNotExists: true) { table in
             table.column(issueIDColumn, primaryKey: true)
             table.column(readableIDColumn)
@@ -699,6 +753,14 @@ actor IssueLocalStore {
             table.column(mutationLastAttemptAtColumn)
             table.column(mutationRetryCountColumn, defaultValue: 0)
             table.column(mutationLastErrorColumn)
+        })
+
+        try db.run(sprintIssueCacheTable.create(ifNotExists: true) { table in
+            table.column(sprintCacheAgileIDColumn)
+            table.column(sprintCacheSprintIDColumn)
+            table.column(sprintCacheIssueIDsJSONColumn)
+            table.column(sprintCacheFetchedAtColumn)
+            table.primaryKey(sprintCacheAgileIDColumn, sprintCacheSprintIDColumn)
         })
     }
 

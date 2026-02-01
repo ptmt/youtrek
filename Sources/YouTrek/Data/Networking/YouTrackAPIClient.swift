@@ -68,6 +68,10 @@ struct YouTrackAPIClient: Sendable {
         self.monitor = monitor
     }
 
+    var baseURL: URL {
+        configuration.baseURL
+    }
+
     func get(path: String, queryItems: [URLQueryItem]) async throws -> Data {
         try await AppDebugSettings.applySlowResponseIfNeeded()
         guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: true) else {
@@ -320,6 +324,118 @@ struct YouTrackAPIClient: Sendable {
             let transportError = YouTrackAPIError.transport(underlying: error)
             await logOnce(response: nil, error: transportError)
             throw transportError
+        }
+    }
+
+    struct MultipartPart: Sendable {
+        let name: String
+        let filename: String
+        let mimeType: String
+        let data: Data
+    }
+
+    func postMultipart(path: String, queryItems: [URLQueryItem] = [], parts: [MultipartPart]) async throws -> Data {
+        try await AppDebugSettings.applySlowResponseIfNeeded()
+        guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: true) else {
+            throw YouTrackAPIError.unsupportedURL
+        }
+
+        let appendedPath: String
+        if components.path.isEmpty {
+            appendedPath = "/\(path)"
+        } else {
+            appendedPath = components.path.appendingPathComponent(path)
+        }
+
+        components.path = appendedPath
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
+
+        guard let url = components.url else {
+            throw YouTrackAPIError.unsupportedURL
+        }
+
+        let token = try await configuration.tokenProvider.token()
+        guard !token.isEmpty else {
+            throw YouTrackAPIError.missingAccessToken
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        for part in parts {
+            body.append("--\(boundary)\r\n")
+            body.append("Content-Disposition: form-data; name=\"\(part.name)\"; filename=\"\(part.filename)\"\r\n")
+            body.append("Content-Type: \(part.mimeType)\r\n\r\n")
+            body.append(part.data)
+            body.append("\r\n")
+        }
+        body.append("--\(boundary)--\r\n")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = configuration.requestTimeout
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let requestStart = Date()
+        let requestMethod = request.httpMethod ?? "POST"
+        let requestURL = request.url
+        LoggingService.networking.info("HTTP \(requestMethod, privacy: .public) start \(requestURL?.absoluteString ?? "-", privacy: .public)")
+        let requestID = await monitor?.recordStart(method: requestMethod, url: requestURL)
+        var didLog = false
+
+        func logOnce(response: URLResponse?, error: Error?) async {
+            guard !didLog else { return }
+            didLog = true
+            let duration = Date().timeIntervalSince(requestStart)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode
+            let errorDescription = error?.localizedDescription
+            LoggingService.networking.info(
+                "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription ?? "none", privacy: .public)"
+            )
+            guard let monitor, let requestID else { return }
+            await monitor.recordFinish(
+                id: requestID,
+                method: requestMethod,
+                url: requestURL,
+                statusCode: statusCode,
+                duration: duration,
+                errorDescription: errorDescription
+            )
+        }
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                let error = YouTrackAPIError.invalidResponse
+                await logOnce(response: response, error: error)
+                throw error
+            }
+            if !(200..<300).contains(http.statusCode) {
+                let body = String(data: data, encoding: .utf8)
+                let error = YouTrackAPIError.http(statusCode: http.statusCode, body: body)
+                await logOnce(response: response, error: error)
+                throw error
+            }
+
+            await logOnce(response: response, error: nil)
+            return data
+        } catch let error as YouTrackAPIError {
+            await logOnce(response: nil, error: error)
+            throw error
+        } catch {
+            let transportError = YouTrackAPIError.transport(underlying: error)
+            await logOnce(response: nil, error: transportError)
+            throw transportError
+        }
+    }
+}
+
+private extension Data {
+    mutating func append(_ string: String) {
+        if let data = string.data(using: .utf8) {
+            append(data)
         }
     }
 }

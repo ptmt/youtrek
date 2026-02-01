@@ -53,3 +53,18 @@ struct IssueAttachmentDraft: Identifiable, Hashable, Codable, Sendable {
         }
     }
 }
+
+extension IssueAttachmentDraft {
+    static func fromFileURL(_ url: URL) -> IssueAttachmentDraft {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .nameKey])
+        let fileSize = values?.fileSize
+        let contentType = values?.contentType
+        return IssueAttachmentDraft(
+            fileURL: url,
+            fileName: values?.name ?? url.lastPathComponent,
+            fileSize: fileSize,
+            mimeType: contentType?.preferredMIMEType,
+            isImage: contentType?.conforms(to: .image)
+        )
+    }
+}
