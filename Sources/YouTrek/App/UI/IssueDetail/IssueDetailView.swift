@@ -873,20 +873,6 @@ private struct BadgeLabel: View {
     }
 }
 
-private struct MarkdownTextView: View {
-    let text: String
-
-    var body: some View {
-        if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .full)) {
-            Text(attributed)
-                .font(.callout)
-        } else {
-            Text(text)
-                .font(.callout)
-        }
-    }
-}
-
 private struct TimelineEntry: Identifiable {
     let id: String
     let title: String

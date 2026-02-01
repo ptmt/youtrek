@@ -333,10 +333,17 @@ final class AppContainer: ObservableObject {
             boardID: boardID
         )
 
+        let cachedLoadStart = ProcessInfo.processInfo.systemUptime
         let cachedIssues = await syncCoordinator.loadCachedIssues(for: query)
+        let cachedLoadDuration = durationText(since: cachedLoadStart)
         if !cachedIssues.isEmpty {
-            LoggingService.sync.info("Initial sync: loaded cached issues (\(cachedIssues.count, privacy: .public)).")
-            recordBoardDataEvent("Cached issues loaded: \(cachedIssues.count).", boardID: boardID)
+            LoggingService.sync.info(
+                "Local DB: cached issues loaded (\(cachedIssues.count, privacy: .public)) in \(cachedLoadDuration, privacy: .public) for \(selection.id, privacy: .public)."
+            )
+            recordBoardDataEvent(
+                "Local DB cached issues loaded: \(cachedIssues.count) in \(cachedLoadDuration).",
+                boardID: boardID
+            )
             let filtered = applySprintFilterIfNeeded(
                 cachedIssues,
                 board: board,
@@ -349,9 +356,13 @@ final class AppContainer: ObservableObject {
             appState.setIssuesLoading(false)
             await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: shouldSeedInitialRead)
         } else {
-            recordBoardDataEvent("Cached issues empty.", boardID: boardID)
+            LoggingService.sync.info(
+                "Local DB: cached issues empty in \(cachedLoadDuration, privacy: .public) for \(selection.id, privacy: .public)."
+            )
+            recordBoardDataEvent("Local DB cached issues empty (\(cachedLoadDuration)).", boardID: boardID)
         }
 
+        let syncStart = ProcessInfo.processInfo.systemUptime
         let syncResult = await syncCoordinator.refreshIssuesWithStatus(
             using: query,
             currentUserID: appState.currentUserID,
@@ -359,31 +370,53 @@ final class AppContainer: ObservableObject {
             currentUserDisplayName: appState.currentUserDisplayName,
             paginate: selection.isBoard
         )
+        let syncDuration = durationText(since: syncStart)
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
             recordIssueSyncCompleted()
         }
         if syncResult.didSyncRemote {
-            LoggingService.sync.info("Initial sync: issues synced from remote (\(syncResult.issues.count, privacy: .public)).")
-            recordBoardDataEvent("Remote sync loaded: \(syncResult.issues.count) issues.", boardID: boardID)
+            LoggingService.sync.info(
+                "Remote sync: issues synced (\(syncResult.issues.count, privacy: .public)) in \(syncDuration, privacy: .public)."
+            )
+            recordBoardDataEvent(
+                "Remote sync loaded: \(syncResult.issues.count) issues in \(syncDuration).",
+                boardID: boardID
+            )
         } else if !syncResult.issues.isEmpty {
-            LoggingService.sync.info("Initial sync: issues loaded from cache (\(syncResult.issues.count, privacy: .public)).")
             let reason = AppDebugSettings.disableSyncing
                 ? "Sync disabled; using cache"
                 : "Remote sync unavailable; using cache"
-            recordBoardDataEvent("\(reason): \(syncResult.issues.count) issues.", boardID: boardID)
+            LoggingService.sync.info(
+                "Local DB: issues loaded from cache (\(syncResult.issues.count, privacy: .public)) in \(syncDuration, privacy: .public) (\(reason, privacy: .public))."
+            )
+            recordBoardDataEvent(
+                "Local DB \(reason): \(syncResult.issues.count) issues in \(syncDuration).",
+                boardID: boardID
+            )
         } else {
-            recordBoardDataEvent("No issues returned after refresh.", boardID: boardID)
+            recordBoardDataEvent("No issues returned after refresh (\(syncDuration)).", boardID: boardID)
         }
         var resolvedIssues = syncResult.issues
         if resolvedIssues.isEmpty,
            let sprintIssueIDs,
            !sprintIssueIDs.isEmpty {
+            let fallbackStart = ProcessInfo.processInfo.systemUptime
             let fallback = await syncCoordinator.loadIssues(readableIDs: Array(sprintIssueIDs))
+            let fallbackDuration = durationText(since: fallbackStart)
             if !fallback.isEmpty {
-                recordBoardDataEvent("Fallback to local sprint issues: \(fallback.count).", boardID: boardID)
+                LoggingService.sync.info(
+                    "Local DB: sprint fallback issues loaded (\(fallback.count, privacy: .public)) in \(fallbackDuration, privacy: .public) for \(selection.id, privacy: .public)."
+                )
+                recordBoardDataEvent(
+                    "Local DB sprint fallback: \(fallback.count) in \(fallbackDuration).",
+                    boardID: boardID
+                )
                 resolvedIssues = fallback
             } else {
-                recordBoardDataEvent("Fallback to local sprint issues empty.", boardID: boardID)
+                LoggingService.sync.info(
+                    "Local DB: sprint fallback issues empty in \(fallbackDuration, privacy: .public) for \(selection.id, privacy: .public)."
+                )
+                recordBoardDataEvent("Local DB sprint fallback empty (\(fallbackDuration)).", boardID: boardID)
             }
         }
         let filtered = applySprintFilterIfNeeded(
@@ -461,6 +494,7 @@ final class AppContainer: ObservableObject {
             boardID: boardID
         )
         let shouldSeedInitialRead = await syncCoordinator.hasSeenUpdates() == false
+        let syncStart = ProcessInfo.processInfo.systemUptime
         let syncResult = await syncCoordinator.refreshIssuesWithStatus(
             using: query,
             currentUserID: appState.currentUserID,
@@ -468,30 +502,57 @@ final class AppContainer: ObservableObject {
             currentUserDisplayName: appState.currentUserDisplayName,
             paginate: item.isBoard
         )
+        let syncDuration = durationText(since: syncStart)
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
             recordIssueSyncCompleted()
         }
         if syncResult.didSyncRemote {
-            recordBoardDataEvent("Refresh remote sync loaded: \(syncResult.issues.count) issues.", boardID: boardID)
+            LoggingService.sync.info(
+                "Remote sync: refresh loaded (\(syncResult.issues.count, privacy: .public)) in \(syncDuration, privacy: .public)."
+            )
+            recordBoardDataEvent(
+                "Refresh remote sync loaded: \(syncResult.issues.count) issues in \(syncDuration).",
+                boardID: boardID
+            )
         } else if !syncResult.issues.isEmpty {
             let reason = AppDebugSettings.disableSyncing
                 ? "Refresh sync disabled; using cache"
                 : "Refresh remote sync unavailable; using cache"
-            recordBoardDataEvent("\(reason): \(syncResult.issues.count) issues.", boardID: boardID)
+            LoggingService.sync.info(
+                "Local DB: refresh loaded (\(syncResult.issues.count, privacy: .public)) in \(syncDuration, privacy: .public) (\(reason, privacy: .public))."
+            )
+            recordBoardDataEvent(
+                "Local DB \(reason): \(syncResult.issues.count) issues in \(syncDuration).",
+                boardID: boardID
+            )
         } else {
-            recordBoardDataEvent("Refresh returned no issues.", boardID: boardID)
+            recordBoardDataEvent("Refresh returned no issues (\(syncDuration)).", boardID: boardID)
         }
         if isSelected {
             var resolvedIssues = syncResult.issues
             if resolvedIssues.isEmpty,
                let sprintIssueIDs,
                !sprintIssueIDs.isEmpty {
+                let fallbackStart = ProcessInfo.processInfo.systemUptime
                 let fallback = await syncCoordinator.loadIssues(readableIDs: Array(sprintIssueIDs))
+                let fallbackDuration = durationText(since: fallbackStart)
                 if !fallback.isEmpty {
-                    recordBoardDataEvent("Refresh fallback to local sprint issues: \(fallback.count).", boardID: boardID)
+                    LoggingService.sync.info(
+                        "Local DB: refresh sprint fallback loaded (\(fallback.count, privacy: .public)) in \(fallbackDuration, privacy: .public) for \(item.id, privacy: .public)."
+                    )
+                    recordBoardDataEvent(
+                        "Local DB refresh sprint fallback: \(fallback.count) in \(fallbackDuration).",
+                        boardID: boardID
+                    )
                     resolvedIssues = fallback
                 } else {
-                    recordBoardDataEvent("Refresh fallback to local sprint issues empty.", boardID: boardID)
+                    LoggingService.sync.info(
+                        "Local DB: refresh sprint fallback empty in \(fallbackDuration, privacy: .public) for \(item.id, privacy: .public)."
+                    )
+                    recordBoardDataEvent(
+                        "Local DB refresh sprint fallback empty (\(fallbackDuration)).",
+                        boardID: boardID
+                    )
                 }
             }
             let filtered = applySprintFilterIfNeeded(
@@ -1406,21 +1467,39 @@ private extension AppContainer {
         appState.recordBoardDataSourceEvent(boardID: boardID, message: message)
     }
 
+    private func formattedDuration(_ duration: TimeInterval) -> String {
+        if duration < 1 {
+            return "\(Int(duration * 1000)) ms"
+        }
+        return String(format: "%.2f s", duration)
+    }
+
+    private func durationText(since start: TimeInterval) -> String {
+        let elapsed = max(0, ProcessInfo.processInfo.systemUptime - start)
+        return formattedDuration(elapsed)
+    }
+
     private func resolveBoardDetailsIfNeeded(for selection: SidebarItem) async -> IssueBoard? {
         guard selection.isBoard else { return selection.board }
         let current = selection.board
         guard boardNeedsDetail(current) else { return current }
         guard let boardID = selection.boardID ?? current?.id else { return current }
 
+        let fetchStart = ProcessInfo.processInfo.systemUptime
         do {
             recordBoardDataEvent("Board details fetch started.", boardID: boardID)
             let detail = try await boardRepositorySwitcher.fetchBoard(id: boardID)
             let resolved = applyingFavorite(current?.isFavorite, to: detail)
             await boardLocalStore.saveBoard(resolved)
-            recordBoardDataEvent("Board details fetched.", boardID: boardID)
+            let durationLabel = durationText(since: fetchStart)
+            recordBoardDataEvent("Board details fetched in \(durationLabel).", boardID: boardID)
             return resolved
         } catch {
-            recordBoardDataEvent("Board details fetch failed: \(error.localizedDescription)", boardID: boardID)
+            let durationLabel = durationText(since: fetchStart)
+            recordBoardDataEvent(
+                "Board details fetch failed in \(durationLabel): \(error.localizedDescription)",
+                boardID: boardID
+            )
             return current
         }
     }
@@ -1444,14 +1523,20 @@ private extension AppContainer {
         boardID: String?
     ) async -> Set<String>? {
         guard let board, let filter, case .sprint(let sprintID) = filter else { return nil }
+        let fetchStart = ProcessInfo.processInfo.systemUptime
         do {
             recordBoardDataEvent("Sprint issue IDs fetch started (sprintID: \(sprintID)).", boardID: boardID)
             let ids = try await issueRepositorySwitcher.fetchSprintIssueIDs(agileID: board.id, sprintID: sprintID)
             guard !ids.isEmpty else { return nil }
-            recordBoardDataEvent("Sprint issue IDs fetched: \(ids.count).", boardID: boardID)
+            let durationLabel = durationText(since: fetchStart)
+            recordBoardDataEvent("Sprint issue IDs fetched: \(ids.count) in \(durationLabel).", boardID: boardID)
             return Set(ids)
         } catch {
-            recordBoardDataEvent("Sprint issue IDs fetch failed: \(error.localizedDescription)", boardID: boardID)
+            let durationLabel = durationText(since: fetchStart)
+            recordBoardDataEvent(
+                "Sprint issue IDs fetch failed in \(durationLabel): \(error.localizedDescription)",
+                boardID: boardID
+            )
             return nil
         }
     }
