@@ -52,6 +52,12 @@ actor IssueLocalStore {
     private let sprintCacheIssueIDsJSON = Expression<String>("issue_ids_json")
     private let sprintCacheFetchedAt = Expression<Double>("fetched_at")
 
+    private let issueDetails = Table("issue_details")
+    private let issueDetailIssueID = Expression<String>("issue_id")
+    private let issueDetailUpdatedAt = Expression<Double>("updated_at")
+    private let issueDetailJSON = Expression<String>("detail_json")
+    private let issueDetailFetchedAt = Expression<Double>("fetched_at")
+
     init() {
         do {
             let dbURL = try Self.databaseURL()
@@ -109,6 +115,75 @@ actor IssueLocalStore {
 
         let unique = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0) })
         return unique.values.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    func loadIssueDetail(for issueID: IssueSummary.ID) async -> IssueDetail? {
+        guard let db else { return nil }
+        let query = issueDetails.filter(issueDetailIssueID == issueID.uuidString)
+        do {
+            guard let row = try db.pluck(query) else { return nil }
+            let json = row[issueDetailJSON]
+            guard let data = json.data(using: .utf8) else { return nil }
+            return try decoder.decode(IssueDetail.self, from: data)
+        } catch {
+            return nil
+        }
+    }
+
+    func loadIssueDetailUpdatedAt(for issueIDs: [IssueSummary.ID]) async -> [IssueSummary.ID: Date] {
+        guard let db else { return [:] }
+        let normalized = issueIDs
+            .map(\.uuidString)
+            .filter { !$0.isEmpty }
+        guard !normalized.isEmpty else { return [:] }
+
+        var results: [IssueSummary.ID: Date] = [:]
+        results.reserveCapacity(normalized.count)
+        for chunk in chunked(normalized, size: 200) {
+            var predicate = Expression<Bool>(value: false)
+            for value in chunk {
+                predicate = predicate || (issueDetailIssueID == value)
+            }
+            let query = issueDetails.filter(predicate)
+            do {
+                for row in try db.prepare(query) {
+                    let idString = row[issueDetailIssueID]
+                    guard let id = UUID(uuidString: idString) else { continue }
+                    let updated = Date(timeIntervalSince1970: row[issueDetailUpdatedAt])
+                    results[id] = updated
+                }
+            } catch {
+                continue
+            }
+        }
+        return results
+    }
+
+    func saveIssueDetail(_ detail: IssueDetail) async {
+        await saveIssueDetails([detail])
+    }
+
+    func saveIssueDetails(_ details: [IssueDetail]) async {
+        guard let db else { return }
+        guard !details.isEmpty else { return }
+        let fetchedAt = Date().timeIntervalSince1970
+        do {
+            try db.run("BEGIN IMMEDIATE TRANSACTION")
+            for detail in details {
+                guard let json = encodeIssueDetail(detail) else { continue }
+                let insert = issueDetails.insert(
+                    or: .replace,
+                    issueDetailIssueID <- detail.id.uuidString,
+                    issueDetailUpdatedAt <- detail.updatedAt.timeIntervalSince1970,
+                    issueDetailJSON <- json,
+                    issueDetailFetchedAt <- fetchedAt
+                )
+                try db.run(insert)
+            }
+            try db.run("COMMIT")
+        } catch {
+            try? db.run("ROLLBACK")
+        }
     }
 
     func loadSprintIssueIDs(agileID: String, sprintID: String) async -> [String]? {
@@ -214,6 +289,7 @@ actor IssueLocalStore {
             try db.run(issueQueries.delete())
             try db.run(issues.delete())
             try db.run(sprintIssueCache.delete())
+            try db.run(issueDetails.delete())
             try db.run("COMMIT")
         } catch {
             try? db.run("ROLLBACK")
@@ -583,6 +659,11 @@ actor IssueLocalStore {
         return Array(issues[start..<end])
     }
 
+    private func encodeIssueDetail(_ detail: IssueDetail) -> String? {
+        guard let data = try? encoder.encode(detail) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     private func encodeTags(_ tags: [String]) -> String {
         guard let data = try? encoder.encode(tags) else { return "[]" }
         return String(decoding: data, as: UTF8.self)
@@ -701,6 +782,12 @@ actor IssueLocalStore {
         let sprintCacheIssueIDsJSONColumn = Expression<String>("issue_ids_json")
         let sprintCacheFetchedAtColumn = Expression<Double>("fetched_at")
 
+        let issueDetailsTable = Table("issue_details")
+        let issueDetailIssueIDColumn = Expression<String>("issue_id")
+        let issueDetailUpdatedAtColumn = Expression<Double>("updated_at")
+        let issueDetailJSONColumn = Expression<String>("detail_json")
+        let issueDetailFetchedAtColumn = Expression<Double>("fetched_at")
+
         try db.run(issuesTable.create(ifNotExists: true) { table in
             table.column(issueIDColumn, primaryKey: true)
             table.column(readableIDColumn)
@@ -761,6 +848,13 @@ actor IssueLocalStore {
             table.column(sprintCacheIssueIDsJSONColumn)
             table.column(sprintCacheFetchedAtColumn)
             table.primaryKey(sprintCacheAgileIDColumn, sprintCacheSprintIDColumn)
+        })
+
+        try db.run(issueDetailsTable.create(ifNotExists: true) { table in
+            table.column(issueDetailIssueIDColumn, primaryKey: true)
+            table.column(issueDetailUpdatedAtColumn)
+            table.column(issueDetailJSONColumn)
+            table.column(issueDetailFetchedAtColumn)
         })
     }
 

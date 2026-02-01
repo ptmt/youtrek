@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 #if DEBUG
 import Combine
@@ -58,11 +59,22 @@ private struct RootContentView: View {
     }
 
     var body: some View {
-        ZStack {
-            rootSplitView
-            if appState.activeCommandPalette != nil {
+        rootSplitView
+            .background(ToolbarSidebarToggleHider())
+            .overlay {
+                commandPaletteOverlay
+            }
+            .toolbar(removing: .sidebarToggle)
+            .animation(.easeOut(duration: 0.15), value: appState.activeCommandPalette?.id)
+    }
+
+    @ViewBuilder
+    private var commandPaletteOverlay: some View {
+        if appState.activeCommandPalette != nil {
+            ZStack {
                 Color.black.opacity(0.15)
                     .ignoresSafeArea()
+                    .contentShape(Rectangle())
                     .transition(.opacity)
                     .onTapGesture {
                         appState.dismissCommandPalette()
@@ -70,10 +82,10 @@ private struct RootContentView: View {
                 CommandPaletteDialog(state: commandPaletteBinding)
                     .shadow(color: .black.opacity(0.2), radius: 18, x: 0, y: 10)
                     .transition(.scale(scale: 0.98).combined(with: .opacity))
-                    .zIndex(1)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .zIndex(10)
         }
-        .animation(.easeOut(duration: 0.15), value: appState.activeCommandPalette?.id)
     }
 
     private var columnVisibilityBinding: Binding<NavigationSplitViewVisibility> {
@@ -233,13 +245,20 @@ private struct RootContentView: View {
 
     @ToolbarContentBuilder
     private var mainToolbar: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
+        ToolbarItemGroup(placement: .navigation) {
+            Button(action: toggleSidebar) {
+                Image(systemName: "sidebar.leading")
+            }
+            .buttonStyle(.accessoryBar)
+            .help("Toggle sidebar")
+
             SearchToolbarField(
                 text: $searchQuery,
                 hasUnreadIssues: hasUnreadIssues,
                 onOpenCommandPalette: container.commandPalette.open,
                 onMarkAllRead: container.markAllIssuesSeen
             )
+            .padding(.leading, 8)
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
@@ -285,6 +304,13 @@ private struct RootContentView: View {
         }
         .inspectorColumnWidth(min: 320, ideal: 400, max: 500)
         .background(.ultraThinMaterial)
+    }
+
+    private func toggleSidebar() {
+        NSApp.keyWindow?.firstResponder?.tryToPerform(
+            #selector(NSSplitViewController.toggleSidebar(_:)),
+            with: nil
+        )
     }
 
 }
@@ -574,6 +600,49 @@ private final class RootDebugStateObserver: ObservableObject {
     }
 }
 #endif
+
+private struct ToolbarSidebarToggleHider: NSViewRepresentable {
+    func makeNSView(context: Context) -> ToolbarSidebarToggleHostView {
+        ToolbarSidebarToggleHostView()
+    }
+
+    func updateNSView(_ nsView: ToolbarSidebarToggleHostView, context: Context) {
+        nsView.removeSidebarToggleIfNeeded()
+    }
+}
+
+private final class ToolbarSidebarToggleHostView: NSView {
+    private var removalAttempts = 0
+    private let maxRemovalAttempts = 6
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        removeSidebarToggleIfNeeded()
+    }
+
+    func removeSidebarToggleIfNeeded() {
+        removalAttempts += 1
+        guard let toolbar = window?.toolbar else { return }
+        let matchesSidebarToggle: (NSToolbarItem) -> Bool = { item in
+            item.itemIdentifier == .toggleSidebar ||
+                item.action == #selector(NSSplitViewController.toggleSidebar(_:))
+        }
+        for (index, item) in toolbar.items.enumerated().reversed() where matchesSidebarToggle(item) {
+            toolbar.removeItem(at: index)
+        }
+        let visibleItems = toolbar.visibleItems ?? toolbar.items
+        for item in visibleItems where matchesSidebarToggle(item) {
+            item.isEnabled = false
+            item.view?.isHidden = true
+            item.view?.alphaValue = 0
+        }
+        if removalAttempts < maxRemovalAttempts {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.removeSidebarToggleIfNeeded()
+            }
+        }
+    }
+}
 
 private struct SearchToolbarField: View {
     @Binding var text: String

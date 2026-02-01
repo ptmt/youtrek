@@ -1,6 +1,6 @@
 import Foundation
 
-struct IssueDetail: Identifiable, Hashable, Sendable {
+struct IssueDetail: Identifiable, Hashable, Sendable, Codable {
     let id: IssueSummary.ID
     let readableID: String
     let title: String
@@ -34,7 +34,7 @@ struct IssueDetail: Identifiable, Hashable, Sendable {
     }
 }
 
-struct IssueComment: Identifiable, Hashable, Sendable {
+struct IssueComment: Identifiable, Hashable, Sendable, Codable {
     let id: String
     let author: Person?
     let createdAt: Date

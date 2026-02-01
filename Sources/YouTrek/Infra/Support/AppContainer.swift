@@ -455,6 +455,12 @@ final class AppContainer: ObservableObject {
         if let detail = appState.issueDetail(for: issue), detail.updatedAt >= issue.updatedAt {
             return
         }
+        if let cached = await syncCoordinator.loadCachedIssueDetail(for: issue) {
+            appState.updateIssueDetail(cached)
+            if cached.updatedAt >= issue.updatedAt {
+                return
+            }
+        }
         appState.setIssueDetailLoading(issueID, isLoading: true)
         do {
             let detail = try await syncCoordinator.fetchIssueDetail(for: issue)
@@ -703,6 +709,37 @@ final class AppContainer: ObservableObject {
         }
         appState.appendAttachments(uploaded, to: issue.id)
         return uploaded
+    }
+
+    func fetchAttachmentData(for attachment: IssueAttachment) async throws -> Data {
+        guard let url = attachment.url else {
+            throw AttachmentDownloadError.missingURL
+        }
+        if url.isFileURL {
+            return try Data(contentsOf: url)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = YouTrackAPIConfiguration.defaultRequestTimeout
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+
+        if shouldAttachToken(for: url) {
+            let token = try await authRepository.currentAccessToken()
+            if !token.isEmpty {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw AttachmentDownloadError.invalidResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8)
+            throw AttachmentDownloadError.http(statusCode: http.statusCode, body: body)
+        }
+        return data
     }
 
     func beginNewIssue(withTitle title: String) {
@@ -1234,6 +1271,26 @@ struct YouTrackTokenValidationUser: Decodable, Sendable {
     }
 }
 
+private enum AttachmentDownloadError: LocalizedError {
+    case missingURL
+    case invalidResponse
+    case http(statusCode: Int, body: String?)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingURL:
+            return "Missing attachment URL."
+        case .invalidResponse:
+            return "Received an invalid response while downloading the attachment."
+        case .http(let statusCode, let body):
+            if let body, !body.isEmpty {
+                return "Attachment download failed with status \(statusCode): \(body)."
+            }
+            return "Attachment download failed with status \(statusCode)."
+        }
+    }
+}
+
 private extension AppContainer {
     static func apiBaseURL(from baseURL: URL) -> URL {
         if baseURL.lastPathComponent.lowercased() == "api" {
@@ -1258,6 +1315,13 @@ private extension AppContainer {
 }
 
 private extension AppContainer {
+    func shouldAttachToken(for url: URL) -> Bool {
+        guard let baseHost = configurationStore.loadBaseURL()?.host else {
+            return false
+        }
+        return baseHost == url.host
+    }
+
     func loadSavedQueriesForSidebar() async -> (queries: [SavedQuery], didSyncRemote: Bool) {
         do {
             let remote = try await syncCoordinator.enqueue(label: "Sync saved searches") {

@@ -47,7 +47,7 @@ actor SyncCoordinator {
         }
         do {
             LoggingService.sync.info("Issue sync: fetching remote issues.")
-            let issues = try await enqueue(label: "Sync issues") {
+            let (issues, remoteIssues) = try await enqueue(label: "Sync issues") {
                 let remote = try await self.fetchIssues(query: query, paginate: paginate)
                 await self.localStore.saveRemoteIssues(
                     remote,
@@ -56,7 +56,11 @@ actor SyncCoordinator {
                     currentUserLogin: currentUserLogin,
                     currentUserDisplayName: currentUserDisplayName
                 )
-                return await self.localStore.loadIssues(for: query)
+                let cached = await self.localStore.loadIssues(for: query)
+                return (cached, remote)
+            }
+            if !remoteIssues.isEmpty {
+                await prefetchIssueDetails(for: remoteIssues)
             }
             LoggingService.sync.info("Issue sync: remote issues fetched (\(issues.count, privacy: .public)).")
             return IssueSyncResult(issues: issues, didSyncRemote: true)
@@ -102,8 +106,56 @@ actor SyncCoordinator {
         return aggregated
     }
 
+    private func prefetchIssueDetails(for issues: [IssueSummary]) async {
+        let candidates = issues.filter { !$0.isDraft }
+        guard !candidates.isEmpty else { return }
+        let cachedUpdatedAt = await localStore.loadIssueDetailUpdatedAt(for: candidates.map(\.id))
+        let pending = candidates.filter { issue in
+            if let cachedAt = cachedUpdatedAt[issue.id], cachedAt >= issue.updatedAt {
+                return false
+            }
+            return true
+        }
+        guard !pending.isEmpty else { return }
+
+        let repository = issueRepository
+        let maxConcurrent = 4
+        var details: [IssueDetail] = []
+        details.reserveCapacity(pending.count)
+
+        await withTaskGroup(of: IssueDetail?.self) { group in
+            var iterator = pending.makeIterator()
+            for _ in 0..<min(maxConcurrent, pending.count) {
+                if let issue = iterator.next() {
+                    group.addTask {
+                        try? await repository.fetchIssueDetail(issue: issue)
+                    }
+                }
+            }
+
+            while let detail = await group.next() {
+                if let detail {
+                    details.append(detail)
+                }
+                if let issue = iterator.next() {
+                    group.addTask {
+                        try? await repository.fetchIssueDetail(issue: issue)
+                    }
+                }
+            }
+        }
+
+        if !details.isEmpty {
+            await localStore.saveIssueDetails(details)
+        }
+    }
+
     func loadCachedIssues(for query: IssueQuery) async -> [IssueSummary] {
         await localStore.loadIssues(for: query)
+    }
+
+    func loadCachedIssueDetail(for issue: IssueSummary) async -> IssueDetail? {
+        await localStore.loadIssueDetail(for: issue.id)
     }
 
     func loadCachedSprintIssueIDs(agileID: String, sprintID: String) async -> [String]? {
@@ -123,7 +175,9 @@ actor SyncCoordinator {
             throw YouTrackAPIError.http(statusCode: 503, body: "Syncing disabled")
         }
         return try await enqueue(label: "Sync issue details") {
-            try await self.issueRepository.fetchIssueDetail(issue: issue)
+            let detail = try await self.issueRepository.fetchIssueDetail(issue: issue)
+            await self.localStore.saveIssueDetail(detail)
+            return detail
         }
     }
 

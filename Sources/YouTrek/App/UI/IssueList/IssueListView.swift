@@ -113,7 +113,7 @@ struct IssueListView: View {
 
     private func metadataRow(for issue: IssueSummary, isUnread: Bool) -> some View {
         return HStack(spacing: 8) {
-            Text(issue.projectName)
+            Text(issue.readableID)
                 .foregroundStyle(.secondary)
             IssueMetaDotLabel(text: issue.status.displayName, colors: issue.status.badgeColors)
             if !issue.priority.isNormalSemantic {

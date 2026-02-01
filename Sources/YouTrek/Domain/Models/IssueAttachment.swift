@@ -1,7 +1,7 @@
 import Foundation
 import UniformTypeIdentifiers
 
-struct IssueAttachment: Identifiable, Hashable, Sendable {
+struct IssueAttachment: Identifiable, Hashable, Sendable, Codable {
     let id: String
     let name: String
     let size: Int?
