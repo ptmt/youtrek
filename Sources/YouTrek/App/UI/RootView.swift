@@ -81,7 +81,7 @@ private struct RootContentView: View {
             sidebarContent
         } detail: {
             mainContent
-                .toolbar { mainToolbar }
+                .toolbar(id: "main-toolbar") { mainToolbar }
         }
         .inspector(isPresented: $isInspectorVisible) {
             inspectorContent
@@ -242,39 +242,17 @@ private struct RootContentView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private var mainToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigation) {
-            Button(action: toggleSidebar) {
-                Label("Toggle Sidebar", systemImage: "sidebar.leading")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.accessoryBar)
-            .help("Toggle sidebar")
-
-            ToolbarGap()
-
-            SearchToolbarField(
-                text: $searchQuery,
-                hasUnreadIssues: hasUnreadIssues,
-                onOpenCommandPalette: container.commandPalette.open,
-                onMarkAllRead: container.markAllIssuesSeen
-            )
-
-            ToolbarGap()
-
-            NewIssueToolbar(container: container)
-                .frame(maxWidth: 280, alignment: .leading)
-
-            Button {
+    private var mainToolbar: some CustomizableToolbarContent {
+        MainToolbar(
+            container: container,
+            searchQuery: $searchQuery,
+            hasUnreadIssues: hasUnreadIssues,
+            onToggleSidebar: toggleSidebar,
+            onToggleInspector: {
                 isInspectorVisible.toggle()
                 appState.setInspectorVisible(isInspectorVisible)
-            } label: {
-                Label("Toggle Inspector", systemImage: "sidebar.trailing")
             }
-            .buttonStyle(.accessoryBar)
-            .help("Show or hide the inspector column")
-        }
+        )
     }
 
     private var inspectorContent: some View {
@@ -648,32 +626,56 @@ private final class ToolbarSidebarToggleHostView: NSView {
 
 private struct SearchToolbarField: View {
     @Binding var text: String
-    let hasUnreadIssues: Bool
-    let onOpenCommandPalette: () -> Void
-    let onMarkAllRead: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Search issues", text: $text)
-                    .submitLabel(.search)
-            }
-            .toolbarFieldStyle()
-            .frame(minWidth: 150, idealWidth: 190, maxWidth: 230, alignment: .leading)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Search issues")
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Filter issues", text: $text)
+                .submitLabel(.search)
+        }
+        .toolbarFieldStyle()
+        .frame(minWidth: 170, idealWidth: 210, maxWidth: 240, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Filter issues")
+    }
+}
 
-            Button(action: onOpenCommandPalette) {
+private struct MainToolbar: CustomizableToolbarContent {
+    @ObservedObject var container: AppContainer
+    @Binding var searchQuery: String
+    let hasUnreadIssues: Bool
+    let onToggleSidebar: () -> Void
+    let onToggleInspector: () -> Void
+
+    var body: some CustomizableToolbarContent {
+//        ToolbarItem(id: "toggle-sidebar") {
+//            Button(action: onToggleSidebar) {
+//                Label("Toggle Sidebar", systemImage: "sidebar.leading")
+//                    .labelStyle(.iconOnly)
+//            }
+//            .buttonStyle(.accessoryBar)
+//            .help("Toggle sidebar")
+//        }
+
+        toolbarSpacer(id: "spacer-search")
+
+        ToolbarItem(id: "search-field") {
+            SearchToolbarField(text: $searchQuery)
+        }
+
+        ToolbarItem(id: "command-palette") {
+            Button(action: container.commandPalette.open) {
                 Label("Command Palette", systemImage: "command.square")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.accessoryBar)
             .keyboardShortcut("k", modifiers: [.command])
             .help("Command palette")
+        }
 
-            Button(action: onMarkAllRead) {
+        ToolbarItem(id: "mark-all-read") {
+            Button(action: container.markAllIssuesSeen) {
                 Label("Mark All as Read", systemImage: "checkmark.circle")
                     .labelStyle(.iconOnly)
             }
@@ -681,14 +683,42 @@ private struct SearchToolbarField: View {
             .disabled(!hasUnreadIssues)
             .help("Mark all issues in the current list as read")
         }
-        .frame(minWidth: 240, idealWidth: 330, maxWidth: 390, alignment: .leading)
+
+        toolbarSpacer(id: "spacer-new-issue")
+
+        ToolbarItem(id: "new-issue") {
+            NewIssueToolbar(container: container)
+                .frame(maxWidth: 280, alignment: .leading)
+        }
+
+        ToolbarItem(id: "toggle-details") {
+            Button(action: onToggleInspector) {
+                Label("Toggle Details", systemImage: "sidebar.trailing")
+            }
+            .buttonStyle(.accessoryBar)
+            .help("Show or hide the issue details column")
+        }
+    }
+
+    @ToolbarContentBuilder
+    private func toolbarSpacer(id: String) -> some CustomizableToolbarContent {
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.flexible)
+        } else {
+            ToolbarItem(id: id) {
+                LegacyToolbarSpacer(width: 120)
+            }
+        }
     }
 }
 
-private struct ToolbarGap: View {
+private struct LegacyToolbarSpacer: View {
+    let width: CGFloat
+
     var body: some View {
         Color.clear
-            .frame(width: 12, height: 1)
+            .frame(width: width, height: 1)
+            .accessibilityHidden(true)
     }
 }
 

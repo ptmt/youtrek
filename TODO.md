@@ -1,8 +1,4 @@
-- [x] Add more custom fields in issue detail view. But collapse those that are not set.
-- [x] In issue list there's a row style that makes every second row with grey background. Let's remove that.
-- [x] Priorities and status should not have colors, instead a small circle with color should be before issue status, and for priority a red flag if it's top priority
-- [x] Toolbar in header has following structure: [toggle left sidebar button | space | search bar | command pallte | mark all as read | space | create a new issue text field | toggle right sidebar ]
-- [x] When board is opened, hide right sidebar at first. Selecting issue on the board, opens the sidebar
-- [x] Identify closed issues and render them accordingly (with less contrast, maybe crossed the line over issue number)
-- [x] In issue details add a small copy icon near issue number, also allow to command + C to issue number (and if it's triggered twice then add issue title to the clipboard as well)
-- [x] When issue creation dialog is invoked, let's reuse project selection dialog and project pre-selectin logic from issue editing. Same for all other parameters, share as much as possible with issue editing.
+- [ ] Reduce number of custom fields shown by default in issue details
+- [ ] Command pallete is not centered, it stick to the bottom left
+- [ ] Make issue id in issue details bigger and make it a link to the web. 
+- [ ] Sync process label is not very visible

@@ -50,14 +50,14 @@ private struct ToolbarFieldStyle: ViewModifier {
             .textFieldStyle(.plain)
             .padding(.horizontal, ToolbarFieldStyleTokens.horizontalPadding)
             .padding(.vertical, ToolbarFieldStyleTokens.verticalPadding)
-            .background(
-                .bar,
-                in: RoundedRectangle(cornerRadius: ToolbarFieldStyleTokens.cornerRadius, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: ToolbarFieldStyleTokens.cornerRadius, style: .continuous)
-                    .stroke(.separator.opacity(ToolbarFieldStyleTokens.strokeOpacity), lineWidth: 1)
-            )
+//            .background(
+//                .bar,
+//                in: RoundedRectangle(cornerRadius: ToolbarFieldStyleTokens.cornerRadius, style: .continuous)
+//            )
+//            .overlay(
+//                RoundedRectangle(cornerRadius: ToolbarFieldStyleTokens.cornerRadius, style: .continuous)
+//                    .stroke(.separator.opacity(ToolbarFieldStyleTokens.strokeOpacity), lineWidth: 1)
+//            )
     }
 }
 
