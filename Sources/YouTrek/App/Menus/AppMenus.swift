@@ -9,6 +9,7 @@ struct AppMenus: Commands {
     @AppStorage(AppDebugSettings.Keys.showNetworkFooter) private var showNetworkFooter: Bool = false
     @AppStorage(AppDebugSettings.Keys.disableSyncing) private var disableSyncing: Bool = false
     @AppStorage(AppDebugSettings.Keys.showBoardDiagnostics) private var showBoardDiagnostics: Bool = false
+    @AppStorage(AppDebugSettings.Keys.showIssueListDiagnostics) private var showIssueListDiagnostics: Bool = false
     #endif
 
     var body: some Commands {
@@ -53,6 +54,7 @@ struct AppMenus: Commands {
             Toggle("Show network footer", isOn: $showNetworkFooter)
             Toggle("Disable syncing", isOn: $disableSyncing)
             Toggle("Show board diagnostics", isOn: $showBoardDiagnostics)
+            Toggle("Show issue list diagnostics", isOn: $showIssueListDiagnostics)
             Divider()
             Button("Clear cache and refetch") {
                 container.clearCacheAndRefetch()

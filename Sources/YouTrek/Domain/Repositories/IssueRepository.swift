@@ -34,6 +34,47 @@ struct IssueQuery: Equatable, Hashable, Sendable {
 }
 
 extension IssueQuery {
+    var diagnosticsLabel: String? {
+        if let raw = rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty {
+            var parts: [String] = [raw]
+            if let sort,
+               raw.range(of: "sort by:", options: [.caseInsensitive, .diacriticInsensitive]) == nil {
+                switch sort {
+                case .updated(let descending):
+                    parts.append("sort by: updated \(descending ? "desc" : "asc")")
+                case .priority(let descending):
+                    parts.append("sort by: priority \(descending ? "desc" : "asc")")
+                }
+            }
+            return parts.joined(separator: " ")
+        }
+
+        var parts: [String] = []
+
+        let trimmedSearch = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedSearch.isEmpty {
+            parts.append(trimmedSearch)
+        }
+
+        let filterParts = filters
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        parts.append(contentsOf: filterParts)
+
+        if let sort {
+            switch sort {
+            case .updated(let descending):
+                parts.append("sort by: updated \(descending ? "desc" : "asc")")
+            case .priority(let descending):
+                parts.append("sort by: priority \(descending ? "desc" : "asc")")
+            }
+        }
+
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " ")
+    }
+
     static func boardQuery(boardName: String, sprintName: String?, sprintFieldName: String? = nil) -> String {
         let trimmedBoard = boardName.trimmingCharacters(in: .whitespacesAndNewlines)
         let escapedBoard = escapeQueryValue(trimmedBoard)

@@ -24,8 +24,10 @@ private struct RootContentView: View {
     @AppStorage(AppDebugSettings.Keys.showNetworkFooter) private var showNetworkFooter: Bool = false
     @AppStorage(AppDebugSettings.Keys.disableSyncing) private var disableSyncing: Bool = false
     @AppStorage(AppDebugSettings.Keys.showBoardDiagnostics) private var showBoardDiagnostics: Bool = false
+    @AppStorage(AppDebugSettings.Keys.showIssueListDiagnostics) private var showIssueListDiagnostics: Bool = false
     #else
     private let showBoardDiagnostics: Bool = false
+    private let showIssueListDiagnostics: Bool = false
     #endif
     private var selectedIssues: [IssueSummary] {
         appState.issues.filter { appState.selectedIssueIDs.contains($0.id) }
@@ -61,31 +63,8 @@ private struct RootContentView: View {
     var body: some View {
         rootSplitView
             .background(ToolbarSidebarToggleHider())
-            .overlay {
-                commandPaletteOverlay
-            }
             .toolbar(removing: .sidebarToggle)
             .animation(.easeOut(duration: 0.15), value: appState.activeCommandPalette?.id)
-    }
-
-    @ViewBuilder
-    private var commandPaletteOverlay: some View {
-        if appState.activeCommandPalette != nil {
-            ZStack {
-                Color.black.opacity(0.15)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .transition(.opacity)
-                    .onTapGesture {
-                        appState.dismissCommandPalette()
-                    }
-                CommandPaletteDialog(state: commandPaletteBinding)
-                    .shadow(color: .black.opacity(0.2), radius: 18, x: 0, y: 10)
-                    .transition(.scale(scale: 0.98).combined(with: .opacity))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .zIndex(10)
-        }
     }
 
     private var columnVisibilityBinding: Binding<NavigationSplitViewVisibility> {
@@ -154,6 +133,10 @@ private struct RootContentView: View {
         .onChange(of: appState.selectedSidebarItem) { _, selection in
             guard let selection else { return }
             container.recordSidebarSelection(selection)
+            if selection.isBoard, isInspectorVisible {
+                isInspectorVisible = false
+                appState.setInspectorVisible(false)
+            }
             if !selectionShowsDrafts(selection), appState.selectedIssue?.isDraft == true {
                 appState.selectedDraftID = nil
                 appState.selectedIssue = nil
@@ -168,6 +151,9 @@ private struct RootContentView: View {
         }
         .sheet(item: $appState.activeNewIssueDialog) { _ in
             NewIssueDialog(state: newIssueDialogBinding)
+        }
+        .sheet(item: $appState.activeCommandPalette) { _ in
+            CommandPaletteDialog(state: commandPaletteBinding)
         }
         #if DEBUG
         .background(RootDebugStateTracker(appState: appState, container: container))
@@ -184,7 +170,10 @@ private struct RootContentView: View {
     private var commandPaletteBinding: Binding<CommandPaletteState> {
         Binding(
             get: { appState.activeCommandPalette ?? CommandPaletteState() },
-            set: { appState.activeCommandPalette = $0 }
+            set: { newValue in
+                guard appState.activeCommandPalette != nil else { return }
+                appState.activeCommandPalette = newValue
+            }
         )
     }
 
@@ -223,6 +212,10 @@ private struct RootContentView: View {
                 showDiagnostics: showBoardDiagnostics
             )
         } else {
+            let listSelection = appState.selectedSidebarItem
+            let listID = listSelection?.id
+            let diagnosticEvents = listID.map { appState.issueListDataSourceEvents(for: $0) } ?? []
+            let diagnosticsQuery = listSelection?.query.diagnosticsLabel
             IssueListView(
                 issues: visibleIssues,
                 selection: $appState.selectedIssue,
@@ -230,6 +223,12 @@ private struct RootContentView: View {
                 showAssigneeColumn: showAssigneeColumn,
                 isLoading: appState.isLoadingIssues,
                 hasCompletedSync: appState.hasCompletedIssueSync,
+                showDiagnostics: showIssueListDiagnostics,
+                diagnosticEvents: diagnosticEvents,
+                diagnosticsTitle: listSelection?.title,
+                diagnosticsID: listSelection?.id,
+                diagnosticsQuery: diagnosticsQuery,
+                diagnosticsSearch: searchQuery,
                 isIssueUnread: { issue in
                     appState.isIssueUnread(issue)
                 },
@@ -247,10 +246,13 @@ private struct RootContentView: View {
     private var mainToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
             Button(action: toggleSidebar) {
-                Image(systemName: "sidebar.leading")
+                Label("Toggle Sidebar", systemImage: "sidebar.leading")
+                    .labelStyle(.iconOnly)
             }
             .buttonStyle(.accessoryBar)
             .help("Toggle sidebar")
+
+            ToolbarGap()
 
             SearchToolbarField(
                 text: $searchQuery,
@@ -258,12 +260,12 @@ private struct RootContentView: View {
                 onOpenCommandPalette: container.commandPalette.open,
                 onMarkAllRead: container.markAllIssuesSeen
             )
-            .padding(.leading, 8)
-        }
 
-        ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarGap()
+
             NewIssueToolbar(container: container)
-                .frame(maxWidth: 280)
+                .frame(maxWidth: 280, alignment: .leading)
+
             Button {
                 isInspectorVisible.toggle()
                 appState.setInspectorVisible(isInspectorVisible)
@@ -651,22 +653,15 @@ private struct SearchToolbarField: View {
     let onMarkAllRead: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
                 TextField("Search issues", text: $text)
-                    .textFieldStyle(.plain)
                     .submitLabel(.search)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.bar, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(.separator.opacity(0.6), lineWidth: 1)
-            )
-            .frame(minWidth: 150, idealWidth: 190, maxWidth: 230)
+            .toolbarFieldStyle()
+            .frame(minWidth: 150, idealWidth: 190, maxWidth: 230, alignment: .leading)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Search issues")
 
@@ -686,7 +681,14 @@ private struct SearchToolbarField: View {
             .disabled(!hasUnreadIssues)
             .help("Mark all issues in the current list as read")
         }
-        .frame(minWidth: 240, idealWidth: 330, maxWidth: 390)
+        .frame(minWidth: 240, idealWidth: 330, maxWidth: 390, alignment: .leading)
+    }
+}
+
+private struct ToolbarGap: View {
+    var body: some View {
+        Color.clear
+            .frame(width: 12, height: 1)
     }
 }
 
@@ -773,7 +775,7 @@ private struct MultiIssueSelectionView: View {
                             applyStatus(option)
                         } label: {
                             let colors = option.badgeColors(fallback: IssueStatus(option: option).badgeColors)
-                            menuRow(title: option.displayName, colors: colors)
+                            statusMenuRow(title: option.displayName, colors: colors)
                         }
                     }
                 } label: {
@@ -784,8 +786,8 @@ private struct MultiIssueSelectionView: View {
                         Button {
                             applyPriority(option)
                         } label: {
-                            let colors = option.badgeColors(fallback: IssuePriority(option: option).badgeColors)
-                            menuRow(title: option.displayName, colors: colors)
+                            let isTop = IssuePriority(option: option).isTopPriority
+                            priorityMenuRow(title: option.displayName, isTopPriority: isTop)
                         }
                     }
                 } label: {
@@ -852,15 +854,25 @@ private struct MultiIssueSelectionView: View {
         return priorityOptions
     }
 
-    private func menuRow(title: String, colors: IssueBadgeColors) -> some View {
+    private func statusMenuRow(title: String, colors: IssueBadgeColors) -> some View {
         HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(colors.background)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .stroke(colors.border, lineWidth: 1)
-                )
-                .frame(width: 18, height: 12)
+            Circle()
+                .fill(colors.foreground)
+                .frame(width: 6, height: 6)
+            Text(title)
+                .foregroundStyle(.primary)
+        }
+    }
+
+    private func priorityMenuRow(title: String, isTopPriority: Bool) -> some View {
+        HStack(spacing: 8) {
+            if isTopPriority {
+                Image(systemName: "flag.fill")
+                    .foregroundStyle(Color.red)
+            } else {
+                Color.clear
+                    .frame(width: 10, height: 10)
+            }
             Text(title)
                 .foregroundStyle(.primary)
         }

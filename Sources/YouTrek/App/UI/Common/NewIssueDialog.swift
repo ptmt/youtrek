@@ -11,6 +11,7 @@ struct NewIssueDialog: View {
     @State private var assigneeOptions: [IssueFieldOption] = []
     @State private var isLoadingProjects = false
     @State private var isLoadingFields = false
+    @State private var isProjectPickerPresented = false
     @FocusState private var isTitleFocused: Bool
 
     private var selectedProject: IssueProject? {
@@ -22,6 +23,13 @@ struct NewIssueDialog: View {
             return project.shortName ?? project.name
         }
         return "Project"
+    }
+
+    private var projectSelection: ProjectSelection {
+        ProjectSelection(
+            projectID: state.projectID,
+            projectName: selectedProject?.name ?? selectedProject?.shortName
+        )
     }
 
     var body: some View {
@@ -81,38 +89,37 @@ struct NewIssueDialog: View {
     }
 
     private var projectChip: some View {
-        Menu {
-            if isLoadingProjects {
-                Text("Loading projects...")
-            } else if projects.isEmpty {
-                Text("No projects available")
-            } else {
-                ForEach(projects) { project in
-                    Button {
-                        state.projectID = project.id
-                    } label: {
-                        HStack {
-                            if let shortName = project.shortName {
-                                Text(shortName)
-                                    .fontWeight(.medium)
-                            }
-                            Text(project.name)
-                        }
-                    }
-                }
-            }
+        Button {
+            isProjectPickerPresented.toggle()
         } label: {
             HStack(spacing: 4) {
                 Text(projectChipLabel)
                     .font(.subheadline.weight(.medium))
                 Image(systemName: "chevron.down")
                     .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+            .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(.separator.opacity(0.5), lineWidth: 1)
+            )
         }
-        .menuStyle(.borderlessButton)
+        .buttonStyle(.plain)
+        .popover(isPresented: $isProjectPickerPresented, arrowEdge: .bottom) {
+            ProjectPickerPopover(
+                selection: projectSelection,
+                projects: projects,
+                isLoading: isLoadingProjects,
+                isPresented: $isProjectPickerPresented,
+                onSelect: { project in
+                    state.projectID = project.id
+                }
+            )
+            .environmentObject(container)
+        }
     }
 
     // MARK: - Content
@@ -178,11 +185,10 @@ struct NewIssueDialog: View {
                 }
             }
         } label: {
-            metadataChipLabel(
-                icon: "circle.dotted",
+            statusChipLabel(
                 text: state.statusOption?.displayName ?? "Status",
-                colors: state.statusOption.map { option in
-                    option.badgeColors(fallback: IssueStatus(option: option).badgeColors)
+                color: state.statusOption.map { option in
+                    option.badgeColors(fallback: IssueStatus(option: option).badgeColors).foreground
                 }
             )
         }
@@ -200,7 +206,7 @@ struct NewIssueDialog: View {
                             displayName: priority.displayName
                         )
                     } label: {
-                        Label(priority.displayName, systemImage: priority.iconName)
+                        priorityMenuLabel(title: priority.displayName, isTopPriority: priority.isTopPriority)
                     }
                 }
             } else {
@@ -212,17 +218,15 @@ struct NewIssueDialog: View {
                     Button {
                         state.priorityOption = option
                     } label: {
-                        Text(option.displayName)
+                        let isTop = IssuePriority(option: option).isTopPriority
+                        priorityMenuLabel(title: option.displayName, isTopPriority: isTop)
                     }
                 }
             }
         } label: {
-            metadataChipLabel(
-                icon: "flag",
+            priorityChipLabel(
                 text: state.priorityOption?.displayName ?? "Priority",
-                colors: state.priorityOption.map { option in
-                    option.badgeColors(fallback: IssuePriority(option: option).badgeColors)
-                }
+                isTopPriority: state.priorityOption.map { IssuePriority(option: $0).isTopPriority } ?? false
             )
         }
         .menuStyle(.borderlessButton)
@@ -248,8 +252,7 @@ struct NewIssueDialog: View {
         } label: {
             metadataChipLabel(
                 icon: "person",
-                text: state.assigneeOption?.displayName ?? "Assignee",
-                colors: nil
+                text: state.assigneeOption?.displayName ?? "Assignee"
             )
         }
         .menuStyle(.borderlessButton)
@@ -261,14 +264,13 @@ struct NewIssueDialog: View {
         } label: {
             metadataChipLabel(
                 icon: "ellipsis",
-                text: nil,
-                colors: nil
+                text: nil
             )
         }
         .menuStyle(.borderlessButton)
     }
 
-    private func metadataChipLabel(icon: String, text: String?, colors: IssueBadgeColors?) -> some View {
+    private func metadataChipLabel(icon: String, text: String?) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.caption)
@@ -279,15 +281,59 @@ struct NewIssueDialog: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(
-            colors?.background.opacity(0.6) ?? Color.clear,
-            in: RoundedRectangle(cornerRadius: 6)
-        )
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(colors?.border ?? Color.secondary.opacity(0.3), lineWidth: 1)
+                .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
         )
-        .foregroundStyle(colors?.foreground ?? .secondary)
+        .foregroundStyle(.secondary)
+    }
+
+    private func statusChipLabel(text: String, color: Color?) -> some View {
+        chipContainer {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill((color ?? Color.secondary).opacity(color == nil ? 0.5 : 1.0))
+                    .frame(width: 6, height: 6)
+                Text(text)
+                    .font(.caption)
+            }
+        }
+    }
+
+    private func priorityChipLabel(text: String, isTopPriority: Bool) -> some View {
+        chipContainer {
+            HStack(spacing: 6) {
+                if isTopPriority {
+                    Image(systemName: "flag.fill")
+                        .foregroundStyle(Color.red)
+                }
+                Text(text)
+                    .font(.caption)
+            }
+        }
+    }
+
+    private func chipContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
+            )
+            .foregroundStyle(.secondary)
+    }
+
+    private func priorityMenuLabel(title: String, isTopPriority: Bool) -> some View {
+        HStack(spacing: 6) {
+            if isTopPriority {
+                Image(systemName: "flag.fill")
+                    .foregroundStyle(Color.red)
+            }
+            Text(title)
+        }
     }
 
     // MARK: - Footer
@@ -329,16 +375,24 @@ struct NewIssueDialog: View {
     private func loadInitialData() async {
         isLoadingProjects = true
         let loadedProjects = await container.loadProjects()
-        projects = loadedProjects.filter { !$0.isArchived }
+        projects = loadedProjects
         isLoadingProjects = false
 
-        if state.projectID == nil, let first = projects.first {
-            state.projectID = first.id
+        if state.projectID == nil {
+            let ordered = ProjectPickerPopover.orderedProjects(
+                projects: projects,
+                selectedProject: nil,
+                recentIssues: container.appState.issues
+            )
+            if let first = ordered.first {
+                state.projectID = first.id
+            }
         }
     }
 
     private func loadFieldsForProject() async {
-        guard let projectID = state.projectID else {
+        guard let projectID = state.projectID,
+              let project = projects.first(where: { $0.id == projectID }) else {
             statusOptions = []
             priorityOptions = []
             assigneeOptions = []
@@ -347,8 +401,9 @@ struct NewIssueDialog: View {
 
         isLoadingFields = true
 
-        async let statusTask = loadStatusOptionsForProject(projectID)
-        async let priorityTask = loadPriorityOptionsForProject(projectID)
+        let issueContext = issueContext(for: project)
+        async let statusTask = container.loadStatusOptions(for: issueContext)
+        async let priorityTask = container.loadPriorityOptions(for: issueContext)
         async let assigneeTask = container.searchPeople(query: nil, projectID: projectID)
 
         statusOptions = await statusTask
@@ -357,39 +412,11 @@ struct NewIssueDialog: View {
 
         isLoadingFields = false
     }
-
-    private func loadStatusOptionsForProject(_ projectID: String) async -> [IssueFieldOption] {
-        let fields = await container.loadFields(for: projectID)
-        guard let statusField = findStatusField(in: fields),
-              let bundleID = statusField.bundleID else {
-            return []
-        }
-        return await container.loadBundleOptions(bundleID: bundleID, kind: statusField.kind)
-    }
-
-    private func loadPriorityOptionsForProject(_ projectID: String) async -> [IssueFieldOption] {
-        let fields = await container.loadFields(for: projectID)
-        guard let priorityField = findPriorityField(in: fields),
-              let bundleID = priorityField.bundleID else {
-            return []
-        }
-        return await container.loadBundleOptions(bundleID: bundleID, kind: priorityField.kind)
-    }
-
-    private func findStatusField(in fields: [IssueField]) -> IssueField? {
-        fields.first { field in
-            let names = [field.name, field.localizedName]
-                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            return names.contains("state") || names.contains("status") || field.kind == .state
-        }
-    }
-
-    private func findPriorityField(in fields: [IssueField]) -> IssueField? {
-        fields.first { field in
-            let names = [field.name, field.localizedName]
-                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            return names.contains("priority")
-        }
+    private func issueContext(for project: IssueProject) -> IssueSummary {
+        let nameCandidate = project.shortName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = (nameCandidate?.isEmpty == false) ? nameCandidate! : project.name
+        let fallbackName = resolvedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? project.id : resolvedName
+        return IssueSummary(readableID: "Draft", title: "", projectName: fallbackName)
     }
 
     // MARK: - Actions

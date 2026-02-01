@@ -11,27 +11,22 @@ struct NewIssueToolbar: View {
     var body: some View {
         HStack(spacing: 8) {
             TextField("New issue...", text: $draftTitle)
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(.bar, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(.separator.opacity(0.6), lineWidth: 1)
-                )
+                .toolbarFieldStyle()
                 .frame(minWidth: 200)
                 .submitLabel(.done)
                 .onSubmit {
                     createDraft()
                 }
+                .help("Quickly capture a new issue from anywhere in the app")
             Button(action: createDraft) {
-                Image(systemName: "plus.circle.fill")
+                Label("Create Issue", systemImage: "plus.circle.fill")
+                    .labelStyle(.iconOnly)
             }
             .buttonStyle(.accessoryBar)
+            .help("Create a new issue")
             .keyboardShortcut(.return, modifiers: [.command])
             .disabled(draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .help("Quickly capture a new issue from anywhere in the app")
     }
 
     private func createDraft() {
@@ -39,5 +34,35 @@ struct NewIssueToolbar: View {
         guard !trimmed.isEmpty else { return }
         container.beginNewIssue(withTitle: trimmed)
         draftTitle = ""
+    }
+}
+
+private enum ToolbarFieldStyleTokens {
+    static let cornerRadius: CGFloat = 8
+    static let horizontalPadding: CGFloat = 8
+    static let verticalPadding: CGFloat = 6
+    static let strokeOpacity: Double = 0.6
+}
+
+private struct ToolbarFieldStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .textFieldStyle(.plain)
+            .padding(.horizontal, ToolbarFieldStyleTokens.horizontalPadding)
+            .padding(.vertical, ToolbarFieldStyleTokens.verticalPadding)
+            .background(
+                .bar,
+                in: RoundedRectangle(cornerRadius: ToolbarFieldStyleTokens.cornerRadius, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: ToolbarFieldStyleTokens.cornerRadius, style: .continuous)
+                    .stroke(.separator.opacity(ToolbarFieldStyleTokens.strokeOpacity), lineWidth: 1)
+            )
+    }
+}
+
+extension View {
+    func toolbarFieldStyle() -> some View {
+        modifier(ToolbarFieldStyle())
     }
 }

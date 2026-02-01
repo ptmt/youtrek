@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct IssueListView: View {
@@ -7,6 +8,12 @@ struct IssueListView: View {
     let showAssigneeColumn: Bool
     let isLoading: Bool
     let hasCompletedSync: Bool
+    let showDiagnostics: Bool
+    let diagnosticEvents: [IssueListDataSourceEvent]
+    let diagnosticsTitle: String?
+    let diagnosticsID: String?
+    let diagnosticsQuery: String?
+    let diagnosticsSearch: String?
     let isIssueUnread: (IssueSummary) -> Bool
     let onIssuesRendered: ((Int) -> Void)?
     let onDeleteDraft: ((UUID) -> Void)?
@@ -17,6 +24,11 @@ struct IssueListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             content
+        }
+        .overlay(alignment: .topTrailing) {
+            if showDiagnostics {
+                diagnosticsOverlay
+            }
         }
         .onAppear(perform: syncSelectionState)
         .onChange(of: selection?.id) { _, _ in
@@ -74,6 +86,7 @@ struct IssueListView: View {
         }
         .tableStyle(.inset)
         .tableColumnHeaders(.hidden)
+        .alternatingRowBackgrounds(false)
         .onAppear {
             onIssuesRendered?(issues.count)
         }
@@ -82,13 +95,14 @@ struct IssueListView: View {
     @ViewBuilder
     private func titleCell(for issue: IssueSummary) -> some View {
         let unread = isIssueUnread(issue)
+        let isClosed = issue.status.isClosed
         let row = HStack(alignment: .top, spacing: 10) {
             UserAvatarView(person: issue.assignee, size: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(issue.title)
-                    .font(.headline.weight(unread ? .semibold : .regular))
-                    .foregroundStyle(titleColor(isUnread: unread))
-                metadataRow(for: issue, isUnread: unread)
+                    .font(.headline.weight(unread && !isClosed ? .semibold : .regular))
+                    .foregroundStyle(titleColor(isUnread: unread, isClosed: isClosed))
+                metadataRow(for: issue, isUnread: unread, isClosed: isClosed)
             }
         }
         .padding(.vertical, 4)
@@ -106,33 +120,41 @@ struct IssueListView: View {
 
     private func assigneeCell(for issue: IssueSummary) -> some View {
         let unread = isIssueUnread(issue)
+        let isClosed = issue.status.isClosed
+        let baseColor: Color = issue.assignee == nil ? .secondary : .primary
         return Text(issue.assigneeDisplayName)
-            .foregroundStyle(issue.assignee == nil ? .secondary : .primary)
-            .fontWeight(unread ? .semibold : .regular)
+            .foregroundStyle(isClosed ? baseColor.opacity(0.6) : baseColor)
+            .fontWeight(unread && !isClosed ? .semibold : .regular)
     }
 
-    private func metadataRow(for issue: IssueSummary, isUnread: Bool) -> some View {
+    private func metadataRow(for issue: IssueSummary, isUnread: Bool, isClosed: Bool) -> some View {
+        let secondaryOpacity = isClosed ? 0.65 : 1.0
         return HStack(spacing: 8) {
             Text(issue.readableID)
-                .foregroundStyle(.secondary)
-            IssueMetaDotLabel(text: issue.status.displayName, colors: issue.status.badgeColors)
+                .foregroundStyle(.secondary.opacity(secondaryOpacity))
+                .strikethrough(isClosed, color: .secondary)
+            IssueMetaDotLabel(
+                text: issue.status.displayName,
+                colors: issue.status.badgeColors,
+                textOpacity: isClosed ? 0.62 : 0.86,
+                dotOpacity: isClosed ? 0.6 : 1.0
+            )
             if !issue.priority.isNormalSemantic {
-                IssueMetaDotLabel(
-                    text: issue.priority.displayName,
-                    colors: issue.priority.badgeColors,
-                    textOpacity: 0.78
-                )
+                IssuePriorityLabel(priority: issue.priority, isMuted: isClosed)
             }
             Spacer(minLength: 0)
             Text(IssueTimestampFormatter.label(for: issue.updatedAt))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondary.opacity(secondaryOpacity))
         }
-        .font(.caption.weight(isUnread ? .medium : .regular))
+        .font(.caption.weight(isUnread && !isClosed ? .medium : .regular))
         .lineLimit(1)
     }
 
-    private func titleColor(isUnread: Bool) -> Color {
-        isUnread ? .primary : .primary.opacity(0.74)
+    private func titleColor(isUnread: Bool, isClosed: Bool) -> Color {
+        if isClosed {
+            return isUnread ? .secondary.opacity(0.85) : .secondary.opacity(0.65)
+        }
+        return isUnread ? .primary : .primary.opacity(0.74)
     }
 
     private func syncSelectionState() {
@@ -159,26 +181,160 @@ struct IssueListView: View {
             selection = nextSelection
         }
     }
+
+    private var diagnosticsOverlay: some View {
+        let events = diagnosticEvents
+        let displayEvents = Array(events.reversed())
+        let title = diagnosticsTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let titleLabel = (title?.isEmpty == false) ? title ?? "—" : "—"
+        let id = diagnosticsID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let idLabel = (id?.isEmpty == false) ? id ?? "—" : "—"
+        let query = diagnosticsQuery?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let queryLabel = (query?.isEmpty == false) ? query ?? "—" : "—"
+        let search = diagnosticsSearch?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let searchLabel = (search?.isEmpty == false) ? search ?? "—" : "—"
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("Issue list diagnostics")
+                    .font(.caption.weight(.semibold))
+                Spacer()
+                Button {
+                    copyDiagnostics()
+                } label: {
+                    Label("Copy diagnostics", systemImage: "doc.on.doc")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .font(.caption2)
+                .help("Copy issue list diagnostics")
+            }
+            Text("Selection: \(titleLabel)")
+            if idLabel != "—" {
+                Text("Selection ID: \(idLabel)")
+            }
+            Text("Issues: \(issues.count)  Loading: \(isLoading ? "Yes" : "No")")
+            Text("Query: \(queryLabel)")
+            Text("Search filter: \(searchLabel)")
+            if events.isEmpty {
+                Text("Data source events: none")
+            } else {
+                Divider()
+                Text("Data source events (\(events.count))")
+                    .font(.caption2.weight(.semibold))
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(displayEvents) { event in
+                            Text("\(formattedDiagnosticsTimestamp(event.timestamp))  \(event.message)")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 160)
+            }
+        }
+        .font(.caption2)
+        .padding(8)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.trailing, 12)
+        .padding(.top, 8)
+        .textSelection(.enabled)
+    }
+
+    private static let diagnosticsDisplayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    private static let diagnosticsCopyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        return formatter
+    }()
+
+    private func formattedDiagnosticsTimestamp(_ date: Date) -> String {
+        Self.diagnosticsDisplayFormatter.string(from: date)
+    }
+
+    private func diagnosticsCopyText() -> String {
+        let title = diagnosticsTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let titleLabel = (title?.isEmpty == false) ? title ?? "—" : "—"
+        let id = diagnosticsID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let idLabel = (id?.isEmpty == false) ? id ?? "—" : "—"
+        let query = diagnosticsQuery?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let queryLabel = (query?.isEmpty == false) ? query ?? "—" : "—"
+        let search = diagnosticsSearch?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let searchLabel = (search?.isEmpty == false) ? search ?? "—" : "—"
+
+        var lines: [String] = []
+        lines.append("Selection: \(titleLabel)")
+        if idLabel != "—" {
+            lines.append("Selection ID: \(idLabel)")
+        }
+        lines.append("Issues: \(issues.count)  Loading: \(isLoading ? "Yes" : "No")")
+        lines.append("Query: \(queryLabel)")
+        lines.append("Search filter: \(searchLabel)")
+        if diagnosticEvents.isEmpty {
+            lines.append("Data source events: none")
+        } else {
+            lines.append("Data source events:")
+            for event in diagnosticEvents {
+                let stamp = Self.diagnosticsCopyFormatter.string(from: event.timestamp)
+                lines.append("\(stamp)  \(event.message)")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func copyDiagnostics() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(diagnosticsCopyText(), forType: .string)
+    }
 }
 
 private struct IssueMetaDotLabel: View {
     let text: String
     let colors: IssueBadgeColors
     let textOpacity: Double
+    let dotOpacity: Double
 
-    init(text: String, colors: IssueBadgeColors, textOpacity: Double = 0.86) {
+    init(text: String, colors: IssueBadgeColors, textOpacity: Double = 0.86, dotOpacity: Double = 1.0) {
         self.text = text
         self.colors = colors
         self.textOpacity = textOpacity
+        self.dotOpacity = dotOpacity
     }
 
     var body: some View {
         HStack(spacing: 5) {
             Circle()
-                .fill(colors.foreground)
+                .fill(colors.foreground.opacity(dotOpacity))
                 .frame(width: 6, height: 6)
             Text(text)
                 .foregroundStyle(Color.primary.opacity(textOpacity))
+        }
+    }
+}
+
+private struct IssuePriorityLabel: View {
+    let priority: IssuePriority
+    let isMuted: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if priority.isTopPriority {
+                Image(systemName: "flag.fill")
+                    .font(.caption2)
+                    .foregroundStyle(Color.red.opacity(isMuted ? 0.7 : 1.0))
+            }
+            Text(priority.displayName)
+                .foregroundStyle(Color.primary.opacity(isMuted ? 0.55 : 0.78))
         }
     }
 }

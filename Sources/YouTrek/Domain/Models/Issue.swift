@@ -271,6 +271,10 @@ enum IssuePriority: Hashable, Sendable, Codable, RawRepresentable {
         semantic == .normal
     }
 
+    var isTopPriority: Bool {
+        semantic == .critical
+    }
+
     static func deduplicated(_ priorities: [IssuePriority]) -> [IssuePriority] {
         var seen = Set<String>()
         var unique: [IssuePriority] = []
@@ -689,6 +693,10 @@ enum IssueStatus: Hashable, Sendable, Codable, CaseIterable, RawRepresentable {
         case .done: return 4
         case .custom: return 10
         }
+    }
+
+    var isClosed: Bool {
+        semantic == .done
     }
 
     static func deduplicated(_ statuses: [IssueStatus]) -> [IssueStatus] {

@@ -29,12 +29,14 @@ final class AppState: ObservableObject {
     @Published private(set) var currentUserID: String? = nil
     @Published private(set) var boardSyncTimestamps: [String: Date] = [:]
     @Published private(set) var boardDataSourceEvents: [String: [BoardDataSourceEvent]] = [:]
+    @Published private(set) var issueListDataSourceEvents: [String: [IssueListDataSourceEvent]] = [:]
     @Published private var boardSprintFilters: [String: BoardSprintFilter] = [:]
     @Published var activeConflict: ConflictNotice?
     @Published var activeNewIssueDialog: NewIssueDialogState?
     @Published var activeCommandPalette: CommandPaletteState?
     private var didLogIssueListRendered = false
     private let boardDataSourceEventLimit = 60
+    private let issueListDataSourceEventLimit = 60
 
     init(issues: [IssueSummary] = []) {
         self.launchUptime = ProcessInfo.processInfo.systemUptime
@@ -244,6 +246,7 @@ final class AppState: ObservableObject {
         boardSyncTimestamps = [:]
         boardSprintFilters = [:]
         boardDataSourceEvents = [:]
+        issueListDataSourceEvents = [:]
     }
 
     func resetInitialSyncState() {
@@ -295,6 +298,21 @@ final class AppState: ObservableObject {
 
     func boardDataSourceEvents(for boardID: String) -> [BoardDataSourceEvent] {
         boardDataSourceEvents[boardID] ?? []
+    }
+
+    func recordIssueListDataSourceEvent(listID: String, message: String, at date: Date = Date()) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var events = issueListDataSourceEvents[listID, default: []]
+        events.append(IssueListDataSourceEvent(timestamp: date, message: trimmed))
+        if events.count > issueListDataSourceEventLimit {
+            events.removeFirst(events.count - issueListDataSourceEventLimit)
+        }
+        issueListDataSourceEvents[listID] = events
+    }
+
+    func issueListDataSourceEvents(for listID: String) -> [IssueListDataSourceEvent] {
+        issueListDataSourceEvents[listID] ?? []
     }
 
     func sprintFilter(for board: IssueBoard) -> BoardSprintFilter {
@@ -459,6 +477,18 @@ struct CommandPaletteState: Identifiable, Hashable, Sendable {
 }
 
 struct BoardDataSourceEvent: Identifiable, Hashable, Sendable {
+    let id: UUID
+    let timestamp: Date
+    let message: String
+
+    init(id: UUID = UUID(), timestamp: Date, message: String) {
+        self.id = id
+        self.timestamp = timestamp
+        self.message = message
+    }
+}
+
+struct IssueListDataSourceEvent: Identifiable, Hashable, Sendable {
     let id: UUID
     let timestamp: Date
     let message: String

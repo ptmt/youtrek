@@ -696,24 +696,28 @@ private struct IssueBoardCard: View {
     let issue: IssueSummary
 
     var body: some View {
+        let isClosed = issue.status.isClosed
         VStack(alignment: .leading, spacing: 6) {
             Text(issue.readableID)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondary.opacity(isClosed ? 0.6 : 1.0))
+                .strikethrough(isClosed, color: .secondary)
             Text(issue.title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
+                .font(.subheadline.weight(isClosed ? .regular : .semibold))
+                .foregroundStyle(isClosed ? .secondary : .primary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 Label(issue.projectName, systemImage: "folder")
                     .labelStyle(.titleAndIcon)
                 Spacer()
                 UserAvatarView(person: issue.assignee, size: 18)
-                Image(systemName: issue.priority.iconName)
-                    .foregroundStyle(issue.priority.tint)
+                if issue.priority.isTopPriority {
+                    Image(systemName: "flag.fill")
+                        .foregroundStyle(Color.red.opacity(isClosed ? 0.7 : 1.0))
+                }
             }
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondary.opacity(isClosed ? 0.6 : 1.0))
         }
         .padding(10)
         .background(.background)

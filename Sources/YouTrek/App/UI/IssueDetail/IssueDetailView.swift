@@ -17,6 +17,8 @@ struct IssueDetailView: View {
     @State private var isPickingImage = false
     @State private var isUploadingAttachments = false
     @State private var attachmentError: String?
+    @State private var lastIssueCopyTimestamp: Date?
+    @State private var lastIssueCopiedID: String?
 
     var body: some View {
         ScrollView {
@@ -53,6 +55,8 @@ struct IssueDetailView: View {
             projectOptions = []
             commentText = ""
             commentError = nil
+            lastIssueCopyTimestamp = nil
+            lastIssueCopiedID = nil
             isLoadingProjects = true
             defer { isLoadingProjects = false }
             projectOptions = await container.loadProjects()
@@ -71,9 +75,20 @@ struct IssueDetailView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(issue.readableID)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Text(issue.readableID)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button {
+                    copyIssueID()
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .keyboardShortcut("c", modifiers: [.command])
+                .help("Copy issue ID")
+            }
             Text(issue.title)
                 .font(.system(size: 24, weight: .bold))
             HStack(spacing: 8) {
@@ -100,9 +115,48 @@ struct IssueDetailView: View {
                     Text("Tags: \(issue.tags.joined(separator: ", "))")
                 }
             }
+            if !customFieldRows.isEmpty {
+                ForEach(customFieldRows) { field in
+                    metadataRow(systemImage: "square.grid.2x2") {
+                        Text("\(field.name): \(field.values.joined(separator: ", "))")
+                    }
+                }
+            }
         }
         .font(.callout)
         .foregroundStyle(.secondary)
+    }
+
+    private var customFieldRows: [IssueDetailCustomField] {
+        let excludedKeys: Set<String> = ["assignee", "state", "status", "priority"]
+        return issue.customFieldValues.compactMap { key, values in
+            let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !trimmedKey.isEmpty, !excludedKeys.contains(trimmedKey) else { return nil }
+            let cleanedValues = values
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            guard !cleanedValues.isEmpty else { return nil }
+            return IssueDetailCustomField(
+                id: trimmedKey,
+                name: customFieldDisplayName(for: trimmedKey),
+                values: cleanedValues
+            )
+        }
+        .sorted { left, right in
+            left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
+        }
+    }
+
+    private func customFieldDisplayName(for key: String) -> String {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Field" }
+        let spaced = trimmed
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+        return spaced
+            .split(separator: " ")
+            .map { $0.capitalized }
+            .joined(separator: " ")
     }
 
     private func updateProject(_ project: IssueProject) {
@@ -259,6 +313,30 @@ struct IssueDetailView: View {
         NSWorkspace.shared.open(url)
     }
 
+    private func copyIssueID() {
+        let now = Date()
+        let isSecondCopy = lastIssueCopiedID == issue.readableID,
+            let lastStamp = lastIssueCopyTimestamp,
+            now.timeIntervalSince(lastStamp) < 1.2
+        lastIssueCopiedID = issue.readableID
+        lastIssueCopyTimestamp = now
+
+        let trimmedTitle = issue.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value: String
+        if isSecondCopy, !trimmedTitle.isEmpty {
+            value = "\(issue.readableID) — \(trimmedTitle)"
+        } else {
+            value = issue.readableID
+        }
+        copyToPasteboard(value)
+    }
+
+    private func copyToPasteboard(_ value: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(value, forType: .string)
+    }
+
     private var timelineEntries: [TimelineEntry] {
         guard let detail else { return [] }
         var entries: [TimelineEntry] = []
@@ -300,7 +378,7 @@ struct IssueDetailView: View {
                     updateStatus(option)
                 } label: {
                     let colors = statusColors(for: option)
-                    menuRow(
+                    statusMenuRow(
                         title: option.displayName,
                         colors: colors,
                         isSelected: optionMatchesStatus(option)
@@ -308,11 +386,7 @@ struct IssueDetailView: View {
                 }
             }
         } label: {
-            BadgeLabel(
-                text: issue.status.displayName,
-                colors: issue.status.badgeColors,
-                showsPile: true
-            )
+            StatusIndicatorLabel(status: issue.status)
         }
         .menuStyle(.borderlessButton)
     }
@@ -328,20 +402,16 @@ struct IssueDetailView: View {
                 Button {
                     updatePriority(option)
                 } label: {
-                    let colors = priorityColors(for: option)
-                    menuRow(
+                    let priority = IssuePriority(option: option)
+                    priorityMenuRow(
                         title: option.displayName,
-                        colors: colors,
+                        isTopPriority: priority.isTopPriority,
                         isSelected: optionMatchesPriority(option)
                     )
                 }
             }
         } label: {
-            BadgeLabel(
-                text: issue.priority.displayName,
-                colors: issue.priority.badgeColors,
-                showsPile: true
-            )
+            PriorityIndicatorLabel(priority: issue.priority)
         }
         .menuStyle(.borderlessButton)
     }
@@ -378,9 +448,6 @@ struct IssueDetailView: View {
         option.badgeColors(fallback: IssueStatus(option: option).badgeColors)
     }
 
-    private func priorityColors(for option: IssueFieldOption) -> IssueBadgeColors {
-        option.badgeColors(fallback: IssuePriority(option: option).badgeColors)
-    }
 
     private func optionMatches(_ option: IssueFieldOption, name: String) -> Bool {
         let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -400,15 +467,30 @@ struct IssueDetailView: View {
         optionMatches(option, name: issue.priority.displayName)
     }
 
-    private func menuRow(title: String, colors: IssueBadgeColors, isSelected: Bool) -> some View {
+    private func statusMenuRow(title: String, colors: IssueBadgeColors, isSelected: Bool) -> some View {
         HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(colors.background)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .stroke(colors.border, lineWidth: 1)
-                )
-                .frame(width: 18, height: 12)
+            Circle()
+                .fill(colors.foreground)
+                .frame(width: 6, height: 6)
+            Text(title)
+                .foregroundStyle(.primary)
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func priorityMenuRow(title: String, isTopPriority: Bool, isSelected: Bool) -> some View {
+        HStack(spacing: 8) {
+            if isTopPriority {
+                Image(systemName: "flag.fill")
+                    .foregroundStyle(Color.red)
+            } else {
+                Color.clear
+                    .frame(width: 10, height: 10)
+            }
             Text(title)
                 .foregroundStyle(.primary)
             Spacer()
@@ -508,6 +590,12 @@ private enum IssueDetailMetrics {
     static let assigneeOptionAvatarSize: CGFloat = 20
 }
 
+private struct IssueDetailCustomField: Identifiable {
+    let id: String
+    let name: String
+    let values: [String]
+}
+
 private struct MetadataIcon: View {
     let systemName: String
     let size: CGFloat
@@ -551,7 +639,7 @@ struct ProjectEditor: View {
         .buttonStyle(.plain)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             ProjectPickerPopover(
-                issue: issue,
+                selection: ProjectSelection(projectID: nil, projectName: issue.projectName),
                 projects: projects,
                 isLoading: isLoading,
                 isPresented: $isPresented,
@@ -577,13 +665,26 @@ struct ProjectEditor: View {
     }
 
     private var currentProject: IssueProject? {
-        projects.first { $0.matches(identifier: issue.projectName) }
+        let selection = ProjectSelection(projectID: nil, projectName: issue.projectName)
+        if let id = selection.projectID, !id.isEmpty {
+            return projects.first { $0.id == id }
+        }
+        if let name = selection.projectName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !name.isEmpty {
+            return projects.first { $0.matches(identifier: name) }
+        }
+        return nil
     }
 }
 
-private struct ProjectPickerPopover: View {
+struct ProjectSelection: Hashable {
+    var projectID: String?
+    var projectName: String?
+}
+
+struct ProjectPickerPopover: View {
     @EnvironmentObject private var container: AppContainer
-    let issue: IssueSummary
+    let selection: ProjectSelection
     let projects: [IssueProject]
     let isLoading: Bool
     @Binding var isPresented: Bool
@@ -631,7 +732,15 @@ private struct ProjectPickerPopover: View {
     }
 
     private var selectedProjectID: String? {
-        projects.first { $0.matches(identifier: issue.projectName) }?.id
+        if let projectID = selection.projectID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !projectID.isEmpty {
+            return projectID
+        }
+        if let name = selection.projectName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !name.isEmpty {
+            return projects.first { $0.matches(identifier: name) }?.id
+        }
+        return nil
     }
 
     private var queryHint: String {
@@ -643,42 +752,9 @@ private struct ProjectPickerPopover: View {
         return "Recent matches are shown first."
     }
 
-    private var availableProjects: [IssueProject] {
-        let activeProjects = projects.filter { !$0.isArchived }
-        guard let current = projects.first(where: { $0.matches(identifier: issue.projectName) }),
-              current.isArchived else {
-            return activeProjects
-        }
-        if activeProjects.contains(current) { return activeProjects }
-        return [current] + activeProjects
-    }
-
-    private var recentProjects: [IssueProject] {
-        var latestByID: [String: (IssueProject, Date)] = [:]
-        for issue in container.appState.issues {
-            let trimmed = issue.projectName.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty,
-                  let project = availableProjects.first(where: { $0.matches(identifier: trimmed) }) else { continue }
-            let updatedAt = issue.updatedAt
-            if let existing = latestByID[project.id], existing.1 >= updatedAt {
-                continue
-            }
-            latestByID[project.id] = (project, updatedAt)
-        }
-        return latestByID.values.sorted { left, right in
-            if left.1 != right.1 {
-                return left.1 > right.1
-            }
-            return left.0.displayName.localizedCaseInsensitiveCompare(right.0.displayName) == .orderedAscending
-        }
-        .map { $0.0 }
-    }
-
-    private var orderedProjects: [IssueProject] {
-        let recent = recentProjects
-        let recentIDs = Set(recent.map(\.id))
-        let remaining = availableProjects.filter { !recentIDs.contains($0.id) }
-        return recent + remaining
+    private var selectedProject: IssueProject? {
+        guard let selectedID = selectedProjectID else { return nil }
+        return projects.first { $0.id == selectedID }
     }
 
     private var filteredProjects: [IssueProject] {
@@ -696,10 +772,55 @@ private struct ProjectPickerPopover: View {
         }
     }
 
+    private var orderedProjects: [IssueProject] {
+        Self.orderedProjects(
+            projects: projects,
+            selectedProject: selectedProject,
+            recentIssues: container.appState.issues
+        )
+    }
+
     private func selectProject(_ project: IssueProject) {
         if project.id == selectedProjectID { return }
         onSelect(project)
         isPresented = false
+    }
+
+    static func orderedProjects(
+        projects: [IssueProject],
+        selectedProject: IssueProject?,
+        recentIssues: [IssueSummary]
+    ) -> [IssueProject] {
+        let activeProjects = projects.filter { !$0.isArchived }
+        let availableProjects: [IssueProject]
+        if let selectedProject, selectedProject.isArchived {
+            availableProjects = activeProjects.contains(selectedProject) ? activeProjects : [selectedProject] + activeProjects
+        } else {
+            availableProjects = activeProjects
+        }
+
+        var latestByID: [String: (IssueProject, Date)] = [:]
+        for issue in recentIssues {
+            let trimmed = issue.projectName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  let project = availableProjects.first(where: { $0.matches(identifier: trimmed) }) else { continue }
+            let updatedAt = issue.updatedAt
+            if let existing = latestByID[project.id], existing.1 >= updatedAt {
+                continue
+            }
+            latestByID[project.id] = (project, updatedAt)
+        }
+        let recent = latestByID.values.sorted { left, right in
+            if left.1 != right.1 {
+                return left.1 > right.1
+            }
+            return left.0.displayName.localizedCaseInsensitiveCompare(right.0.displayName) == .orderedAscending
+        }
+        .map { $0.0 }
+
+        let recentIDs = Set(recent.map(\.id))
+        let remaining = availableProjects.filter { !recentIDs.contains($0.id) }
+        return recent + remaining
     }
 }
 
@@ -947,34 +1068,48 @@ private struct UnassignedRow: View {
     }
 }
 
-private struct BadgeLabel: View {
-    let text: String
-    let colors: IssueBadgeColors
-    let showsPile: Bool
+private struct StatusIndicatorLabel: View {
+    let status: IssueStatus
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            if showsPile {
-                Capsule()
-                    .fill(colors.background.opacity(0.8))
-                    .offset(x: 2, y: 2)
-            }
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(colors.foreground)
-                    .frame(width: 6, height: 6)
-                Text(text)
-                    .font(.callout.weight(.bold))
-                    .foregroundStyle(colors.foreground)
-            }
-            .padding(.vertical, 5)
-            .padding(.horizontal, 9)
-            .background(colors.background, in: Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(colors.border, lineWidth: 1)
-            )
+        HStack(spacing: 6) {
+            Circle()
+                .fill(status.badgeColors.foreground)
+                .frame(width: 6, height: 6)
+            Text(status.displayName)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.primary)
         }
+        .padding(.vertical, 5)
+        .padding(.horizontal, 9)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(.separator.opacity(0.6), lineWidth: 1)
+        )
+    }
+}
+
+private struct PriorityIndicatorLabel: View {
+    let priority: IssuePriority
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if priority.isTopPriority {
+                Image(systemName: "flag.fill")
+                    .foregroundStyle(Color.red)
+            }
+            Text(priority.displayName)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.primary)
+        }
+        .padding(.vertical, 5)
+        .padding(.horizontal, 9)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(.separator.opacity(0.6), lineWidth: 1)
+        )
     }
 }
 

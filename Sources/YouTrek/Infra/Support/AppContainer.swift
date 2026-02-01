@@ -306,15 +306,24 @@ final class AppContainer: ObservableObject {
             appState.selectedSidebarItem = SidebarItem.board(resolvedBoard, page: selection.query.page)
         }
 
-        if let rawQuery = query.rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !rawQuery.isEmpty {
-            recordBoardDataEvent("Issue query: \(rawQuery).", boardID: boardID)
+        let listID = selection.isBoard ? nil : selection.id
+        let recordDataEvent: (String) -> Void = { [weak self] message in
+            guard let self else { return }
+            if selection.isBoard {
+                self.recordBoardDataEvent(message, boardID: boardID)
+            } else {
+                self.recordIssueListDataEvent(message, listID: listID)
+            }
+        }
+
+        if let queryLabel = query.diagnosticsLabel {
+            recordDataEvent("Issue query: \(queryLabel).")
         }
         if query == lastLoadedIssueQuery {
-            recordBoardDataEvent("Load issues skipped (same query).", boardID: boardID)
+            recordDataEvent("Load issues skipped (same query).")
             return
         }
-        recordBoardDataEvent("Load issues started.", boardID: boardID)
+        recordDataEvent("Load issues started.")
         lastLoadedIssueQuery = query
         appState.setIssuesLoading(true)
         let shouldSeedInitialRead = await syncCoordinator.hasSeenUpdates() == false
@@ -325,7 +334,7 @@ final class AppContainer: ObservableObject {
             let sprintLabel = sprintFilter.isBacklog
                 ? "Backlog"
                 : (board.sprintName(for: sprintFilter) ?? "Sprint \(sprintFilter.sprintID ?? "-")")
-            recordBoardDataEvent("Sprint filter: \(sprintLabel).", boardID: boardID)
+            recordDataEvent("Sprint filter: \(sprintLabel).")
         }
         var sprintIssueIDs = await loadCachedSprintIssueIDsIfNeeded(
             board: board,
@@ -348,10 +357,7 @@ final class AppContainer: ObservableObject {
             LoggingService.sync.info(
                 "Local DB: cached issues loaded (\(cachedIssues.count, privacy: .public)) in \(cachedLoadDuration, privacy: .public) for \(selection.id, privacy: .public)."
             )
-            recordBoardDataEvent(
-                "Local DB cached issues loaded: \(cachedIssues.count) in \(cachedLoadDuration).",
-                boardID: boardID
-            )
+            recordDataEvent("Local DB cached issues loaded: \(cachedIssues.count) in \(cachedLoadDuration).")
             let filtered = applySprintFilterIfNeeded(
                 cachedIssues,
                 board: board,
@@ -367,7 +373,7 @@ final class AppContainer: ObservableObject {
             LoggingService.sync.info(
                 "Local DB: cached issues empty in \(cachedLoadDuration, privacy: .public) for \(selection.id, privacy: .public)."
             )
-            recordBoardDataEvent("Local DB cached issues empty (\(cachedLoadDuration)).", boardID: boardID)
+            recordDataEvent("Local DB cached issues empty (\(cachedLoadDuration)).")
         }
 
         let syncStart = ProcessInfo.processInfo.systemUptime
@@ -389,10 +395,7 @@ final class AppContainer: ObservableObject {
             LoggingService.sync.info(
                 "Remote sync: issues synced (\(syncResult.issues.count, privacy: .public)) in \(syncDuration, privacy: .public)."
             )
-            recordBoardDataEvent(
-                "Remote sync loaded: \(syncResult.issues.count) issues in \(syncDuration).",
-                boardID: boardID
-            )
+            recordDataEvent("Remote sync loaded: \(syncResult.issues.count) issues in \(syncDuration).")
         } else if !syncResult.issues.isEmpty {
             let reason = AppDebugSettings.disableSyncing
                 ? "Sync disabled; using cache"
@@ -400,12 +403,9 @@ final class AppContainer: ObservableObject {
             LoggingService.sync.info(
                 "Local DB: issues loaded from cache (\(syncResult.issues.count, privacy: .public)) in \(syncDuration, privacy: .public) (\(reason, privacy: .public))."
             )
-            recordBoardDataEvent(
-                "Local DB \(reason): \(syncResult.issues.count) issues in \(syncDuration).",
-                boardID: boardID
-            )
+            recordDataEvent("Local DB \(reason): \(syncResult.issues.count) issues in \(syncDuration).")
         } else {
-            recordBoardDataEvent("No issues returned after refresh (\(syncDuration)).", boardID: boardID)
+            recordDataEvent("No issues returned after refresh (\(syncDuration)).")
         }
         var resolvedIssues = syncResult.issues
         if resolvedIssues.isEmpty,
@@ -418,16 +418,13 @@ final class AppContainer: ObservableObject {
                 LoggingService.sync.info(
                     "Local DB: sprint fallback issues loaded (\(fallback.count, privacy: .public)) in \(fallbackDuration, privacy: .public) for \(selection.id, privacy: .public)."
                 )
-                recordBoardDataEvent(
-                    "Local DB sprint fallback: \(fallback.count) in \(fallbackDuration).",
-                    boardID: boardID
-                )
+                recordDataEvent("Local DB sprint fallback: \(fallback.count) in \(fallbackDuration).")
                 resolvedIssues = fallback
             } else {
                 LoggingService.sync.info(
                     "Local DB: sprint fallback issues empty in \(fallbackDuration, privacy: .public) for \(selection.id, privacy: .public)."
                 )
-                recordBoardDataEvent("Local DB sprint fallback empty (\(fallbackDuration)).", boardID: boardID)
+                recordDataEvent("Local DB sprint fallback empty (\(fallbackDuration)).")
             }
         }
         let filtered = applySprintFilterIfNeeded(
@@ -1575,6 +1572,11 @@ private extension AppContainer {
     private func recordBoardDataEvent(_ message: String, boardID: String?) {
         guard let boardID else { return }
         appState.recordBoardDataSourceEvent(boardID: boardID, message: message)
+    }
+
+    private func recordIssueListDataEvent(_ message: String, listID: String?) {
+        guard let listID else { return }
+        appState.recordIssueListDataSourceEvent(listID: listID, message: message)
     }
 
     private func formattedDuration(_ duration: TimeInterval) -> String {

@@ -264,6 +264,7 @@ enum AppDebugSettings {
         static let showNetworkFooter = "com.potomushto.youtrek.debug.show-network-footer"
         static let disableSyncing = "com.potomushto.youtrek.debug.disable-syncing"
         static let showBoardDiagnostics = "com.potomushto.youtrek.debug.show-board-diagnostics"
+        static let showIssueListDiagnostics = "com.potomushto.youtrek.debug.show-issue-list-diagnostics"
     }
 
     static var simulateSlowResponses: Bool {
@@ -298,6 +299,14 @@ enum AppDebugSettings {
         #endif
     }
 
+    static var showIssueListDiagnostics: Bool {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: Keys.showIssueListDiagnostics)
+        #else
+        return false
+        #endif
+    }
+
     static func setSimulateSlowResponses(_ value: Bool) {
         #if DEBUG
         UserDefaults.standard.set(value, forKey: Keys.simulateSlowResponses)
@@ -319,6 +328,12 @@ enum AppDebugSettings {
     static func setShowBoardDiagnostics(_ value: Bool) {
         #if DEBUG
         UserDefaults.standard.set(value, forKey: Keys.showBoardDiagnostics)
+        #endif
+    }
+
+    static func setShowIssueListDiagnostics(_ value: Bool) {
+        #if DEBUG
+        UserDefaults.standard.set(value, forKey: Keys.showIssueListDiagnostics)
         #endif
     }
 
