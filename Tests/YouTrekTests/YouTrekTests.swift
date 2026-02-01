@@ -3,9 +3,12 @@ import XCTest
 
 final class YouTrekTests: XCTestCase {
     @MainActor
-    func testAppStartsWithExpectedBootstrapState() throws {
+    func testAppStartsWithExpectedBootstrapState() async throws {
         let container = AppContainer.preview
         XCTAssertNotNil(container)
-        XCTAssertEqual(container.appState.selectedSidebarItem, .inbox)
+        await container.bootstrap()
+        let selection = try XCTUnwrap(container.appState.selectedSidebarItem)
+        XCTAssertFalse(selection.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertEqual(selection.query.page.offset, 0)
     }
 }

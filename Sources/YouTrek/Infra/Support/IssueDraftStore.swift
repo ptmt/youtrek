@@ -71,18 +71,53 @@ actor IssueDraftStore {
         static let drafts = "com.potomushto.youtrek.issue-drafts"
     }
 
+    private static func makeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            var container = encoder.singleValueContainer()
+            let value = formatter.string(from: date)
+            try container.encode(value)
+        }
+        return encoder
+    }
+
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let formatterWithFractional = ISO8601DateFormatter()
+            formatterWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime]
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+            if let date = formatterWithFractional.date(from: value) ?? formatter.date(from: value) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO8601 date: \(value)"
+            )
+        }
+        return decoder
+    }
+
     private let defaults: UserDefaults
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        let encoder = JSONEncoder()
-        let decoder = JSONDecoder()
-        encoder.dateEncodingStrategy = .iso8601
-        decoder.dateDecodingStrategy = .iso8601
-        self.encoder = encoder
-        self.decoder = decoder
+        self.encoder = Self.makeEncoder()
+        self.decoder = Self.makeDecoder()
+    }
+
+    init(suiteName: String) {
+        let resolvedDefaults = UserDefaults(suiteName: suiteName) ?? .standard
+        self.defaults = resolvedDefaults
+        self.encoder = Self.makeEncoder()
+        self.decoder = Self.makeDecoder()
     }
 
     func saveDraft(_ draft: IssueDraft) -> IssueDraftRecord {

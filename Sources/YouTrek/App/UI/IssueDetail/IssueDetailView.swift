@@ -315,9 +315,14 @@ struct IssueDetailView: View {
 
     private func copyIssueID() {
         let now = Date()
-        let isSecondCopy = lastIssueCopiedID == issue.readableID,
-            let lastStamp = lastIssueCopyTimestamp,
-            now.timeIntervalSince(lastStamp) < 1.2
+        let isSecondCopy: Bool
+        if lastIssueCopiedID == issue.readableID,
+           let lastStamp = lastIssueCopyTimestamp,
+           now.timeIntervalSince(lastStamp) < 1.2 {
+            isSecondCopy = true
+        } else {
+            isSecondCopy = false
+        }
         lastIssueCopiedID = issue.readableID
         lastIssueCopyTimestamp = now
 

@@ -184,7 +184,7 @@ final class YouTrackIssueRepositoryTests: XCTestCase {
         let queryItems = components.queryItems ?? []
         XCTAssertTrue(queryItems.contains(where: { $0.name == "fields" && $0.value?.contains("idReadable") == true }))
 
-        let body = try XCTUnwrap(lastRequest.httpBody)
+        let body = try XCTUnwrap(lastRequest.resolvedBody())
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertEqual(json["summary"] as? String, "Ship settings panel")
 
@@ -204,6 +204,32 @@ final class YouTrackIssueRepositoryTests: XCTestCase {
         let moduleField = customFields?.first(where: { $0["name"] as? String == "Subsystem" })
         let moduleValue = moduleField?["value"] as? [String: Any]
         XCTAssertEqual(moduleValue?["name"] as? String, "Settings")
+    }
+}
+
+private extension URLRequest {
+    func resolvedBody() throws -> Data? {
+        if let body = httpBody {
+            return body
+        }
+        guard let stream = httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        let bufferSize = 1024
+        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: bufferSize)
+            if read < 0 {
+                throw stream.streamError ?? URLError(.cannotDecodeContentData)
+            }
+            if read == 0 {
+                break
+            }
+            data.append(buffer, count: read)
+        }
+        return data
     }
 }
 

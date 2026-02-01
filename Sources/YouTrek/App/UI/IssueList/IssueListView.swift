@@ -86,7 +86,7 @@ struct IssueListView: View {
         }
         .tableStyle(.inset)
         .tableColumnHeaders(.hidden)
-        .alternatingRowBackgrounds(false)
+        .alternatingRowBackgrounds(.disabled)
         .onAppear {
             onIssuesRendered?(issues.count)
         }

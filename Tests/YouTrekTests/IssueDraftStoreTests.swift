@@ -2,28 +2,26 @@ import XCTest
 @testable import YouTrek
 
 final class IssueDraftStoreTests: XCTestCase {
-    private var defaults: UserDefaults!
+    private let suiteName = "IssueDraftStoreTests"
 
     override func setUp() {
         super.setUp()
-        defaults = UserDefaults(suiteName: "IssueDraftStoreTests")
-        defaults.removePersistentDomain(forName: "IssueDraftStoreTests")
+        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
     }
 
     override func tearDown() {
-        defaults.removePersistentDomain(forName: "IssueDraftStoreTests")
-        defaults = nil
+        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
         super.tearDown()
     }
 
     func testLatestSubmittedDraftReturnsNilWhenNone() async {
-        let store = IssueDraftStore(defaults: defaults)
+        let store = IssueDraftStore(suiteName: suiteName)
         let latest = await store.latestSubmittedDraft()
         XCTAssertNil(latest)
     }
 
     func testLatestSubmittedDraftReturnsMostRecentSubmittedDraft() async {
-        let store = IssueDraftStore(defaults: defaults)
+        let store = IssueDraftStore(suiteName: suiteName)
 
         let firstDraft = IssueDraft(
             title: "First",
