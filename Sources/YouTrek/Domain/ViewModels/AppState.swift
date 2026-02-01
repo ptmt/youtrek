@@ -331,11 +331,15 @@ final class AppState: ObservableObject {
     }
 
     func presentCommandPalette(state: CommandPaletteState = CommandPaletteState()) {
-        activeCommandPalette = state
+        withAnimation(.easeOut(duration: 0.15)) {
+            activeCommandPalette = state
+        }
     }
 
     func dismissCommandPalette() {
-        activeCommandPalette = nil
+        withAnimation(.easeOut(duration: 0.15)) {
+            activeCommandPalette = nil
+        }
     }
 
     func recordIssueListRendered(issueCount: Int) {

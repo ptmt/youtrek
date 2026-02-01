@@ -3,7 +3,6 @@ import SwiftUI
 struct CommandPaletteDialog: View {
     @EnvironmentObject private var container: AppContainer
     @Binding var state: CommandPaletteState
-    @Environment(\.dismiss) private var dismiss
     @FocusState private var isSearchFocused: Bool
     @State private var selectionID: CommandPaletteItem.ID?
     private static let relativeFormatter: RelativeDateTimeFormatter = {
@@ -148,7 +147,7 @@ struct CommandPaletteDialog: View {
                     openSelection()
                 },
                 onEscape: {
-                    dismiss()
+                    closePalette()
                 }
             )
         )
@@ -169,7 +168,7 @@ struct CommandPaletteDialog: View {
                 .font(.headline)
             Spacer()
             Button {
-                dismiss()
+                closePalette()
             } label: {
                 Image(systemName: "xmark")
             }
@@ -287,7 +286,11 @@ struct CommandPaletteDialog: View {
         case .action(let action):
             action.perform()
         }
-        dismiss()
+        closePalette()
+    }
+
+    private func closePalette() {
+        container.appState.dismissCommandPalette()
     }
 
     private func moveSelection(offset: Int) {

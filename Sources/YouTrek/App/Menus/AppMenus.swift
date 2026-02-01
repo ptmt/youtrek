@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AppMenus: Commands {
     @ObservedObject var container: AppContainer
+    @AppStorage("issueList.showAssigneeColumn") private var showAssigneeColumn: Bool = false
     #if DEBUG
     @AppStorage(AppDebugSettings.Keys.simulateSlowResponses) private var simulateSlowResponses: Bool = false
     @AppStorage(AppDebugSettings.Keys.showNetworkFooter) private var showNetworkFooter: Bool = false
@@ -27,6 +28,10 @@ struct AppMenus: Commands {
                 container.commandPalette.open()
             }
             .keyboardShortcut("k", modifiers: [.command])
+
+            Divider()
+
+            Toggle("Show Assignee Column", isOn: $showAssigneeColumn)
         }
 
         CommandGroup(after: .appVisibility) {

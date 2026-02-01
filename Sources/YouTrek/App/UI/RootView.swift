@@ -58,7 +58,22 @@ private struct RootContentView: View {
     }
 
     var body: some View {
-        rootSplitView
+        ZStack {
+            rootSplitView
+            if appState.activeCommandPalette != nil {
+                Color.black.opacity(0.15)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                    .onTapGesture {
+                        appState.dismissCommandPalette()
+                    }
+                CommandPaletteDialog(state: commandPaletteBinding)
+                    .shadow(color: .black.opacity(0.2), radius: 18, x: 0, y: 10)
+                    .transition(.scale(scale: 0.98).combined(with: .opacity))
+                    .zIndex(1)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: appState.activeCommandPalette?.id)
     }
 
     private var columnVisibilityBinding: Binding<NavigationSplitViewVisibility> {
@@ -142,9 +157,6 @@ private struct RootContentView: View {
         .sheet(item: $appState.activeNewIssueDialog) { _ in
             NewIssueDialog(state: newIssueDialogBinding)
         }
-        .sheet(item: $appState.activeCommandPalette) { _ in
-            CommandPaletteDialog(state: commandPaletteBinding)
-        }
         #if DEBUG
         .background(RootDebugStateTracker(appState: appState, container: container))
         #endif
@@ -224,7 +236,6 @@ private struct RootContentView: View {
         ToolbarItem(placement: .principal) {
             SearchToolbarField(
                 text: $searchQuery,
-                showAssigneeColumn: $showAssigneeColumn,
                 hasUnreadIssues: hasUnreadIssues,
                 onOpenCommandPalette: container.commandPalette.open,
                 onMarkAllRead: container.markAllIssuesSeen
@@ -566,7 +577,6 @@ private final class RootDebugStateObserver: ObservableObject {
 
 private struct SearchToolbarField: View {
     @Binding var text: String
-    @Binding var showAssigneeColumn: Bool
     let hasUnreadIssues: Bool
     let onOpenCommandPalette: () -> Void
     let onMarkAllRead: () -> Void
@@ -598,14 +608,6 @@ private struct SearchToolbarField: View {
             .buttonStyle(.accessoryBar)
             .keyboardShortcut("k", modifiers: [.command])
             .help("Command palette")
-
-            Menu {
-                Toggle("Assignee as Column", isOn: $showAssigneeColumn)
-            } label: {
-                Label("Columns", systemImage: "tablecells")
-                    .labelStyle(.iconOnly)
-            }
-            .help("Show or hide optional columns in the issue list")
 
             Button(action: onMarkAllRead) {
                 Label("Mark All as Read", systemImage: "checkmark.circle")

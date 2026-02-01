@@ -73,6 +73,7 @@ struct IssueListView: View {
             }
         }
         .tableStyle(.inset)
+        .tableColumnHeaders(.hidden)
         .onAppear {
             onIssuesRendered?(issues.count)
         }
