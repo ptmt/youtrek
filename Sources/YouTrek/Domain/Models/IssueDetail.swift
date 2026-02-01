@@ -9,6 +9,7 @@ struct IssueDetail: Identifiable, Hashable, Sendable {
     let createdAt: Date?
     let updatedAt: Date
     let comments: [IssueComment]
+    let attachments: [IssueAttachment]
 
     init(
         id: IssueSummary.ID,
@@ -18,7 +19,8 @@ struct IssueDetail: Identifiable, Hashable, Sendable {
         reporter: Person? = nil,
         createdAt: Date? = nil,
         updatedAt: Date,
-        comments: [IssueComment] = []
+        comments: [IssueComment] = [],
+        attachments: [IssueAttachment] = []
     ) {
         self.id = id
         self.readableID = readableID
@@ -28,6 +30,7 @@ struct IssueDetail: Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.comments = comments
+        self.attachments = attachments
     }
 }
 
@@ -58,7 +61,8 @@ extension IssueDetail {
             reporter: reporter,
             createdAt: createdAt,
             updatedAt: updatedAt,
-            comments: updatedComments
+            comments: updatedComments,
+            attachments: attachments
         )
     }
 }
