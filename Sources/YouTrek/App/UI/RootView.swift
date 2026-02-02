@@ -63,6 +63,7 @@ private struct RootContentView: View {
     var body: some View {
         rootSplitView
             .background(ToolbarSidebarToggleHider())
+            .background(SplitViewFullHeightLayoutEnabler())
             .toolbar(removing: .sidebarToggle)
             .animation(.easeOut(duration: 0.15), value: appState.activeCommandPalette?.id)
     }
@@ -87,6 +88,7 @@ private struct RootContentView: View {
             inspectorContent
         }
         .navigationSplitViewStyle(.prominentDetail)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         #if DEBUG
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if showNetworkFooter {
@@ -201,6 +203,7 @@ private struct RootContentView: View {
             },
             onToggleSidebar: toggleSidebar
         )
+        .toolbar(removing: .sidebarToggle)
     }
 
     @ViewBuilder
@@ -592,6 +595,116 @@ private struct ToolbarSidebarToggleHider: NSViewRepresentable {
     }
 }
 
+private struct SplitViewFullHeightLayoutEnabler: NSViewRepresentable {
+    func makeNSView(context: Context) -> SplitViewFullHeightHostView {
+        SplitViewFullHeightHostView()
+    }
+
+    func updateNSView(_ nsView: SplitViewFullHeightHostView, context: Context) {
+        nsView.scheduleApply()
+    }
+}
+
+private final class SplitViewFullHeightHostView: NSView {
+    private var applyAttempts = 0
+    private let maxApplyAttempts = 6
+    private var hasScheduledApply = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyAttempts = 0
+        scheduleApply()
+    }
+
+    func scheduleApply() {
+        guard !hasScheduledApply else { return }
+        hasScheduledApply = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.hasScheduledApply = false
+            self.applyFullHeightLayoutIfNeeded()
+        }
+    }
+
+    private func applyFullHeightLayoutIfNeeded() {
+        if applyFullHeightLayout() {
+            applyAttempts = 0
+            return
+        }
+        applyAttempts += 1
+        guard applyAttempts < maxApplyAttempts else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.applyFullHeightLayoutIfNeeded()
+        }
+    }
+
+    @discardableResult
+    private func applyFullHeightLayout() -> Bool {
+        guard let window else { return false }
+        let splitViewControllers = resolveSplitViewControllers(for: window)
+        guard !splitViewControllers.isEmpty else { return false }
+        for splitViewController in splitViewControllers {
+            for item in splitViewController.splitViewItems where !item.allowsFullHeightLayout {
+                item.allowsFullHeightLayout = true
+            }
+        }
+        return true
+    }
+
+    private func resolveSplitViewControllers(for window: NSWindow) -> [NSSplitViewController] {
+        var controllers = collectSplitViewControllers(from: window.contentViewController)
+        controllers.append(contentsOf: collectSplitViewControllers(from: window.contentView))
+        var seen = Set<ObjectIdentifier>()
+        return controllers.filter { controller in
+            let id = ObjectIdentifier(controller)
+            if seen.contains(id) {
+                return false
+            }
+            seen.insert(id)
+            return true
+        }
+    }
+
+    private func collectSplitViewControllers(from viewController: NSViewController?) -> [NSSplitViewController] {
+        guard let viewController else { return [] }
+        var controllers: [NSSplitViewController] = []
+        if let splitViewController = viewController as? NSSplitViewController {
+            controllers.append(splitViewController)
+        }
+        for child in viewController.children {
+            controllers.append(contentsOf: collectSplitViewControllers(from: child))
+        }
+        return controllers
+    }
+
+    private func collectSplitViewControllers(from view: NSView?) -> [NSSplitViewController] {
+        guard let view else { return [] }
+        var controllers: [NSSplitViewController] = []
+        if let splitView = view as? NSSplitView {
+            if let controller = splitView.delegate as? NSSplitViewController {
+                controllers.append(controller)
+            } else if let controller = splitViewController(from: splitView) {
+                controllers.append(controller)
+            }
+        }
+        for subview in view.subviews {
+            controllers.append(contentsOf: collectSplitViewControllers(from: subview))
+        }
+        return controllers
+    }
+
+    private func splitViewController(from view: NSView) -> NSSplitViewController? {
+        var responder: NSResponder? = view
+        while let current = responder {
+            if let splitViewController = current as? NSSplitViewController {
+                return splitViewController
+            }
+            responder = current.nextResponder
+        }
+        return nil
+    }
+}
+
 private final class ToolbarSidebarToggleHostView: NSView {
     private var removalAttempts = 0
     private let maxRemovalAttempts = 6
@@ -650,15 +763,6 @@ private struct MainToolbar: CustomizableToolbarContent {
     let onToggleInspector: () -> Void
 
     var body: some CustomizableToolbarContent {
-//        ToolbarItem(id: "toggle-sidebar") {
-//            Button(action: onToggleSidebar) {
-//                Label("Toggle Sidebar", systemImage: "sidebar.leading")
-//                    .labelStyle(.iconOnly)
-//            }
-//            .buttonStyle(.accessoryBar)
-//            .help("Toggle sidebar")
-//        }
-
         toolbarSpacer(id: "spacer-search")
 
         ToolbarItem(id: "search-field") {

@@ -66,7 +66,7 @@ struct SidebarView: View {
             }
             .listStyle(.sidebar)
         }
-        .frame(minWidth: 220)
+        .frame(minWidth: 220, maxHeight: .infinity)
         .padding(.bottom, 28)
         .overlay(alignment: .bottomLeading) {
             if isSyncing {

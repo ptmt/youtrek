@@ -148,7 +148,7 @@ private final class WindowAccessorView: NSView {
                 hasAppliedSetupPresentation = true
             }
         } else if needsReconfigure {
-            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = false
             window.titleVisibility = .visible
             window.standardWindowButton(.closeButton)?.isHidden = false
