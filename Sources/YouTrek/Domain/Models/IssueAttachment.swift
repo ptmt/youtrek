@@ -56,15 +56,67 @@ struct IssueAttachmentDraft: Identifiable, Hashable, Codable, Sendable {
 
 extension IssueAttachmentDraft {
     static func fromFileURL(_ url: URL) -> IssueAttachmentDraft {
-        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .nameKey])
+        let originalValues = try? url.resourceValues(forKeys: [.nameKey])
+        let originalName = originalValues?.name ?? url.lastPathComponent
+        let staging = AttachmentStaging.prepareCopy(from: url)
+        let resolvedURL = staging?.url ?? url
+        let values = staging?.values ?? (try? resolvedURL.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .nameKey]))
         let fileSize = values?.fileSize
         let contentType = values?.contentType
         return IssueAttachmentDraft(
-            fileURL: url,
-            fileName: values?.name ?? url.lastPathComponent,
+            fileURL: resolvedURL,
+            fileName: originalName,
             fileSize: fileSize,
             mimeType: contentType?.preferredMIMEType,
             isImage: contentType?.conforms(to: .image)
         )
+    }
+}
+
+private enum AttachmentStaging {
+    static func prepareCopy(from url: URL) -> (url: URL, values: URLResourceValues?)? {
+        guard let stagingDirectory = stagingDirectory() else { return nil }
+        if url.deletingLastPathComponent() == stagingDirectory {
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .nameKey])
+            return (url, values)
+        }
+
+        let didStart = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStart {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let ext = url.pathExtension
+        let fileName = ext.isEmpty ? UUID().uuidString : "\(UUID().uuidString).\(ext)"
+        let destination = stagingDirectory.appendingPathComponent(fileName)
+        do {
+            try FileManager.default.copyItem(at: url, to: destination)
+            let values = try? destination.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .nameKey])
+            return (destination, values)
+        } catch {
+            return nil
+        }
+    }
+
+    private static func stagingDirectory() -> URL? {
+        do {
+            let baseURL = try FileManager.default.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            let directory = baseURL
+                .appendingPathComponent("YouTrek", isDirectory: true)
+                .appendingPathComponent("Attachments", isDirectory: true)
+            if !FileManager.default.fileExists(atPath: directory.path) {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            }
+            return directory
+        } catch {
+            return nil
+        }
     }
 }
