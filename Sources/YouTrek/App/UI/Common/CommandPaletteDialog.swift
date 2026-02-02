@@ -3,9 +3,9 @@ import SwiftUI
 struct CommandPaletteDialog: View {
     @EnvironmentObject private var container: AppContainer
     @Binding var state: CommandPaletteState
-    @Environment(\.dismiss) private var dismiss
     @FocusState private var isSearchFocused: Bool
     @State private var selectionID: CommandPaletteItem.ID?
+    let onClose: () -> Void
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
@@ -291,7 +291,7 @@ struct CommandPaletteDialog: View {
     }
 
     private func closePalette() {
-        dismiss()
+        onClose()
     }
 
     private func moveSelection(offset: Int) {

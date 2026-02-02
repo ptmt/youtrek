@@ -154,8 +154,13 @@ private struct RootContentView: View {
         .sheet(item: $appState.activeNewIssueDialog) { _ in
             NewIssueDialog(state: newIssueDialogBinding)
         }
-        .sheet(item: $appState.activeCommandPalette) { _ in
-            CommandPaletteDialog(state: commandPaletteBinding)
+        .overlay {
+            if appState.activeCommandPalette != nil {
+                CommandPaletteOverlay(
+                    state: commandPaletteBinding,
+                    onClose: { appState.dismissCommandPalette() }
+                )
+            }
         }
         #if DEBUG
         .background(RootDebugStateTracker(appState: appState, container: container))
@@ -592,6 +597,24 @@ private struct ToolbarSidebarToggleHider: NSViewRepresentable {
 
     func updateNSView(_ nsView: ToolbarSidebarToggleHostView, context: Context) {
         nsView.removeSidebarToggleIfNeeded()
+    }
+}
+
+private struct CommandPaletteOverlay: View {
+    @Binding var state: CommandPaletteState
+    let onClose: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.25)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    onClose()
+                }
+            CommandPaletteDialog(state: $state, onClose: onClose)
+                .shadow(color: .black.opacity(0.2), radius: 18, x: 0, y: 8)
+        }
+        .transition(.opacity)
     }
 }
 
