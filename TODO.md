@@ -2,7 +2,7 @@
 - [x] Command pallete is not centered, it sticks to the bottom left
 - [x] Make issue id in issue details bigger font and make it a link to the web. 
 - [x] Render issue status color and issue priority icons in issue details the same way as in issue list. Then port same component to "new issue" dialog
-- [ ] On launch sidebar may disappear for a moment. Never allow that, it should be stable, identify the problem
+- [x] On launch sidebar may disappear for a moment. Never allow that, it should be stable, identify the problem
 - [ ] In new issue dialog "More options coming soon" -> implement these fields. Try to analyze recent issues in inbox constantly and compile the list of such fields and their values (most common used)
 - [ ] Make file attachments work in new issue creation
 - [ ] Add support for markdown in comments too

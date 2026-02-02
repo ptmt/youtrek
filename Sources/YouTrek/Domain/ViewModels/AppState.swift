@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 final class AppState: ObservableObject {
     private let launchUptime: TimeInterval
+    private let sidebarStabilityInterval: TimeInterval = 1.0
     @Published private(set) var columnVisibility: NavigationSplitViewVisibility = .all
     @Published var selectedSidebarItem: SidebarItem?
     @Published private(set) var sidebarSections: [SidebarSection] = []
@@ -208,6 +209,10 @@ final class AppState: ObservableObject {
     }
 
     func updateColumnVisibility(_ newValue: NavigationSplitViewVisibility, source: String) {
+        if source == "NavigationSplitView",
+           shouldIgnoreInitialSidebarCollapse(newValue) {
+            return
+        }
         guard columnVisibility != newValue else { return }
         let oldValue = columnVisibility
         columnVisibility = newValue
@@ -395,6 +400,15 @@ private extension AppState {
 
     func columnVisibilityDescription(_ value: NavigationSplitViewVisibility) -> String {
         String(describing: value)
+    }
+
+    func shouldIgnoreInitialSidebarCollapse(_ newValue: NavigationSplitViewVisibility) -> Bool {
+        guard newValue != .all else { return false }
+        if sidebarSections.isEmpty || selectedSidebarItem == nil {
+            return true
+        }
+        let elapsed = ProcessInfo.processInfo.systemUptime - launchUptime
+        return elapsed < sidebarStabilityInterval
     }
 
     func relativeTimeString(since date: Date, now: Date) -> String {
