@@ -198,7 +198,8 @@ private struct RootContentView: View {
             },
             boardSyncStatus: { item in
                 appState.boardSyncStatus(for: item)
-            }
+            },
+            onToggleSidebar: toggleSidebar
         )
     }
 

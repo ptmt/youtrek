@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SidebarView: View {
     let sections: [SidebarSection]
@@ -9,57 +10,62 @@ struct SidebarView: View {
     let onRefreshBoard: ((SidebarItem) -> Void)?
     let onOpenBoardInWeb: ((SidebarItem) -> Void)?
     let boardSyncStatus: ((SidebarItem) -> String?)?
+    let onToggleSidebar: (() -> Void)?
 
     var body: some View {
-        List(selection: $selection) {
-            ForEach(sections) { section in
-                Section(section.title) {
-                    if section.items.isEmpty {
-                        if let emptyMessage = section.emptyMessage {
-                            Text(emptyMessage)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .disabled(true)
-                        }
-                    } else {
-                        ForEach(section.items) { item in
-                            if let savedQueryID = item.savedQueryID {
-                                NavigationLink(value: item) {
-                                    Label(item.displayTitle, systemImage: item.iconName)
-                                }
-                                .contextMenu {
-                                    Button("Delete Saved Search", role: .destructive) {
-                                        onDeleteSavedSearch?(savedQueryID)
+        ZStack(alignment: .top) {
+            Color(nsColor: .windowBackgroundColor)
+                .ignoresSafeArea(.container, edges: .top)
+            List(selection: $selection) {
+                ForEach(sections) { section in
+                    Section(section.title) {
+                        if section.items.isEmpty {
+                            if let emptyMessage = section.emptyMessage {
+                                Text(emptyMessage)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .disabled(true)
+                            }
+                        } else {
+                            ForEach(section.items) { item in
+                                if let savedQueryID = item.savedQueryID {
+                                    NavigationLink(value: item) {
+                                        Label(item.displayTitle, systemImage: item.iconName)
                                     }
-                                }
-                            } else if item.isBoard {
-                                NavigationLink(value: item) {
-                                    Label(item.displayTitle, systemImage: item.iconName)
-                                }
-                                .contextMenu {
-                                    Button("Refresh") {
-                                        onRefreshBoard?(item)
+                                    .contextMenu {
+                                        Button("Delete Saved Search", role: .destructive) {
+                                            onDeleteSavedSearch?(savedQueryID)
+                                        }
                                     }
-                                    Button("Open in Web") {
-                                        onOpenBoardInWeb?(item)
+                                } else if item.isBoard {
+                                    NavigationLink(value: item) {
+                                        Label(item.displayTitle, systemImage: item.iconName)
                                     }
-                                    if let status = boardSyncStatus?(item) {
-                                        Divider()
-                                        Text("Last synced: \(status)")
-                                            .disabled(true)
+                                    .contextMenu {
+                                        Button("Refresh") {
+                                            onRefreshBoard?(item)
+                                        }
+                                        Button("Open in Web") {
+                                            onOpenBoardInWeb?(item)
+                                        }
+                                        if let status = boardSyncStatus?(item) {
+                                            Divider()
+                                            Text("Last synced: \(status)")
+                                                .disabled(true)
+                                        }
                                     }
-                                }
-                            } else {
-                                NavigationLink(value: item) {
-                                    Label(item.displayTitle, systemImage: item.iconName)
+                                } else {
+                                    NavigationLink(value: item) {
+                                        Label(item.displayTitle, systemImage: item.iconName)
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+            .listStyle(.sidebar)
         }
-        .listStyle(.sidebar)
         .frame(minWidth: 220)
         .padding(.bottom, 28)
         .overlay(alignment: .bottomLeading) {
@@ -71,6 +77,16 @@ struct SidebarView: View {
                     .padding(.leading, 8)
                     .padding(.bottom, 6)
                     .accessibilityLabel("Sync status")
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: { onToggleSidebar?() }) {
+                    Label("Toggle Sidebar", systemImage: "sidebar.leading")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.accessoryBar)
+                .help("Toggle sidebar")
             }
         }
         // .toolbar { EditButton() }
