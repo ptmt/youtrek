@@ -622,8 +622,26 @@ final class AppContainer: ObservableObject {
         return uiBase
     }
 
+    func issueWebURL(for issue: IssueSummary) -> URL? {
+        let trimmedID = issue.readableID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedID.isEmpty else { return nil }
+        guard let apiBase = configurationStore.loadBaseURL() else { return nil }
+        var uiBase = apiBase
+        if uiBase.lastPathComponent.lowercased() == "api" {
+            uiBase.deleteLastPathComponent()
+        }
+        uiBase.appendPathComponent("issue")
+        uiBase.appendPathComponent(trimmedID)
+        return uiBase
+    }
+
     func openBoardInWeb(_ item: SidebarItem) {
         guard let url = boardWebURL(for: item) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    func openIssueInWeb(_ issue: IssueSummary) {
+        guard let url = issueWebURL(for: issue) else { return }
         NSWorkspace.shared.open(url)
     }
 

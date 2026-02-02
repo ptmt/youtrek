@@ -78,9 +78,7 @@ struct IssueDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Text(issue.readableID)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                issueIDLink
                 Button {
                     copyIssueID()
                 } label: {
@@ -97,6 +95,22 @@ struct IssueDetailView: View {
                 statusMenu
                 priorityMenu
             }
+        }
+    }
+
+    @ViewBuilder
+    private var issueIDLink: some View {
+        let label = Text(issue.readableID)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(.secondary)
+        if let url = container.issueWebURL(for: issue) {
+            Link(destination: url) {
+                label
+            }
+            .buttonStyle(.plain)
+            .help("Open in YouTrack")
+        } else {
+            label
         }
     }
 
