@@ -254,6 +254,14 @@ struct SetupWindow: View {
         if uiBase.lastPathComponent.lowercased() == "api" {
             uiBase.deleteLastPathComponent()
         }
+        if let host = uiBase.host?.lowercased(), host.hasSuffix(".youtrack.cloud") {
+            if var components = URLComponents(url: uiBase, resolvingAgainstBaseURL: false) {
+                components.path = ""
+                if let cleaned = components.url {
+                    uiBase = cleaned
+                }
+            }
+        }
         uiBase.appendPathComponent("users")
         uiBase.appendPathComponent("me")
         var components = URLComponents(url: uiBase, resolvingAgainstBaseURL: false)
