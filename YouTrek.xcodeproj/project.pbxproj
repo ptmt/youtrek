@@ -37,6 +37,7 @@
 		778FF05D4EAC43E62857C01D /* NewIssueToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FA72E4D9ACF4E1772ABD7F /* NewIssueToolbar.swift */; };
 		778FF05D4EAC43E62857C01E /* NewIssueDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FA72E4D9ACF4E1772ABD80 /* NewIssueDialog.swift */; };
 		6154B2B141184ED2B93861A6 /* CommandPaletteDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BF8D7F6E11A42FDA2178071 /* CommandPaletteDialog.swift */; };
+		C0FFEE1234567890ABCDEF02 /* IssueBadgeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE1234567890ABCDEF01 /* IssueBadgeViews.swift */; };
 		B6F7001D7CF24BDB9EF0D0A7 /* MarkdownTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E827C5F39D5E4DFEA06C2463 /* MarkdownTextView.swift */; };
 		34624FC5D5AC4824962DC87C /* IssueAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1F6D0374F7E4408A078BCF5 /* IssueAttachment.swift */; };
 		240719BA093F4DB3B371E4BC /* AttachmentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC68C73EC8C04D7FA2BABD20 /* AttachmentViews.swift */; };
@@ -156,6 +157,7 @@
 		F6FA72E4D9ACF4E1772ABD7F /* NewIssueToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewIssueToolbar.swift; sourceTree = "<group>"; };
 		F6FA72E4D9ACF4E1772ABD80 /* NewIssueDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewIssueDialog.swift; sourceTree = "<group>"; };
 		0BF8D7F6E11A42FDA2178071 /* CommandPaletteDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteDialog.swift; sourceTree = "<group>"; };
+		C0FFEE1234567890ABCDEF01 /* IssueBadgeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueBadgeViews.swift; sourceTree = "<group>"; };
 		E827C5F39D5E4DFEA06C2463 /* MarkdownTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTextView.swift; sourceTree = "<group>"; };
 		FD57D8CD24C08703B24D3C86 /* TelemetryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryService.swift; sourceTree = "<group>"; };
 		FF2DFD58E618AA42ED5A0EBF /* IssueFieldRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueFieldRepository.swift; sourceTree = "<group>"; };
@@ -417,6 +419,7 @@
 				F6FA72E4D9ACF4E1772ABD7F /* NewIssueToolbar.swift */,
 				F6FA72E4D9ACF4E1772ABD80 /* NewIssueDialog.swift */,
 				0BF8D7F6E11A42FDA2178071 /* CommandPaletteDialog.swift */,
+				C0FFEE1234567890ABCDEF01 /* IssueBadgeViews.swift */,
 				E827C5F39D5E4DFEA06C2463 /* MarkdownTextView.swift */,
 				CC68C73EC8C04D7FA2BABD20 /* AttachmentViews.swift */,
 				96D7F507180F29C1DBEBFD1A /* SettingsView.swift */,
@@ -649,6 +652,7 @@
 				778FF05D4EAC43E62857C01D /* NewIssueToolbar.swift in Sources */,
 				778FF05D4EAC43E62857C01E /* NewIssueDialog.swift in Sources */,
 				6154B2B141184ED2B93861A6 /* CommandPaletteDialog.swift in Sources */,
+				C0FFEE1234567890ABCDEF02 /* IssueBadgeViews.swift in Sources */,
 				B6F7001D7CF24BDB9EF0D0A7 /* MarkdownTextView.swift in Sources */,
 				240719BA093F4DB3B371E4BC /* AttachmentViews.swift in Sources */,
 				ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */,

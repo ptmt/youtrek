@@ -431,7 +431,11 @@ struct IssueDetailView: View {
                 }
             }
         } label: {
-            StatusIndicatorLabel(status: issue.status)
+            IssueStatusBadge(
+                text: issue.status.displayName,
+                colors: issue.status.badgeColors
+            )
+            .font(.callout.weight(.semibold))
         }
         .menuStyle(.borderlessButton)
     }
@@ -456,7 +460,8 @@ struct IssueDetailView: View {
                 }
             }
         } label: {
-            PriorityIndicatorLabel(priority: issue.priority)
+            IssuePriorityBadge(priority: issue.priority)
+                .font(.callout.weight(.semibold))
         }
         .menuStyle(.borderlessButton)
     }
@@ -1111,51 +1116,6 @@ private struct UnassignedRow: View {
             }
         }
         .contentShape(Rectangle())
-    }
-}
-
-private struct StatusIndicatorLabel: View {
-    let status: IssueStatus
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(status.badgeColors.foreground)
-                .frame(width: 6, height: 6)
-            Text(status.displayName)
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(.primary)
-        }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 9)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(
-            Capsule()
-                .stroke(.separator.opacity(0.6), lineWidth: 1)
-        )
-    }
-}
-
-private struct PriorityIndicatorLabel: View {
-    let priority: IssuePriority
-
-    var body: some View {
-        HStack(spacing: 6) {
-            if priority.isTopPriority {
-                Image(systemName: "flag.fill")
-                    .foregroundStyle(Color.red)
-            }
-            Text(priority.displayName)
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(.primary)
-        }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 9)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(
-            Capsule()
-                .stroke(.separator.opacity(0.6), lineWidth: 1)
-        )
     }
 }
 

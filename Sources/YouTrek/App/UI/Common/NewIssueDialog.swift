@@ -185,12 +185,15 @@ struct NewIssueDialog: View {
                 }
             }
         } label: {
-            statusChipLabel(
-                text: state.statusOption?.displayName ?? "Status",
-                color: state.statusOption.map { option in
-                    option.badgeColors(fallback: IssueStatus(option: option).badgeColors).foreground
-                }
-            )
+            chipContainer {
+                IssueStatusBadge(
+                    text: state.statusOption?.displayName ?? "Status",
+                    colors: statusChipColors,
+                    textOpacity: state.statusOption == nil ? 0.6 : 0.86,
+                    dotOpacity: state.statusOption == nil ? 0.5 : 1.0
+                )
+                .font(.caption)
+            }
         }
         .menuStyle(.borderlessButton)
     }
@@ -224,10 +227,14 @@ struct NewIssueDialog: View {
                 }
             }
         } label: {
-            priorityChipLabel(
-                text: state.priorityOption?.displayName ?? "Priority",
-                isTopPriority: state.priorityOption.map { IssuePriority(option: $0).isTopPriority } ?? false
-            )
+            chipContainer {
+                IssuePriorityBadge(
+                    text: state.priorityOption?.displayName ?? "Priority",
+                    isTopPriority: state.priorityOption.map { IssuePriority(option: $0).isTopPriority } ?? false,
+                    isMuted: state.priorityOption == nil
+                )
+                .font(.caption)
+            }
         }
         .menuStyle(.borderlessButton)
     }
@@ -289,31 +296,6 @@ struct NewIssueDialog: View {
         .foregroundStyle(.secondary)
     }
 
-    private func statusChipLabel(text: String, color: Color?) -> some View {
-        chipContainer {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill((color ?? Color.secondary).opacity(color == nil ? 0.5 : 1.0))
-                    .frame(width: 6, height: 6)
-                Text(text)
-                    .font(.caption)
-            }
-        }
-    }
-
-    private func priorityChipLabel(text: String, isTopPriority: Bool) -> some View {
-        chipContainer {
-            HStack(spacing: 6) {
-                if isTopPriority {
-                    Image(systemName: "flag.fill")
-                        .foregroundStyle(Color.red)
-                }
-                Text(text)
-                    .font(.caption)
-            }
-        }
-    }
-
     private func chipContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
             .padding(.horizontal, 8)
@@ -334,6 +316,13 @@ struct NewIssueDialog: View {
             }
             Text(title)
         }
+    }
+
+    private var statusChipColors: IssueBadgeColors {
+        if let option = state.statusOption {
+            return option.badgeColors(fallback: IssueStatus(option: option).badgeColors)
+        }
+        return IssueBadgeColors(background: .clear, foreground: .secondary, border: .clear)
     }
 
     // MARK: - Footer

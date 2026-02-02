@@ -133,14 +133,14 @@ struct IssueListView: View {
             Text(issue.readableID)
                 .foregroundStyle(.secondary.opacity(secondaryOpacity))
                 .strikethrough(isClosed, color: .secondary)
-            IssueMetaDotLabel(
+            IssueStatusBadge(
                 text: issue.status.displayName,
                 colors: issue.status.badgeColors,
                 textOpacity: isClosed ? 0.62 : 0.86,
                 dotOpacity: isClosed ? 0.6 : 1.0
             )
             if !issue.priority.isNormalSemantic {
-                IssuePriorityLabel(priority: issue.priority, isMuted: isClosed)
+                IssuePriorityBadge(priority: issue.priority, isMuted: isClosed)
             }
             Spacer(minLength: 0)
             Text(IssueTimestampFormatter.label(for: issue.updatedAt))
@@ -295,47 +295,6 @@ struct IssueListView: View {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(diagnosticsCopyText(), forType: .string)
-    }
-}
-
-private struct IssueMetaDotLabel: View {
-    let text: String
-    let colors: IssueBadgeColors
-    let textOpacity: Double
-    let dotOpacity: Double
-
-    init(text: String, colors: IssueBadgeColors, textOpacity: Double = 0.86, dotOpacity: Double = 1.0) {
-        self.text = text
-        self.colors = colors
-        self.textOpacity = textOpacity
-        self.dotOpacity = dotOpacity
-    }
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(colors.foreground.opacity(dotOpacity))
-                .frame(width: 6, height: 6)
-            Text(text)
-                .foregroundStyle(Color.primary.opacity(textOpacity))
-        }
-    }
-}
-
-private struct IssuePriorityLabel: View {
-    let priority: IssuePriority
-    let isMuted: Bool
-
-    var body: some View {
-        HStack(spacing: 5) {
-            if priority.isTopPriority {
-                Image(systemName: "flag.fill")
-                    .font(.caption2)
-                    .foregroundStyle(Color.red.opacity(isMuted ? 0.7 : 1.0))
-            }
-            Text(priority.displayName)
-                .foregroundStyle(Color.primary.opacity(isMuted ? 0.55 : 0.78))
-        }
     }
 }
 
