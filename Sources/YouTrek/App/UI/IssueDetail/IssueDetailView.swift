@@ -20,6 +20,7 @@ struct IssueDetailView: View {
     @State private var lastIssueCopyTimestamp: Date?
     @State private var lastIssueCopiedID: String?
     @State private var showsAllCustomFields: Bool = false
+    @State private var showsCommentPreview: Bool = false
 
     var body: some View {
         ScrollView {
@@ -578,18 +579,32 @@ struct IssueDetailView: View {
                     ProgressView()
                         .controlSize(.small)
                 }
+                Spacer()
+                if !commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button(showsCommentPreview ? "Edit" : "Preview") {
+                        showsCommentPreview.toggle()
+                    }
+                    .buttonStyle(.borderless)
+                }
             }
-            ZStack(alignment: .topLeading) {
-                TextEditor(text: $commentText)
-                    .frame(minHeight: 120)
-                    .font(.callout)
-                    .accessibilityLabel("Comment text")
-                if commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("Write a comment…")
+            if showsCommentPreview {
+                MarkdownTextView(text: commentText)
+                    .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+                    .padding(8)
+                    .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            } else {
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $commentText)
+                        .frame(minHeight: 120)
                         .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 5)
-                        .padding(.leading, 5)
+                        .accessibilityLabel("Comment text")
+                    if commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Write a comment…")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 5)
+                            .padding(.leading, 5)
+                    }
                 }
             }
             HStack(spacing: 12) {
@@ -610,6 +625,10 @@ struct IssueDetailView: View {
             if commentError != nil {
                 commentError = nil
             }
+            if commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               showsCommentPreview {
+                showsCommentPreview = false
+            }
         }
     }
 
@@ -624,6 +643,7 @@ struct IssueDetailView: View {
                 await MainActor.run {
                     commentText = ""
                     isSubmittingComment = false
+                    showsCommentPreview = false
                 }
             } catch {
                 await MainActor.run {
