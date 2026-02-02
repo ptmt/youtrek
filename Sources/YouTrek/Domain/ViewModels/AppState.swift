@@ -16,6 +16,7 @@ final class AppState: ObservableObject {
     @Published private(set) var issueSeenUpdates: [IssueSummary.ID: Date] = [:]
     @Published private(set) var issueDetails: [IssueSummary.ID: IssueDetail] = [:]
     @Published private(set) var issueDetailLoadingIDs: Set<IssueSummary.ID> = []
+    @Published private(set) var inboxFieldUsage: [String: [String: Int]] = [:]
     @Published private var searchQuery: String = ""
     @Published private(set) var isInspectorVisible: Bool = true
     @Published private(set) var isSidebarVisible: Bool = true
@@ -159,6 +160,21 @@ final class AppState: ObservableObject {
     func resetIssueDetails() {
         issueDetails = [:]
         issueDetailLoadingIDs = []
+    }
+
+    func updateInboxFieldUsage(from issues: [IssueSummary]) {
+        inboxFieldUsage = Self.buildInboxFieldUsage(from: issues)
+    }
+
+    func inboxFieldUsageScore(for fieldName: String) -> Int {
+        let normalized = Self.normalizedFieldName(fieldName)
+        guard let values = inboxFieldUsage[normalized] else { return 0 }
+        return values.values.reduce(0, +)
+    }
+
+    func inboxFieldUsageCounts(for fieldName: String) -> [String: Int] {
+        let normalized = Self.normalizedFieldName(fieldName)
+        return inboxFieldUsage[normalized] ?? [:]
     }
 
     func isIssueUnread(_ issue: IssueSummary) -> Bool {
@@ -411,6 +427,28 @@ private extension AppState {
         return elapsed < sidebarStabilityInterval
     }
 
+    static func normalizedFieldName(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    static func buildInboxFieldUsage(from issues: [IssueSummary]) -> [String: [String: Int]] {
+        let excludedKeys: Set<String> = ["assignee", "state", "status", "priority"]
+        let recent = issues.sorted { $0.updatedAt > $1.updatedAt }.prefix(50)
+        var usage: [String: [String: Int]] = [:]
+        for issue in recent {
+            for (key, values) in issue.customFieldValues {
+                let normalizedKey = normalizedFieldName(key)
+                guard !normalizedKey.isEmpty, !excludedKeys.contains(normalizedKey) else { continue }
+                for value in values {
+                    let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmedValue.isEmpty else { continue }
+                    usage[normalizedKey, default: [:]][trimmedValue, default: 0] += 1
+                }
+            }
+        }
+        return usage
+    }
+
     func relativeTimeString(since date: Date, now: Date) -> String {
         let elapsed = max(0, Int(now.timeIntervalSince(date)))
         if elapsed < 60 {
@@ -453,6 +491,7 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
     var assigneeOption: IssueFieldOption?
     var labels: [String]
     var createMore: Bool
+    var customFields: [IssueDraftField]
     var attachments: [IssueAttachmentDraft]
 
     init(
@@ -465,6 +504,7 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
         assigneeOption: IssueFieldOption? = nil,
         labels: [String] = [],
         createMore: Bool = false,
+        customFields: [IssueDraftField] = [],
         attachments: [IssueAttachmentDraft] = []
     ) {
         self.id = id
@@ -476,6 +516,7 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
         self.assigneeOption = assigneeOption
         self.labels = labels
         self.createMore = createMore
+        self.customFields = customFields
         self.attachments = attachments
     }
 }

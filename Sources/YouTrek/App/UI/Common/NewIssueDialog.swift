@@ -9,9 +9,13 @@ struct NewIssueDialog: View {
     @State private var statusOptions: [IssueFieldOption] = []
     @State private var priorityOptions: [IssueFieldOption] = []
     @State private var assigneeOptions: [IssueFieldOption] = []
+    @State private var customFields: [IssueField] = []
     @State private var isLoadingProjects = false
     @State private var isLoadingFields = false
+    @State private var isLoadingCustomFields = false
     @State private var isProjectPickerPresented = false
+    @State private var isMoreOptionsPresented = false
+    @State private var showsAllCustomFields = false
     @FocusState private var isTitleFocused: Bool
 
     private var selectedProject: IssueProject? {
@@ -266,15 +270,69 @@ struct NewIssueDialog: View {
     }
 
     private var moreChip: some View {
-        Menu {
-            Text("More options coming soon")
+        Button {
+            isMoreOptionsPresented.toggle()
         } label: {
             metadataChipLabel(
                 icon: "ellipsis",
                 text: nil
             )
         }
-        .menuStyle(.borderlessButton)
+        .buttonStyle(.plain)
+        .popover(isPresented: $isMoreOptionsPresented, arrowEdge: .bottom) {
+            moreOptionsPopover
+        }
+    }
+
+    private var moreOptionsPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("More options")
+                    .font(.headline)
+                Spacer()
+                if isLoadingCustomFields {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+
+            if displayCustomFields.isEmpty {
+                Text(isLoadingCustomFields ? "Loading fields…" : "No additional fields yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                if !showsAllCustomFields {
+                    Text("Suggested from Inbox")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(displayCustomFields) { field in
+                            IssueFieldRow(
+                                field: field,
+                                value: draftFieldBinding(for: field),
+                                onPrefetchPeople: prefetchPeopleIfNeeded,
+                                onSearchPeople: { query in
+                                    await searchPeople(query: query, fieldID: field.id)
+                                }
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 320)
+            }
+
+            if shouldShowCustomFieldToggle {
+                Button(customFieldsToggleLabel) {
+                    showsAllCustomFields.toggle()
+                }
+                .buttonStyle(.link)
+            }
+        }
+        .padding(12)
+        .frame(width: 360)
     }
 
     private func metadataChipLabel(icon: String, text: String?) -> some View {
@@ -323,6 +381,103 @@ struct NewIssueDialog: View {
             return option.badgeColors(fallback: IssueStatus(option: option).badgeColors)
         }
         return IssueBadgeColors(background: .clear, foreground: .secondary, border: .clear)
+    }
+
+    private var displayCustomFields: [IssueField] {
+        let base = showsAllCustomFields ? orderedCustomFields(customFields) : suggestedCustomFields
+        return base.map { field in
+            var resolved = field
+            resolved.options = orderedOptions(for: field, options: field.options)
+            return resolved
+        }
+    }
+
+    private var suggestedCustomFields: [IssueField] {
+        let ordered = orderedCustomFields(customFields)
+        let required = ordered.filter { $0.isRequired }
+        let usageSorted = ordered.filter { !$0.isRequired && fieldUsageScore($0) > 0 }
+        let topUsage = usageSorted.prefix(6)
+        var combined: [IssueField] = []
+        for field in required + topUsage {
+            if !combined.contains(where: { $0.id == field.id }) {
+                combined.append(field)
+            }
+        }
+        return combined
+    }
+
+    private var shouldShowCustomFieldToggle: Bool {
+        let ordered = orderedCustomFields(customFields)
+        return ordered.count > suggestedCustomFields.count
+    }
+
+    private var customFieldsToggleLabel: String {
+        showsAllCustomFields ? "Show suggested fields" : "Show all fields"
+    }
+
+    private func orderedCustomFields(_ fields: [IssueField]) -> [IssueField] {
+        fields.sorted { left, right in
+            if left.isRequired != right.isRequired {
+                return left.isRequired && !right.isRequired
+            }
+            let leftScore = fieldUsageScore(left)
+            let rightScore = fieldUsageScore(right)
+            if leftScore != rightScore {
+                return leftScore > rightScore
+            }
+            let leftOrdinal = left.ordinal ?? Int.max
+            let rightOrdinal = right.ordinal ?? Int.max
+            if leftOrdinal != rightOrdinal {
+                return leftOrdinal < rightOrdinal
+            }
+            return left.displayName.localizedCaseInsensitiveCompare(right.displayName) == .orderedAscending
+        }
+    }
+
+    private func orderedOptions(for field: IssueField, options: [IssueFieldOption]) -> [IssueFieldOption] {
+        guard !options.isEmpty else { return options }
+        let usage = fieldUsageCounts(field)
+        guard !usage.isEmpty else { return options }
+        let normalizedUsage = usage.reduce(into: [String: Int]()) { partial, entry in
+            let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty else { return }
+            partial[key] = entry.value
+        }
+
+        func score(for option: IssueFieldOption) -> Int {
+            let candidates = [
+                option.displayName,
+                option.name
+            ]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            return candidates.compactMap { normalizedUsage[$0] }.max() ?? 0
+        }
+
+        return options.sorted { left, right in
+            let leftScore = score(for: left)
+            let rightScore = score(for: right)
+            if leftScore != rightScore {
+                return leftScore > rightScore
+            }
+            let leftOrdinal = left.ordinal ?? Int.max
+            let rightOrdinal = right.ordinal ?? Int.max
+            if leftOrdinal != rightOrdinal {
+                return leftOrdinal < rightOrdinal
+            }
+            return left.displayName.localizedCaseInsensitiveCompare(right.displayName) == .orderedAscending
+        }
+    }
+
+    private func fieldUsageScore(_ field: IssueField) -> Int {
+        container.appState.inboxFieldUsageScore(for: field.normalizedName)
+    }
+
+    private func fieldUsageCounts(_ field: IssueField) -> [String: Int] {
+        container.appState.inboxFieldUsageCounts(for: field.normalizedName)
+    }
+
+    private var excludedCustomFieldNames: Set<String> {
+        ["assignee", "state", "status", "priority"]
     }
 
     // MARK: - Footer
@@ -385,22 +540,103 @@ struct NewIssueDialog: View {
             statusOptions = []
             priorityOptions = []
             assigneeOptions = []
+            customFields = []
             return
         }
 
         isLoadingFields = true
+        isLoadingCustomFields = true
+        showsAllCustomFields = false
+        state.customFields = []
 
         let issueContext = issueContext(for: project)
         async let statusTask = container.loadStatusOptions(for: issueContext)
         async let priorityTask = container.loadPriorityOptions(for: issueContext)
         async let assigneeTask = container.searchPeople(query: nil, projectID: projectID)
+        async let customFieldsTask = loadCustomFields(for: project)
 
         statusOptions = await statusTask
         priorityOptions = await priorityTask
         assigneeOptions = await assigneeTask
+        customFields = await customFieldsTask
 
         isLoadingFields = false
+        isLoadingCustomFields = false
     }
+
+    private func loadCustomFields(for project: IssueProject) async -> [IssueField] {
+        let fetched = await container.loadFields(for: project.id)
+        let filtered = fetched.filter { !excludedCustomFieldNames.contains($0.normalizedName) }
+        guard !filtered.isEmpty else { return [] }
+
+        let optionsByField = await fetchCustomFieldOptions(for: filtered)
+        var resolved = filtered
+        for index in resolved.indices {
+            if let options = optionsByField[resolved[index].id] {
+                resolved[index].options = options
+            }
+        }
+
+        if resolved.contains(where: { $0.kind.usesPeople }) {
+            let people = await container.searchPeople(query: nil, projectID: project.id)
+            if !people.isEmpty {
+                for index in resolved.indices where resolved[index].kind.usesPeople {
+                    resolved[index].options = people
+                }
+            }
+        }
+
+        return resolved
+    }
+
+    private func fetchCustomFieldOptions(for fields: [IssueField]) async -> [String: [IssueFieldOption]] {
+        var results: [String: [IssueFieldOption]] = [:]
+        await withTaskGroup(of: (String, [IssueFieldOption]).self) { group in
+            for field in fields {
+                guard field.kind.usesOptions, let bundleID = field.bundleID else { continue }
+                group.addTask {
+                    let options = await container.loadBundleOptions(bundleID: bundleID, kind: field.kind)
+                    return (field.id, options)
+                }
+            }
+            for await (fieldID, options) in group {
+                results[fieldID] = options
+            }
+        }
+        return results
+    }
+
+    private func prefetchPeopleIfNeeded() {
+        guard let projectID = state.projectID else { return }
+        Task {
+            let options = await container.searchPeople(query: nil, projectID: projectID)
+            await MainActor.run {
+                updateUserFieldOptions(options)
+            }
+        }
+    }
+
+    private func searchPeople(query: String, fieldID: String) async {
+        guard let projectID = state.projectID else { return }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let options = await container.searchPeople(query: trimmed.isEmpty ? nil : trimmed, projectID: projectID)
+        await MainActor.run {
+            updateFieldOptions(fieldID: fieldID, options: options)
+        }
+    }
+
+    private func updateUserFieldOptions(_ options: [IssueFieldOption]) {
+        guard !options.isEmpty else { return }
+        for index in customFields.indices where customFields[index].kind.usesPeople {
+            customFields[index].options = options
+        }
+    }
+
+    private func updateFieldOptions(fieldID: String, options: [IssueFieldOption]) {
+        guard let index = customFields.firstIndex(where: { $0.id == fieldID }) else { return }
+        customFields[index].options = options
+    }
+
     private func issueContext(for project: IssueProject) -> IssueSummary {
         let nameCandidate = project.shortName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = (nameCandidate?.isEmpty == false) ? nameCandidate! : project.name
@@ -409,6 +645,49 @@ struct NewIssueDialog: View {
     }
 
     // MARK: - Actions
+
+    private func draftFieldBinding(for field: IssueField) -> Binding<IssueDraftFieldValue> {
+        Binding(
+            get: {
+                state.customFields.first(where: { $0.normalizedName == field.normalizedName })?.value ?? .none
+            },
+            set: { newValue in
+                updateDraftField(field, value: newValue)
+            }
+        )
+    }
+
+    private func updateDraftField(_ field: IssueField, value: IssueDraftFieldValue) {
+        let normalized = field.normalizedName
+        if value.isEmpty {
+            state.customFields.removeAll { $0.normalizedName == normalized }
+            return
+        }
+        let draftField = IssueDraftField(
+            name: field.name,
+            kind: field.kind,
+            allowsMultiple: field.allowsMultiple,
+            value: value
+        )
+        if let index = state.customFields.firstIndex(where: { $0.normalizedName == normalized }) {
+            state.customFields[index] = draftField
+        } else {
+            state.customFields.append(draftField)
+        }
+    }
+
+    private func normalizedCustomFields(from fields: [IssueDraftField]) -> [IssueDraftField] {
+        let excluded = excludedCustomFieldNames
+        var seen: Set<String> = []
+        var resolved: [IssueDraftField] = []
+        for field in fields where !field.value.isEmpty {
+            let normalized = field.normalizedName
+            guard !normalized.isEmpty, !excluded.contains(normalized) else { continue }
+            guard seen.insert(normalized).inserted else { continue }
+            resolved.append(field)
+        }
+        return resolved
+    }
 
     private func createIssue() {
         let trimmedTitle = state.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -424,6 +703,8 @@ struct NewIssueDialog: View {
                 value: .option(statusOption)
             ))
         }
+
+        customFields.append(contentsOf: normalizedCustomFields(from: state.customFields))
 
         let priority: IssuePriority
         if let priorityOption = state.priorityOption {

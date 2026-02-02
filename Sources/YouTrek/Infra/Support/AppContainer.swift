@@ -367,6 +367,9 @@ final class AppContainer: ObservableObject {
             if filtered != appState.issues {
                 appState.replaceIssues(with: filtered)
             }
+            if selection.isInbox {
+                appState.updateInboxFieldUsage(from: filtered)
+            }
             appState.setIssuesLoading(false)
             await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: shouldSeedInitialRead)
         } else {
@@ -435,6 +438,9 @@ final class AppContainer: ObservableObject {
         )
         if filtered != appState.issues {
             appState.replaceIssues(with: filtered)
+        }
+        if selection.isInbox {
+            appState.updateInboxFieldUsage(from: filtered)
         }
         appState.setIssuesLoading(false)
         await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: shouldSeedInitialRead)
