@@ -1,4 +1,4 @@
-- [ ] Reduce number of custom fields shown by default in issue details
+- [x] Reduce number of custom fields shown by default in issue details
 - [ ] Command pallete is not centered, it sticks to the bottom left
 - [ ] Make issue id in issue details bigger font and make it a link to the web. 
 - [ ] Render issue status color and issue priority icons in issue details the same way as in issue list. Then port same component to "new issue" dialog

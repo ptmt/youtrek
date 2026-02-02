@@ -19,6 +19,7 @@ struct IssueDetailView: View {
     @State private var attachmentError: String?
     @State private var lastIssueCopyTimestamp: Date?
     @State private var lastIssueCopiedID: String?
+    @State private var showsAllCustomFields: Bool = false
 
     var body: some View {
         ScrollView {
@@ -57,6 +58,7 @@ struct IssueDetailView: View {
             commentError = nil
             lastIssueCopyTimestamp = nil
             lastIssueCopiedID = nil
+            showsAllCustomFields = false
             isLoadingProjects = true
             defer { isLoadingProjects = false }
             projectOptions = await container.loadProjects()
@@ -116,10 +118,20 @@ struct IssueDetailView: View {
                 }
             }
             if !customFieldRows.isEmpty {
-                ForEach(customFieldRows) { field in
+                ForEach(visibleCustomFieldRows) { field in
                     metadataRow(systemImage: "square.grid.2x2") {
                         Text("\(field.name): \(field.values.joined(separator: ", "))")
                     }
+                }
+                if customFieldRows.count > IssueDetailMetrics.customFieldPreviewLimit {
+                    Button {
+                        showsAllCustomFields.toggle()
+                    } label: {
+                        metadataRow(systemImage: showsAllCustomFields ? "chevron.up" : "chevron.down") {
+                            Text(customFieldsToggleLabel)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -145,6 +157,20 @@ struct IssueDetailView: View {
         .sorted { left, right in
             left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
         }
+    }
+
+    private var visibleCustomFieldRows: [IssueDetailCustomField] {
+        guard !showsAllCustomFields, customFieldRows.count > IssueDetailMetrics.customFieldPreviewLimit else {
+            return customFieldRows
+        }
+        return Array(customFieldRows.prefix(IssueDetailMetrics.customFieldPreviewLimit))
+    }
+
+    private var customFieldsToggleLabel: String {
+        if showsAllCustomFields {
+            return "Show fewer custom fields"
+        }
+        return "Show all \(customFieldRows.count) custom fields"
     }
 
     private func customFieldDisplayName(for key: String) -> String {
@@ -593,6 +619,7 @@ struct IssueDetailView: View {
 private enum IssueDetailMetrics {
     static let metadataIconSize: CGFloat = 22
     static let assigneeOptionAvatarSize: CGFloat = 20
+    static let customFieldPreviewLimit: Int = 3
 }
 
 private struct IssueDetailCustomField: Identifiable {
