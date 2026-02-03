@@ -120,6 +120,19 @@ actor IssueDraftStore {
         self.decoder = Self.makeDecoder()
     }
 
+    init(accountID: UUID?) {
+        if let accountID {
+            let suiteName = "\(Keys.drafts).\(accountID.uuidString)"
+            let resolvedDefaults = UserDefaults(suiteName: suiteName) ?? .standard
+            self.defaults = resolvedDefaults
+        } else {
+            self.defaults = .standard
+        }
+        self.encoder = Self.makeEncoder()
+        self.decoder = Self.makeDecoder()
+        Self.migrateLegacyDraftsIfNeeded(to: defaults)
+    }
+
     func saveDraft(_ draft: IssueDraft) -> IssueDraftRecord {
         var records = loadRecords()
         let record = IssueDraftRecord(draft: draft)
@@ -188,5 +201,13 @@ actor IssueDraftStore {
     private func persist(_ records: [IssueDraftRecord]) {
         guard let data = try? encoder.encode(records) else { return }
         defaults.set(data, forKey: Keys.drafts)
+    }
+
+    private static func migrateLegacyDraftsIfNeeded(to defaults: UserDefaults) {
+        guard defaults.data(forKey: Keys.drafts) == nil else { return }
+        let legacyDefaults = UserDefaults.standard
+        guard let legacyData = legacyDefaults.data(forKey: Keys.drafts) else { return }
+        defaults.set(legacyData, forKey: Keys.drafts)
+        legacyDefaults.removeObject(forKey: Keys.drafts)
     }
 }

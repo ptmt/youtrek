@@ -9,8 +9,8 @@ final class AppContainer: ObservableObject {
     let issueComposer: IssueComposer
     let commandPalette: CommandPaletteCoordinator
     let router: WindowRouter
-    let syncCoordinator: SyncCoordinator
-    let issueDraftStore: IssueDraftStore
+    var syncCoordinator: SyncCoordinator
+    var issueDraftStore: IssueDraftStore
     let authRepository: AuthRepository
     let networkMonitor: NetworkRequestMonitor
 
@@ -22,8 +22,8 @@ final class AppContainer: ObservableObject {
     private let projectRepositorySwitcher: SwitchableProjectRepository
     private let issueFieldRepositorySwitcher: SwitchableIssueFieldRepository
     private let peopleRepositorySwitcher: SwitchablePeopleRepository
-    private let boardLocalStore: IssueBoardLocalStore
-    private let savedQueryLocalStore: SavedQueryLocalStore
+    private var boardLocalStore: IssueBoardLocalStore
+    private var savedQueryLocalStore: SavedQueryLocalStore
     private var lastLoadedIssueQuery: IssueQuery?
     private var cachedProjects: [IssueProject] = []
     private var cachedSavedQueries: [SavedQuery] = []
@@ -35,6 +35,8 @@ final class AppContainer: ObservableObject {
     private var draftSaveTask: Task<Void, Never>?
     @Published private(set) var supportsBrowserAuth: Bool = false
     @Published private(set) var requiresSetup: Bool = true
+    @Published private(set) var accounts: [StoredAccount] = []
+    @Published private(set) var activeAccountID: UUID?
     private var oauthConfiguration: YouTrackOAuthConfiguration?
     private var oauthRepository: AppAuthRepository?
 
@@ -79,6 +81,7 @@ final class AppContainer: ObservableObject {
         self.appStateCancellable = appState.objectWillChange.sink { [weak self] in
             self?.objectWillChange.send()
         }
+        refreshAccounts()
     }
 
     static let live: AppContainer = {
@@ -87,6 +90,7 @@ final class AppContainer: ObservableObject {
         let composer = IssueComposer()
         let palette = CommandPaletteCoordinator(router: router, appState: state)
         let configurationStore = AppConfigurationStore()
+        let activeAccountID = configurationStore.activeAccountID()
         state.setCurrentUserProfile(
             displayName: configurationStore.loadUserDisplayName(),
             login: configurationStore.loadUserLogin(),
@@ -99,7 +103,7 @@ final class AppContainer: ObservableObject {
             boards: initialSyncState.boards,
             savedSearches: initialSyncState.savedSearches
         )
-        let draftStore = IssueDraftStore()
+        let draftStore = IssueDraftStore(accountID: activeAccountID)
         let networkMonitor = NetworkRequestMonitor()
         let initialRequiresSetup = AppContainer.requiresSetupOnLaunch(configurationStore: configurationStore)
         let manualAuth = ManualTokenAuthRepository(configurationStore: configurationStore)
@@ -110,8 +114,9 @@ final class AppContainer: ObservableObject {
         let projectSwitcher = SwitchableProjectRepository(initial: EmptyProjectRepository())
         let fieldSwitcher = SwitchableIssueFieldRepository(initial: EmptyIssueFieldRepository())
         let peopleSwitcher = SwitchablePeopleRepository(initial: EmptyPeopleRepository())
-        let boardStore = IssueBoardLocalStore()
-        let savedQueryStore = SavedQueryLocalStore()
+        let boardStore = IssueBoardLocalStore(accountID: activeAccountID)
+        let savedQueryStore = SavedQueryLocalStore(accountID: activeAccountID)
+        let issueLocalStore = IssueLocalStore(accountID: activeAccountID)
         let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
             await MainActor.run {
                 state?.updateSyncActivity(isSyncing: pendingCount > 0, label: label)
@@ -119,6 +124,7 @@ final class AppContainer: ObservableObject {
         }
         let sync = SyncCoordinator(
             issueRepository: issueSwitcher,
+            localStore: issueLocalStore,
             operationQueue: syncQueue,
             conflictHandler: { [weak state] conflict in
                 await MainActor.run {
@@ -159,7 +165,8 @@ final class AppContainer: ObservableObject {
         let authRepository = PreviewAuthRepository()
         let issueRepository = PreviewIssueRepository()
         let store = AppConfigurationStore()
-        let draftStore = IssueDraftStore()
+        let activeAccountID = store.activeAccountID()
+        let draftStore = IssueDraftStore(accountID: activeAccountID)
         let networkMonitor = NetworkRequestMonitor()
         let authSwitcher = SwitchableAuthRepository(initial: authRepository)
         let issueSwitcher = SwitchableIssueRepository(initial: issueRepository)
@@ -168,8 +175,9 @@ final class AppContainer: ObservableObject {
         let projectSwitcher = SwitchableProjectRepository(initial: PreviewProjectRepository())
         let fieldSwitcher = SwitchableIssueFieldRepository(initial: PreviewIssueFieldRepository())
         let peopleSwitcher = SwitchablePeopleRepository(initial: PreviewPeopleRepository())
-        let boardStore = IssueBoardLocalStore()
-        let savedQueryStore = SavedQueryLocalStore()
+        let boardStore = IssueBoardLocalStore(accountID: activeAccountID)
+        let savedQueryStore = SavedQueryLocalStore(accountID: activeAccountID)
+        let issueLocalStore = IssueLocalStore(accountID: activeAccountID)
         let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
             await MainActor.run {
                 state?.updateSyncActivity(isSyncing: pendingCount > 0, label: label)
@@ -177,6 +185,7 @@ final class AppContainer: ObservableObject {
         }
         let sync = SyncCoordinator(
             issueRepository: issueSwitcher,
+            localStore: issueLocalStore,
             operationQueue: syncQueue,
             conflictHandler: { [weak state] conflict in
                 await MainActor.run {
@@ -253,6 +262,94 @@ final class AppContainer: ObservableObject {
             LoggingService.sync.info("Bootstrap: refreshing sidebar data.")
             await self.refreshSidebarData()
         }
+    }
+
+    func switchAccount(to id: UUID) async {
+        guard configurationStore.activateAccount(id: id) else { return }
+        refreshAccounts()
+        configureStores(for: id)
+        resetStateForAccountSwitch()
+        let initialSyncState = configurationStore.loadInitialSyncState()
+        appState.prefillInitialSyncState(
+            issues: initialSyncState.issues,
+            boards: initialSyncState.boards,
+            savedSearches: initialSyncState.savedSearches
+        )
+        appState.setCurrentUserProfile(
+            displayName: configurationStore.loadUserDisplayName(),
+            login: configurationStore.loadUserLogin(),
+            id: configurationStore.loadUserID()
+        )
+        await configureIfNeeded()
+    }
+
+    func startAddingAccount() {
+        resetStateForAccountSwitch()
+        requiresSetup = true
+    }
+
+    private func refreshAccounts() {
+        let loaded = configurationStore.loadAccounts()
+        let sorted = loaded.sorted(by: sortAccounts)
+        accounts = sorted
+        activeAccountID = configurationStore.activeAccountID()
+    }
+
+    private func sortAccounts(_ lhs: StoredAccount, _ rhs: StoredAccount) -> Bool {
+        let lhsDate = lhs.lastUsedAt ?? lhs.createdAt
+        let rhsDate = rhs.lastUsedAt ?? rhs.createdAt
+        if lhsDate != rhsDate { return lhsDate > rhsDate }
+        return lhs.displayTitle < rhs.displayTitle
+    }
+
+    private func configureStores(for accountID: UUID?) {
+        issueDraftStore = IssueDraftStore(accountID: accountID)
+        boardLocalStore = IssueBoardLocalStore(accountID: accountID)
+        savedQueryLocalStore = SavedQueryLocalStore(accountID: accountID)
+        let issueLocalStore = IssueLocalStore(accountID: accountID)
+        let syncQueue = SyncOperationQueue { [weak appState] pendingCount, label in
+            await MainActor.run {
+                appState?.updateSyncActivity(isSyncing: pendingCount > 0, label: label)
+            }
+        }
+        syncCoordinator = SyncCoordinator(
+            issueRepository: issueRepositorySwitcher,
+            localStore: issueLocalStore,
+            operationQueue: syncQueue,
+            conflictHandler: { [weak appState] conflict in
+                await MainActor.run {
+                    appState?.presentConflict(conflict)
+                }
+            }
+        )
+    }
+
+    private func resetStateForAccountSwitch() {
+        draftSaveTask?.cancel()
+        draftSaveTask = nil
+        issueComposer.resetDraft()
+        appState.updateSyncActivity(isSyncing: false, label: nil)
+        appState.updateSearch(query: "")
+        appState.activeConflict = nil
+        appState.activeNewIssueDialog = nil
+        appState.activeCommandPalette = nil
+        appState.replaceIssues(with: [])
+        appState.resetIssueSeenUpdates()
+        appState.resetIssueDetails()
+        appState.selectedIssue = nil
+        appState.selectedIssueIDs = []
+        appState.setDrafts([])
+        appState.selectedDraftID = nil
+        appState.resetBoardSyncState()
+        appState.resetInitialSyncState()
+        appState.updateSidebar(sections: [], preferredSelectionID: nil)
+        appState.setIssuesLoading(false)
+        appState.updateInboxFieldUsage(from: [])
+        lastLoadedIssueQuery = nil
+        statusOptionsCache.removeAll()
+        priorityOptionsCache.removeAll()
+        cachedSavedQueries = []
+        cachedBoards = []
     }
 
     private func recordIssueSyncCompleted() {
@@ -964,7 +1061,6 @@ final class AppContainer: ObservableObject {
                     shouldResetInitialSyncState: false
                 )
                 try await authRepository.signIn()
-                self.updateUserProfile(from: self.authRepository.currentAccount)
                 await self.applyOAuth(
                     configuration: configuration,
                     configureRepositories: true,
@@ -979,8 +1075,7 @@ final class AppContainer: ObservableObject {
     }
 
     func signOut() async {
-        await signOutAndClearLocalState()
-        requiresSetup = true
+        await signOutAndClearLocalState(removeAccount: true)
     }
 
     func resyncWorkspace() async {
@@ -989,11 +1084,11 @@ final class AppContainer: ObservableObject {
 
     func cancelInitialSync() async {
         LoggingService.sync.info("Initial sync: cancel requested.")
-        await signOutAndClearLocalState()
-        requiresSetup = true
+        await signOutAndClearLocalState(removeAccount: true)
     }
 
-    private func signOutAndClearLocalState() async {
+    private func signOutAndClearLocalState(removeAccount: Bool) async {
+        let previousAccountID = configurationStore.activeAccountID()
         do {
             try await authRepository.signOut()
         } catch {
@@ -1004,30 +1099,32 @@ final class AppContainer: ObservableObject {
         await boardLocalStore.clearCache()
         await savedQueryLocalStore.clearCache()
 
-        configurationStore.clearBaseURL()
-        configurationStore.clearUserDisplayName()
-        configurationStore.clearUserLogin()
-        configurationStore.clearUserID()
-        configurationStore.clearLastSidebarSelectionID()
+        if removeAccount, let previousAccountID {
+            _ = configurationStore.removeAccount(id: previousAccountID)
+        }
 
+        refreshAccounts()
+        resetStateForAccountSwitch()
         appState.setCurrentUserProfile(displayName: nil, login: nil, id: nil)
-        appState.updateSyncActivity(isSyncing: false, label: nil)
-        resetInitialSyncState()
-        appState.resetBoardSyncState()
-        appState.updateSearch(query: "")
-        appState.activeConflict = nil
-        appState.replaceIssues(with: [])
-        appState.resetIssueSeenUpdates()
-        appState.resetIssueDetails()
-        appState.selectedIssue = nil
-        appState.selectedIssueIDs = []
-        appState.updateSidebar(sections: [], preferredSelectionID: nil)
-        appState.setIssuesLoading(false)
-        lastLoadedIssueQuery = nil
-        statusOptionsCache.removeAll()
-        priorityOptionsCache.removeAll()
-        cachedSavedQueries = []
-        cachedBoards = []
+        appState.resetInitialSyncState()
+
+        guard let nextAccountID = configurationStore.activeAccountID(), nextAccountID != previousAccountID else {
+            requiresSetup = true
+            return
+        }
+        configureStores(for: nextAccountID)
+        let initialSyncState = configurationStore.loadInitialSyncState()
+        appState.prefillInitialSyncState(
+            issues: initialSyncState.issues,
+            boards: initialSyncState.boards,
+            savedSearches: initialSyncState.savedSearches
+        )
+        appState.setCurrentUserProfile(
+            displayName: configurationStore.loadUserDisplayName(),
+            login: configurationStore.loadUserLogin(),
+            id: configurationStore.loadUserID()
+        )
+        await configureIfNeeded()
     }
 
     func validateManualToken(baseURL: URL, token: String) async throws -> YouTrackTokenValidationUser {
@@ -1053,14 +1150,24 @@ final class AppContainer: ObservableObject {
         token: String,
         userProfile: YouTrackTokenValidationUser? = nil,
         allowKeychainInteraction: Bool = false,
-        shouldResetInitialSyncState: Bool = true
+        shouldResetInitialSyncState: Bool = true,
+        shouldBootstrap: Bool = true
     ) async -> ManualTokenSaveOutcome {
         let apiBaseURL = Self.apiBaseURL(from: baseURL)
 
         if shouldResetInitialSyncState {
             resetInitialSyncState()
         }
-        configurationStore.save(baseURL: apiBaseURL)
+        let account = configurationStore.upsertAccount(
+            baseURL: apiBaseURL,
+            authMethod: .token,
+            displayName: userProfile?.displayName,
+            login: userProfile?.login,
+            userID: userProfile?.id,
+            allowBaseURLOnlyMatch: true
+        )
+        refreshAccounts()
+        configureStores(for: account.id)
         let manualAuth = ManualTokenAuthRepository(configurationStore: configurationStore)
         var tokenSaved = true
         var tokenSaveError: String?
@@ -1075,6 +1182,7 @@ final class AppContainer: ObservableObject {
 
         authRepositorySwitcher.replace(with: manualAuth)
         storeUserProfile(userProfile)
+        refreshAccounts()
 
         let tokenProvider = YouTrackAPITokenProvider {
             try await manualAuth.currentAccessToken()
@@ -1096,7 +1204,9 @@ final class AppContainer: ObservableObject {
         await MainActor.run {
             requiresSetup = false
         }
-        await bootstrap()
+        if shouldBootstrap {
+            await bootstrap()
+        }
         return ManualTokenSaveOutcome(saved: tokenSaved, errorMessage: tokenSaveError)
     }
 
@@ -1105,11 +1215,22 @@ final class AppContainer: ObservableObject {
     }
 
     func setBaseURL(_ url: URL) {
-        configurationStore.save(baseURL: url)
+        let apiBaseURL = Self.apiBaseURL(from: url)
+        _ = configurationStore.upsertAccount(
+            baseURL: apiBaseURL,
+            authMethod: .oauth,
+            allowBaseURLOnlyMatch: true
+        )
+        refreshAccounts()
     }
 
     func recordSidebarSelection(_ selection: SidebarItem) {
         configurationStore.saveLastSidebarSelectionID(selection.id)
+    }
+
+    var activeAccount: StoredAccount? {
+        guard let activeID = activeAccountID else { return nil }
+        return accounts.first { $0.id == activeID }
     }
 
     var browserAuthAvailable: Bool {
@@ -1121,6 +1242,7 @@ final class AppContainer: ObservableObject {
         if let trimmed, !trimmed.isEmpty {
             configurationStore.saveUserDisplayName(trimmed)
         }
+        refreshAccounts()
         appState.setCurrentUserProfile(
             displayName: configurationStore.loadUserDisplayName(),
             login: configurationStore.loadUserLogin(),
@@ -1145,6 +1267,7 @@ final class AppContainer: ObservableObject {
            !id.isEmpty {
             configurationStore.saveUserID(id)
         }
+        refreshAccounts()
         appState.setCurrentUserProfile(
             displayName: configurationStore.loadUserDisplayName(),
             login: configurationStore.loadUserLogin(),
@@ -1181,51 +1304,72 @@ final class AppContainer: ObservableObject {
     }
 
     private func configureIfNeeded() async {
+        refreshAccounts()
+        let activeAccount = configurationStore.activeAccount()
         let oauthConfiguration = try? YouTrackOAuthConfiguration.loadFromEnvironment()
         let hasOAuthState = oauthConfiguration != nil && AppAuthRepository.hasSavedAuthState()
+        supportsBrowserAuth = oauthConfiguration != nil
 
-        if let oauthConfiguration {
-            LoggingService.sync.info("Configuration: OAuth environment detected.")
+        if let activeAccount {
+            configureStores(for: activeAccount.id)
+            switch activeAccount.authMethod {
+            case .oauth:
+                guard let oauthConfiguration else {
+                    requiresSetup = true
+                    return
+                }
+                LoggingService.sync.info("Configuration: OAuth environment detected.")
+                await applyOAuth(
+                    configuration: oauthConfiguration,
+                    configureRepositories: hasOAuthState,
+                    shouldResetInitialSyncState: false
+                )
+                if hasOAuthState, authRepository.currentAccount != nil {
+                    await bootstrap()
+                    return
+                }
+            case .token:
+                let baseURL = configurationStore.loadBaseURL()
+                var token = configurationStore.loadToken()
+                if token == nil, baseURL != nil {
+                    token = await MainActor.run {
+                        configurationStore.loadToken(allowInteraction: true)
+                    }
+                }
+
+                if let baseURL, let token, !token.isEmpty {
+                    let needsProfile = configurationStore.loadUserDisplayName() == nil
+                        || configurationStore.loadUserLogin() == nil
+                        || configurationStore.loadUserID() == nil
+                    let userProfile: YouTrackTokenValidationUser?
+                    if needsProfile {
+                        LoggingService.sync.info("Configuration: stored token found, validating user profile.")
+                        userProfile = try? await validateManualToken(baseURL: baseURL, token: token)
+                    } else {
+                        userProfile = nil
+                    }
+                    LoggingService.sync.info("Configuration: stored token found, bootstrapping.")
+                    _ = await completeManualSetup(
+                        baseURL: baseURL,
+                        token: token,
+                        userProfile: userProfile,
+                        shouldResetInitialSyncState: false,
+                        shouldBootstrap: true
+                    )
+                    return
+                }
+            }
+        } else if let oauthConfiguration, hasOAuthState {
+            LoggingService.sync.info("Configuration: OAuth state detected without account, restoring.")
             await applyOAuth(
                 configuration: oauthConfiguration,
-                configureRepositories: hasOAuthState,
+                configureRepositories: true,
                 shouldResetInitialSyncState: false
             )
-            if hasOAuthState, authRepository.currentAccount != nil {
+            if authRepository.currentAccount != nil {
                 await bootstrap()
                 return
             }
-        } else {
-            supportsBrowserAuth = false
-        }
-
-        let baseURL = configurationStore.loadBaseURL()
-        var token = configurationStore.loadToken()
-        if token == nil, baseURL != nil {
-            token = await MainActor.run {
-                configurationStore.loadToken(allowInteraction: true)
-            }
-        }
-
-        if let baseURL, let token, !token.isEmpty {
-            let needsProfile = configurationStore.loadUserDisplayName() == nil
-                || configurationStore.loadUserLogin() == nil
-                || configurationStore.loadUserID() == nil
-            let userProfile: YouTrackTokenValidationUser?
-            if needsProfile {
-                LoggingService.sync.info("Configuration: stored token found, validating user profile.")
-                userProfile = try? await validateManualToken(baseURL: baseURL, token: token)
-            } else {
-                userProfile = nil
-            }
-            LoggingService.sync.info("Configuration: stored token found, bootstrapping.")
-            _ = await completeManualSetup(
-                baseURL: baseURL,
-                token: token,
-                userProfile: userProfile,
-                shouldResetInitialSyncState: false
-            )
-            return
         }
 
         if oauthConfiguration != nil {
@@ -1254,15 +1398,26 @@ final class AppContainer: ObservableObject {
         )
         oauthRepository = appAuthRepository
         authRepositorySwitcher.replace(with: appAuthRepository)
-        updateUserProfile(from: appAuthRepository.currentAccount)
         supportsBrowserAuth = true
         requiresSetup = appAuthRepository.currentAccount == nil
 
-        guard configureRepositories, appAuthRepository.currentAccount != nil else {
+        guard configureRepositories, let currentAccount = appAuthRepository.currentAccount else {
+            updateUserProfile(from: appAuthRepository.currentAccount)
             LoggingService.sync.info("OAuth: configured sign-in repository, awaiting authentication.")
             return
         }
 
+        let storedAccount = configurationStore.upsertAccount(
+            baseURL: configuration.apiBaseURL,
+            authMethod: .oauth,
+            displayName: currentAccount.displayName,
+            login: nil,
+            userID: currentAccount.id.uuidString,
+            allowBaseURLOnlyMatch: true
+        )
+        refreshAccounts()
+        configureStores(for: storedAccount.id)
+        updateUserProfile(from: appAuthRepository.currentAccount)
         LoggingService.sync.info("OAuth: configuring repositories.")
         let tokenProvider = YouTrackAPITokenProvider { try await appAuthRepository.currentAccessToken() }
         let apiConfiguration = YouTrackAPIConfiguration(baseURL: configuration.apiBaseURL, tokenProvider: tokenProvider)
@@ -1278,6 +1433,7 @@ final class AppContainer: ObservableObject {
         await projectRepositorySwitcher.replace(with: projectRepository)
         await issueFieldRepositorySwitcher.replace(with: fieldRepository)
         await peopleRepositorySwitcher.replace(with: peopleRepository)
+        requiresSetup = false
     }
 }
 
@@ -1321,6 +1477,16 @@ private extension AppContainer {
     }
 
     static func requiresSetupOnLaunch(configurationStore: AppConfigurationStore) -> Bool {
+        if let activeAccount = configurationStore.activeAccount() {
+            switch activeAccount.authMethod {
+            case .oauth:
+                return !AppAuthRepository.hasSavedAuthState()
+            case .token:
+                return configurationStore.loadBaseURL() == nil ||
+                    (configurationStore.loadToken()?.isEmpty != false)
+            }
+        }
+
         let hasManualToken = configurationStore.loadBaseURL() != nil &&
             (configurationStore.loadToken()?.isEmpty == false)
 

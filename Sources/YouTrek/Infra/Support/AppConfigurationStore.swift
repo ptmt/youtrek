@@ -2,6 +2,8 @@ import Foundation
 
 struct AppConfigurationStore {
     private enum Keys {
+        static let accounts = "com.potomushto.youtrek.config.accounts"
+        static let activeAccountID = "com.potomushto.youtrek.config.active-account-id"
         static let baseURL = "com.potomushto.youtrek.config.base-url"
         static let tokenAccount = "com.potomushto.youtrek.config.token"
         static let lastSidebarSelectionID = "com.potomushto.youtrek.config.last-sidebar-selection"
@@ -34,6 +36,7 @@ struct AppConfigurationStore {
     ) {
         self.defaults = defaults
         self.keychain = keychain
+        migrateLegacyAccountsIfNeeded()
     }
 
     private static func defaultDefaults() -> UserDefaults {
@@ -70,21 +73,157 @@ struct AppConfigurationStore {
            !selection.isEmpty {
             target.set(selection, forKey: Keys.lastSidebarSelectionID)
         }
+        if target.object(forKey: Keys.initialIssueSyncCompleted) == nil,
+           let value = source.object(forKey: Keys.initialIssueSyncCompleted) as? Bool {
+            target.set(value, forKey: Keys.initialIssueSyncCompleted)
+        }
+        if target.object(forKey: Keys.initialBoardSyncCompleted) == nil,
+           let value = source.object(forKey: Keys.initialBoardSyncCompleted) as? Bool {
+            target.set(value, forKey: Keys.initialBoardSyncCompleted)
+        }
+        if target.object(forKey: Keys.initialSavedSearchSyncCompleted) == nil,
+           let value = source.object(forKey: Keys.initialSavedSearchSyncCompleted) as? Bool {
+            target.set(value, forKey: Keys.initialSavedSearchSyncCompleted)
+        }
+    }
+
+    func loadAccounts() -> [StoredAccount] {
+        migrateLegacyAccountsIfNeeded()
+        let accounts = loadStoredAccounts()
+        _ = ensureActiveAccountID(in: accounts)
+        return accounts
+    }
+
+    func activeAccountID() -> UUID? {
+        migrateLegacyAccountsIfNeeded()
+        let accounts = loadStoredAccounts()
+        return ensureActiveAccountID(in: accounts)
+    }
+
+    func activeAccount() -> StoredAccount? {
+        let accounts = loadAccounts()
+        guard let activeID = activeAccountID() else { return nil }
+        return accounts.first { $0.id == activeID }
+    }
+
+    @discardableResult
+    func activateAccount(id: UUID) -> Bool {
+        migrateLegacyAccountsIfNeeded()
+        var accounts = loadStoredAccounts()
+        guard let index = accounts.firstIndex(where: { $0.id == id }) else { return false }
+        accounts[index].lastUsedAt = Date()
+        saveStoredAccounts(accounts)
+        defaults.set(id.uuidString, forKey: Keys.activeAccountID)
+        return true
+    }
+
+    func setActiveAccountID(_ id: UUID?) {
+        guard let id else {
+            defaults.removeObject(forKey: Keys.activeAccountID)
+            return
+        }
+        _ = activateAccount(id: id)
+    }
+
+    @discardableResult
+    func upsertAccount(
+        baseURL: URL,
+        authMethod: StoredAccount.AuthMethod,
+        displayName: String? = nil,
+        login: String? = nil,
+        userID: String? = nil,
+        allowBaseURLOnlyMatch: Bool = false
+    ) -> StoredAccount {
+        migrateLegacyAccountsIfNeeded()
+        var accounts = loadStoredAccounts()
+        let normalizedBaseURL = normalizeBaseURL(baseURL)
+        let trimmedLogin = login?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedUserID = userID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let index = matchAccountIndex(
+            in: accounts,
+            baseURL: normalizedBaseURL,
+            userID: trimmedUserID,
+            login: trimmedLogin,
+            allowBaseURLOnlyMatch: allowBaseURLOnlyMatch
+        )
+
+        let now = Date()
+        let resolvedAccount: StoredAccount
+        if let index {
+            var account = accounts[index]
+            account.baseURL = normalizedBaseURL
+            if let name = displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                account.displayName = name
+            }
+            if let login = trimmedLogin, !login.isEmpty {
+                account.login = login
+            }
+            if let userID = trimmedUserID, !userID.isEmpty {
+                account.userID = userID
+            }
+            account.authMethod = authMethod
+            account.lastUsedAt = now
+            accounts[index] = account
+            resolvedAccount = account
+        } else {
+            let account = StoredAccount(
+                baseURL: normalizedBaseURL,
+                displayName: displayName,
+                login: trimmedLogin,
+                userID: trimmedUserID,
+                authMethod: authMethod,
+                createdAt: now,
+                lastUsedAt: now
+            )
+            accounts.append(account)
+            resolvedAccount = account
+        }
+
+        saveStoredAccounts(accounts)
+        defaults.set(resolvedAccount.id.uuidString, forKey: Keys.activeAccountID)
+        return resolvedAccount
+    }
+
+    @discardableResult
+    func removeAccount(id: UUID) -> UUID? {
+        migrateLegacyAccountsIfNeeded()
+        var accounts = loadStoredAccounts()
+        accounts.removeAll { $0.id == id }
+        saveStoredAccounts(accounts)
+        guard !accounts.isEmpty else {
+            defaults.removeObject(forKey: Keys.activeAccountID)
+            return nil
+        }
+        let next = accounts.sorted(by: accountSortPredicate).first
+        if let next {
+            defaults.set(next.id.uuidString, forKey: Keys.activeAccountID)
+            return next.id
+        }
+        defaults.removeObject(forKey: Keys.activeAccountID)
+        return nil
     }
 
     func loadBaseURL() -> URL? {
-        guard let stored = defaults.string(forKey: Keys.baseURL), !stored.isEmpty else {
+        guard let stored = activeAccount()?.baseURL, !stored.isEmpty else {
             return nil
         }
         return URL(string: stored)
     }
 
     func save(baseURL: URL) {
-        defaults.set(baseURL.absoluteString, forKey: Keys.baseURL)
+        if activeAccountID() == nil {
+            _ = upsertAccount(baseURL: baseURL, authMethod: .token, allowBaseURLOnlyMatch: true)
+            return
+        }
+        updateActiveAccount { account in
+            account.baseURL = normalizeBaseURL(baseURL)
+        }
     }
 
     func clearBaseURL() {
-        defaults.removeObject(forKey: Keys.baseURL)
+        updateActiveAccount { account in
+            account.baseURL = ""
+        }
     }
 
     func loadToken(allowInteraction: Bool = false) -> String? {
@@ -92,9 +231,11 @@ struct AppConfigurationStore {
     }
 
     func loadTokenResult(allowInteraction: Bool = false) -> (token: String?, error: String?) {
+        guard let accountID = activeAccountID() else { return (nil, nil) }
+        let tokenKey = tokenAccountKey(for: accountID)
         let tokenData: Data?
         do {
-            tokenData = try keychain.load(account: Keys.tokenAccount, allowInteraction: allowInteraction)
+            tokenData = try loadTokenData(account: tokenKey, allowInteraction: allowInteraction)
         } catch {
             let message = error.localizedDescription
             LoggingService.sync.error("Keychain: failed to load token (\(message, privacy: .public)).")
@@ -106,25 +247,12 @@ struct AppConfigurationStore {
             }
             return (token, nil)
         }
-        guard keychain.accessGroup != nil else { return (nil, nil) }
         do {
-            if let migrated = try loadFromAlternateAccessGroups(allowInteraction: allowInteraction) {
-                return (String(data: migrated, encoding: .utf8), nil)
-            }
-        } catch {
-            return (nil, error.localizedDescription)
-        }
-        do {
-            let legacyKeychain = KeychainStorage(
-                service: "com.potomushto.youtrek.config",
-                prefersDataProtectionKeychain: false
-            )
-            if let legacyData = try legacyKeychain.load(
-                account: Keys.tokenAccount,
-                allowInteraction: allowInteraction
-            ) {
-                try? keychain.save(data: legacyData, account: Keys.tokenAccount)
-                return (String(data: legacyData, encoding: .utf8), nil)
+            if let legacyData = try loadTokenData(account: Keys.tokenAccount, allowInteraction: allowInteraction) {
+                try? keychain.save(data: legacyData, account: tokenKey)
+                if let token = String(data: legacyData, encoding: .utf8) {
+                    return (token, nil)
+                }
             }
         } catch {
             let message = error.localizedDescription
@@ -135,100 +263,131 @@ struct AppConfigurationStore {
     }
 
     func save(token: String) throws {
+        guard let accountID = activeAccountID() else { return }
         let data = Data(token.utf8)
-        try keychain.save(data: data, account: Keys.tokenAccount)
+        let tokenKey = tokenAccountKey(for: accountID)
+        try keychain.save(data: data, account: tokenKey)
         if keychain.accessGroup != nil {
             try? KeychainStorage(
                 service: "com.potomushto.youtrek.config",
                 prefersDataProtectionKeychain: false
             )
-            .save(data: data, account: Keys.tokenAccount)
+            .save(data: data, account: tokenKey)
         }
     }
 
     func clearToken() throws {
-        try keychain.delete(account: Keys.tokenAccount)
+        guard let accountID = activeAccountID() else { return }
+        let tokenKey = tokenAccountKey(for: accountID)
+        try keychain.delete(account: tokenKey)
         if keychain.accessGroup != nil {
             try? KeychainStorage(
                 service: "com.potomushto.youtrek.config",
                 prefersDataProtectionKeychain: false
             )
-            .delete(account: Keys.tokenAccount)
+            .delete(account: tokenKey)
         }
     }
 
     func loadUserDisplayName() -> String? {
-        defaults.string(forKey: Keys.userDisplayName)
+        activeAccount()?.displayName
     }
 
     func saveUserDisplayName(_ name: String) {
-        defaults.set(name, forKey: Keys.userDisplayName)
+        updateActiveAccount { account in
+            account.displayName = name
+        }
     }
 
     func clearUserDisplayName() {
-        defaults.removeObject(forKey: Keys.userDisplayName)
+        updateActiveAccount { account in
+            account.displayName = nil
+        }
     }
 
     func loadUserLogin() -> String? {
-        defaults.string(forKey: Keys.userLogin)
+        activeAccount()?.login
     }
 
     func saveUserLogin(_ login: String) {
-        defaults.set(login, forKey: Keys.userLogin)
+        updateActiveAccount { account in
+            account.login = login
+        }
     }
 
     func clearUserLogin() {
-        defaults.removeObject(forKey: Keys.userLogin)
+        updateActiveAccount { account in
+            account.login = nil
+        }
     }
 
     func loadUserID() -> String? {
-        defaults.string(forKey: Keys.userID)
+        activeAccount()?.userID
     }
 
     func saveUserID(_ id: String) {
-        defaults.set(id, forKey: Keys.userID)
+        updateActiveAccount { account in
+            account.userID = id
+        }
     }
 
     func clearUserID() {
-        defaults.removeObject(forKey: Keys.userID)
+        updateActiveAccount { account in
+            account.userID = nil
+        }
     }
 
     func loadLastSidebarSelectionID() -> String? {
-        defaults.string(forKey: Keys.lastSidebarSelectionID)
+        activeAccount()?.lastSidebarSelectionID
     }
 
     func saveLastSidebarSelectionID(_ id: String) {
-        defaults.set(id, forKey: Keys.lastSidebarSelectionID)
+        updateActiveAccount { account in
+            account.lastSidebarSelectionID = id
+        }
     }
 
     func clearLastSidebarSelectionID() {
-        defaults.removeObject(forKey: Keys.lastSidebarSelectionID)
+        updateActiveAccount { account in
+            account.lastSidebarSelectionID = nil
+        }
     }
 
     func loadInitialSyncState() -> (issues: Bool, boards: Bool, savedSearches: Bool) {
-        (
-            issues: defaults.bool(forKey: Keys.initialIssueSyncCompleted),
-            boards: defaults.bool(forKey: Keys.initialBoardSyncCompleted),
-            savedSearches: defaults.bool(forKey: Keys.initialSavedSearchSyncCompleted)
+        guard let account = activeAccount() else {
+            return (issues: false, boards: false, savedSearches: false)
+        }
+        return (
+            issues: account.initialIssueSyncCompleted,
+            boards: account.initialBoardSyncCompleted,
+            savedSearches: account.initialSavedSearchSyncCompleted
         )
     }
 
     func saveInitialIssueSyncCompleted(_ value: Bool) {
-        defaults.set(value, forKey: Keys.initialIssueSyncCompleted)
+        updateActiveAccount { account in
+            account.initialIssueSyncCompleted = value
+        }
     }
 
     func saveInitialBoardSyncCompleted(_ value: Bool) {
-        defaults.set(value, forKey: Keys.initialBoardSyncCompleted)
+        updateActiveAccount { account in
+            account.initialBoardSyncCompleted = value
+        }
     }
 
     func saveInitialSavedSearchSyncCompleted(_ value: Bool) {
-        defaults.set(value, forKey: Keys.initialSavedSearchSyncCompleted)
+        updateActiveAccount { account in
+            account.initialSavedSearchSyncCompleted = value
+        }
     }
 
     func clearInitialSyncState() {
-        defaults.removeObject(forKey: Keys.initialIssueSyncCompleted)
-        defaults.removeObject(forKey: Keys.initialBoardSyncCompleted)
-        defaults.removeObject(forKey: Keys.initialSavedSearchSyncCompleted)
+        updateActiveAccount { account in
+            account.initialIssueSyncCompleted = false
+            account.initialBoardSyncCompleted = false
+            account.initialSavedSearchSyncCompleted = false
+        }
     }
 
     private static func resolveAccessGroup() -> String? {
@@ -255,6 +414,163 @@ struct AppConfigurationStore {
             }
         }
         return nil
+    }
+
+    private func loadFromAlternateAccessGroups(account: String, allowInteraction: Bool) throws -> Data? {
+        guard let currentGroup = keychain.accessGroup else { return nil }
+        let availableGroups = KeychainAccessGroupResolver.availableGroups()
+        let candidates = availableGroups.filter { $0 != currentGroup }
+        guard !candidates.isEmpty else { return nil }
+        for group in candidates {
+            let alternate = KeychainStorage(service: keychain.service, accessGroup: group)
+            if let data = try alternate.load(
+                account: account,
+                allowInteraction: allowInteraction
+            ) {
+                try? keychain.save(data: data, account: account)
+                return data
+            }
+        }
+        return nil
+    }
+
+    private func loadTokenData(account: String, allowInteraction: Bool) throws -> Data? {
+        if let data = try keychain.load(account: account, allowInteraction: allowInteraction) {
+            return data
+        }
+        if keychain.accessGroup != nil,
+           let migrated = try loadFromAlternateAccessGroups(account: account, allowInteraction: allowInteraction) {
+            return migrated
+        }
+        let legacyKeychain = KeychainStorage(
+            service: "com.potomushto.youtrek.config",
+            prefersDataProtectionKeychain: false
+        )
+        if let legacyData = try legacyKeychain.load(account: account, allowInteraction: allowInteraction) {
+            try? keychain.save(data: legacyData, account: account)
+            return legacyData
+        }
+        return nil
+    }
+
+    private func migrateLegacyAccountsIfNeeded() {
+        guard defaults.data(forKey: Keys.accounts) == nil else { return }
+
+        let legacyBaseURL = defaults.string(forKey: Keys.baseURL)
+        let legacyDisplayName = defaults.string(forKey: Keys.userDisplayName)
+        let legacyLogin = defaults.string(forKey: Keys.userLogin)
+        let legacyUserID = defaults.string(forKey: Keys.userID)
+        let legacySelection = defaults.string(forKey: Keys.lastSidebarSelectionID)
+        let legacyIssueSync = defaults.bool(forKey: Keys.initialIssueSyncCompleted)
+        let legacyBoardSync = defaults.bool(forKey: Keys.initialBoardSyncCompleted)
+        let legacySavedSync = defaults.bool(forKey: Keys.initialSavedSearchSyncCompleted)
+
+        let legacyDataExists = [legacyBaseURL, legacyDisplayName, legacyLogin, legacyUserID, legacySelection]
+            .contains { value in
+                guard let value else { return false }
+                return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+
+        let legacyTokenExists = (try? loadTokenData(account: Keys.tokenAccount, allowInteraction: false)) != nil
+        guard legacyDataExists || legacyTokenExists else { return }
+
+        let resolvedBaseURL = legacyBaseURL ?? ""
+        let account = StoredAccount(
+            baseURL: resolvedBaseURL,
+            displayName: legacyDisplayName,
+            login: legacyLogin,
+            userID: legacyUserID,
+            lastSidebarSelectionID: legacySelection,
+            initialIssueSyncCompleted: legacyIssueSync,
+            initialBoardSyncCompleted: legacyBoardSync,
+            initialSavedSearchSyncCompleted: legacySavedSync,
+            authMethod: .token,
+            createdAt: Date(),
+            lastUsedAt: Date()
+        )
+        saveStoredAccounts([account])
+        defaults.set(account.id.uuidString, forKey: Keys.activeAccountID)
+
+        if let legacyData = try? loadTokenData(account: Keys.tokenAccount, allowInteraction: false) {
+            try? keychain.save(data: legacyData, account: tokenAccountKey(for: account.id))
+        }
+    }
+
+    private func loadStoredAccounts() -> [StoredAccount] {
+        guard let data = defaults.data(forKey: Keys.accounts) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode([StoredAccount].self, from: data)) ?? []
+    }
+
+    private func saveStoredAccounts(_ accounts: [StoredAccount]) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = []
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(accounts) else { return }
+        defaults.set(data, forKey: Keys.accounts)
+    }
+
+    private func ensureActiveAccountID(in accounts: [StoredAccount]) -> UUID? {
+        if accounts.isEmpty {
+            defaults.removeObject(forKey: Keys.activeAccountID)
+            return nil
+        }
+        if let raw = defaults.string(forKey: Keys.activeAccountID),
+           let id = UUID(uuidString: raw),
+           accounts.contains(where: { $0.id == id }) {
+            return id
+        }
+        let sorted = accounts.sorted(by: accountSortPredicate)
+        guard let fallback = sorted.first else { return nil }
+        defaults.set(fallback.id.uuidString, forKey: Keys.activeAccountID)
+        return fallback.id
+    }
+
+    private func updateActiveAccount(_ update: (inout StoredAccount) -> Void) {
+        migrateLegacyAccountsIfNeeded()
+        var accounts = loadStoredAccounts()
+        guard let activeID = ensureActiveAccountID(in: accounts) else { return }
+        guard let index = accounts.firstIndex(where: { $0.id == activeID }) else { return }
+        update(&accounts[index])
+        accounts[index].lastUsedAt = Date()
+        saveStoredAccounts(accounts)
+    }
+
+    private func matchAccountIndex(
+        in accounts: [StoredAccount],
+        baseURL: String,
+        userID: String?,
+        login: String?,
+        allowBaseURLOnlyMatch: Bool
+    ) -> Int? {
+        if let userID, !userID.isEmpty {
+            return accounts.firstIndex(where: { $0.baseURL == baseURL && $0.userID == userID })
+        }
+        if let login, !login.isEmpty {
+            return accounts.firstIndex(where: { $0.baseURL == baseURL && $0.login == login })
+        }
+        guard allowBaseURLOnlyMatch else { return nil }
+        return accounts.firstIndex(where: { $0.baseURL == baseURL })
+    }
+
+    private func accountSortPredicate(_ lhs: StoredAccount, _ rhs: StoredAccount) -> Bool {
+        let lhsDate = lhs.lastUsedAt ?? lhs.createdAt
+        let rhsDate = rhs.lastUsedAt ?? rhs.createdAt
+        if lhsDate != rhsDate { return lhsDate > rhsDate }
+        return lhs.displayTitle < rhs.displayTitle
+    }
+
+    private func normalizeBaseURL(_ url: URL) -> String {
+        var resolved = url
+        if resolved.lastPathComponent.isEmpty {
+            resolved.deleteLastPathComponent()
+        }
+        return resolved.absoluteString
+    }
+
+    private func tokenAccountKey(for accountID: UUID) -> String {
+        "\(Keys.tokenAccount).\(accountID.uuidString)"
     }
 }
 

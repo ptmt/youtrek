@@ -1,5 +1,5 @@
 - [x] Reduce number of custom fields shown by default in issue details
-- [x] Command pallete is not centered, it sticks to the bottom left
+- [ ] Command pallete doesn't look like new issue dialog, it blends with the background. Implement it exactly as new issue dialog
 - [x] Make issue id in issue details bigger font and make it a link to the web. 
 - [x] Render issue status color and issue priority icons in issue details the same way as in issue list. Then port same component to "new issue" dialog
 - [x] On launch sidebar may disappear for a moment. Never allow that, it should be stable, identify the problem
@@ -7,4 +7,4 @@
 - [x] Make file attachments work in new issue creation
 - [x] Add support for markdown in comments too
 - [x] Make sure "create a token" link from setupwindow adapting to the cloud urls like https://potomushto.youtrack.cloud/users/me?tab=account-security
-- [ ] Add support for multi-account. Isolate everything in different database and allow switching account pressing on user avatar on the top left. In CLI allow switching too by choosing id of the account and allow listing of accounts. Also f
+- [x] Add support for multi-account. Isolate everything in different database and allow switching account pressing on user avatar on the top left. In CLI allow switching too by choosing id of the account and allow listing of accounts. Also f

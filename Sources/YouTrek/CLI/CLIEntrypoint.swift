@@ -86,6 +86,45 @@ private enum CLIRunner {
             }
             printAuthStatus()
             return 0
+        case "list":
+            if remaining.contains("--help") || remaining.contains("-h") {
+                CLIOutput.printAuthHelp()
+                return 0
+            }
+            let store = AppConfigurationStore()
+            let accounts = store.loadAccounts()
+            let activeID = store.activeAccountID()
+            CLIOutput.printAccounts(accounts, activeID: activeID)
+            return 0
+        case "switch":
+            let parsed = try parseOptions(
+                remaining,
+                valueOptions: ["--id"],
+                flagOptions: []
+            )
+            if parsed.flags.contains("--help") || parsed.flags.contains("-h") {
+                CLIOutput.printAuthHelp()
+                return 0
+            }
+            let rawID = parsed.options["--id"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !rawID.isEmpty else {
+                throw CLIError.missingArgument("--id")
+            }
+            guard let accountID = UUID(uuidString: rawID) else {
+                throw CLIError.invalidValue(option: "--id", value: rawID)
+            }
+            let store = AppConfigurationStore()
+            guard store.activateAccount(id: accountID) else {
+                throw CLIError.invalidValue(option: "--id", value: rawID)
+            }
+            let accounts = store.loadAccounts()
+            let activeAccount = accounts.first { $0.id == accountID }
+            if let activeAccount {
+                CLIOutput.printInfo("Switched to account \(activeAccount.displayTitle) (\(accountID.uuidString)).")
+            } else {
+                CLIOutput.printInfo("Switched to account \(accountID.uuidString).")
+            }
+            return 0
         case "login":
             if remaining.contains("--help") || remaining.contains("-h") {
                 CLIOutput.printAuthHelp()
@@ -104,12 +143,15 @@ private enum CLIRunner {
             let store = AppConfigurationStore()
             let baseURLOverride = parsed.options["--base-url"] ?? ProcessInfo.processInfo.environment["YOUTRACK_BASE_URL"]
             let baseURL = try resolveBaseURL(override: baseURLOverride, store: store, required: true)
-            if baseURLOverride != nil || store.loadBaseURL() == nil {
-                store.save(baseURL: baseURL)
-            }
+            let account = store.upsertAccount(
+                baseURL: baseURL,
+                authMethod: .token,
+                allowBaseURLOnlyMatch: true
+            )
             try store.save(token: token)
 
             CLIOutput.printInfo("Token saved. Base URL: \(baseURL.absoluteString)")
+            CLIOutput.printInfo("Account ID: \(account.id.uuidString)")
             await performInitialSync(baseURL: baseURL, token: token)
             return 0
         default:
@@ -119,6 +161,9 @@ private enum CLIRunner {
 
     private static func printAuthStatus() {
         let store = AppConfigurationStore()
+        let accounts = store.loadAccounts()
+        let activeID = store.activeAccountID()
+        let activeAccount = accounts.first { $0.id == activeID }
         let baseURL = store.loadBaseURL()?.absoluteString ?? "(not set)"
         let token = store.loadToken()
 
@@ -127,6 +172,14 @@ private enum CLIRunner {
             CLIOutput.printInfo("Signed in via token (****\(suffix)).")
         } else {
             CLIOutput.printInfo("Not signed in. Run: youtrek auth login --base-url <url> --token <pat>")
+        }
+        if let activeAccount {
+            CLIOutput.printInfo("Active account: \(activeAccount.displayTitle) (\(activeAccount.id.uuidString))")
+        } else if !accounts.isEmpty {
+            CLIOutput.printInfo("Active account: (not set)")
+        }
+        if !accounts.isEmpty {
+            CLIOutput.printInfo("Accounts: \(accounts.count) (use `youtrek auth list`)")
         }
         CLIOutput.printInfo("Base URL: \(baseURL)")
     }
@@ -210,7 +263,8 @@ private enum CLIRunner {
             }
 
             if parsed.flags.contains("--offline") {
-                let store = IssueLocalStore()
+                let accountID = AppConfigurationStore().activeAccountID()
+                let store = IssueLocalStore(accountID: accountID)
                 let issues = await store.loadIssues(for: query)
                 if parsed.flags.contains("--json") {
                     let output = issues.map { IssueSummaryOutput(issue: $0) }
@@ -224,7 +278,8 @@ private enum CLIRunner {
             let connection = try resolveConnection(options: parsed)
             let issueRepository = YouTrackIssueRepository(configuration: connection.configuration)
             let issues = try await issueRepository.fetchIssues(query: query)
-            let store = IssueLocalStore()
+            let accountID = AppConfigurationStore().activeAccountID()
+            let store = IssueLocalStore(accountID: accountID)
             await store.saveRemoteIssues(
                 issues,
                 for: query,
@@ -341,7 +396,8 @@ private enum CLIRunner {
             }
 
             if parsed.flags.contains("--offline") {
-                let store = IssueBoardLocalStore()
+                let accountID = AppConfigurationStore().activeAccountID()
+                let store = IssueBoardLocalStore(accountID: accountID)
                 let boards = await store.loadBoards()
                 let filtered = parsed.flags.contains("--favorites") ? boards.filter(\.isFavorite) : boards
                 if parsed.flags.contains("--json") {
@@ -356,7 +412,8 @@ private enum CLIRunner {
             let connection = try resolveConnection(options: parsed)
             let repository = YouTrackIssueBoardRepository(configuration: connection.configuration)
             let boards = try await repository.fetchBoards()
-            let store = IssueBoardLocalStore()
+            let accountID = AppConfigurationStore().activeAccountID()
+            let store = IssueBoardLocalStore(accountID: accountID)
             await store.saveRemoteBoards(boards)
 
             let filtered = parsed.flags.contains("--favorites") ? boards.filter(\.isFavorite) : boards
@@ -569,8 +626,9 @@ private enum CLIRunner {
         let issueRepository = YouTrackIssueRepository(configuration: configuration)
         let boardRepository = YouTrackIssueBoardRepository(configuration: configuration)
         let savedQueryRepository = YouTrackSavedQueryRepository(configuration: configuration)
-        let issueStore = IssueLocalStore()
-        let boardStore = IssueBoardLocalStore()
+        let accountID = AppConfigurationStore().activeAccountID()
+        let issueStore = IssueLocalStore(accountID: accountID)
+        let boardStore = IssueBoardLocalStore(accountID: accountID)
         let totalSteps = 3
 
         CLIOutput.printInfo("Starting initial sync (1/\(totalSteps)): issues")
@@ -695,6 +753,8 @@ private struct CLIOutput {
             Commands:
               auth status
               auth login --base-url <url> --token <pat>
+              auth list
+              auth switch --id <uuid>
               issues list [--query <ytql>] [--saved <name>] [--top <n>] [--offline] [--json]
               issues comment --id <id> --text <text> [--json]
               issues statuses --project <id|shortName|name> [--fields <fields>]
@@ -715,6 +775,8 @@ private struct CLIOutput {
             Auth commands:
               youtrek auth status
               youtrek auth login --base-url <url> --token <pat>
+              youtrek auth list
+              youtrek auth switch --id <uuid>
             """
         )
     }
@@ -774,6 +836,24 @@ private struct CLIOutput {
 
     static func printError(_ message: String) {
         fputs("error: \(message)\n", stderr)
+    }
+
+    static func printAccounts(_ accounts: [StoredAccount], activeID: UUID?) {
+        if accounts.isEmpty {
+            print("No accounts configured.")
+            return
+        }
+
+        let rows = accounts.map { account in
+            [
+                account.id.uuidString,
+                account.displayTitle,
+                account.baseURL,
+                account.id == activeID ? "Yes" : ""
+            ]
+        }
+
+        printTable(headers: ["ID", "Name", "Base URL", "Active"], rows: rows)
     }
 
     static func printIssues(_ issues: [IssueSummary]) {

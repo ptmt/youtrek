@@ -55,6 +55,7 @@
 		AE532ADB1F8E36F39E0B6FFF /* LoggingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E846A3202CA8FD93450D72F /* LoggingService.swift */; };
 		B11B22C33D44E55F66778899 /* IssueBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11B22C33D44E55F66778899 /* IssueBoard.swift */; };
 		B1F0E1B28F16D4C39B3F8A01 /* AppConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A00 /* AppConfigurationStore.swift */; };
+		C8E2D3F4A5B6C7D8E9F0A112 /* StoredAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D1C9A2F3E4B5C6D7E8F901 /* StoredAccount.swift */; };
 		B1F0E1B28F16D4C39B3F8A03 /* SwitchableRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A02 /* SwitchableRepositories.swift */; };
 		B1F0E1B28F16D4C39B3F8A05 /* ManualTokenAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A04 /* ManualTokenAuthRepository.swift */; };
 		B1F0E1B28F16D4C39B3F8A07 /* SetupWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A06 /* SetupWindow.swift */; };
@@ -127,6 +128,7 @@
 		A11B22C33D44E55F66778899 /* IssueBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueBoard.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5C /* IssueBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueBoardView.swift; sourceTree = "<group>"; };
 		A1F0E1B28F16D4C39B3F8A00 /* AppConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfigurationStore.swift; sourceTree = "<group>"; };
+		B7D1C9A2F3E4B5C6D7E8F901 /* StoredAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoredAccount.swift; sourceTree = "<group>"; };
 		A1F0E1B28F16D4C39B3F8A02 /* SwitchableRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitchableRepositories.swift; sourceTree = "<group>"; };
 		A1F0E1B28F16D4C39B3F8A04 /* ManualTokenAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualTokenAuthRepository.swift; sourceTree = "<group>"; };
 		A1F0E1B28F16D4C39B3F8A06 /* SetupWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupWindow.swift; sourceTree = "<group>"; };
@@ -232,6 +234,7 @@
 				259D750A7F2F67E76894DD3F /* AppContainer.swift */,
 				86D2C2DB3FD959E98B994951 /* KeychainStorage.swift */,
 				A1F0E1B28F16D4C39B3F8A00 /* AppConfigurationStore.swift */,
+				B7D1C9A2F3E4B5C6D7E8F901 /* StoredAccount.swift */,
 				A2B3C4D5E6F708192A3B4C5D /* IssueDraftStore.swift */,
 				1D1E1D1E1D1E1D1E1D1E1D1E /* CLIInstaller.swift */,
 				A1F0E1B28F16D4C39B3F8A02 /* SwitchableRepositories.swift */,
@@ -616,6 +619,7 @@
 				E9C4B2243C4A344ED73BAE55 /* AppAuthRepository.swift in Sources */,
 				2C7F193FF8B70AEE455E2DA1 /* AppContainer.swift in Sources */,
 				B1F0E1B28F16D4C39B3F8A01 /* AppConfigurationStore.swift in Sources */,
+				C8E2D3F4A5B6C7D8E9F0A112 /* StoredAccount.swift in Sources */,
 				A9B8C7D6E5F40123456789AC /* NetworkRequestMonitor.swift in Sources */,
 				C8D69D755B9F5965999415BA /* AppMain.swift in Sources */,
 				B8AB6665E8494092BAD781CD /* AppTheme.swift in Sources */,
