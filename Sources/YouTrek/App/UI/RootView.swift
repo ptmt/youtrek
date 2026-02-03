@@ -786,6 +786,10 @@ private struct MainToolbar: CustomizableToolbarContent {
     let onToggleInspector: () -> Void
 
     var body: some CustomizableToolbarContent {
+        ToolbarItem(id: "account-switcher") {
+            accountSwitcher
+        }
+
         toolbarSpacer(id: "spacer-search")
 
         ToolbarItem(id: "search-field") {
@@ -826,6 +830,58 @@ private struct MainToolbar: CustomizableToolbarContent {
             .buttonStyle(.accessoryBar)
             .help("Show or hide the issue details column")
         }
+    }
+
+    private var accountSwitcher: some View {
+        Menu {
+            if container.accounts.isEmpty {
+                Text("No accounts")
+                    .foregroundStyle(.secondary)
+                    .disabled(true)
+            } else {
+                ForEach(container.accounts) { account in
+                    Button {
+                        Task { await container.switchAccount(to: account.id) }
+                    } label: {
+                        HStack {
+                            Text(account.displayTitle)
+                            Spacer(minLength: 0)
+                            if account.id == container.activeAccountID {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button("Add Account…") {
+                container.startAddingAccount()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                UserAvatarView(person: activePerson, size: 22)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .buttonStyle(.accessoryBar)
+        .help("Switch account")
+        .accessibilityLabel("Account menu")
+    }
+
+    private var activePerson: Person? {
+        guard let account = container.activeAccount else { return nil }
+        return Person(
+            id: Person.stableID(for: account.id.uuidString),
+            displayName: account.displayTitle,
+            avatarURL: nil,
+            login: account.login,
+            remoteID: account.userID
+        )
     }
 
     @ToolbarContentBuilder
