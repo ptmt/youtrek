@@ -8,6 +8,7 @@ protocol IssueRepository: Sendable {
     func updateIssue(id: IssueSummary.ID, patch: IssuePatch) async throws -> IssueSummary
     func addComment(issueReadableID: String, text: String) async throws -> IssueComment
     func uploadAttachments(issueReadableID: String, attachments: [IssueAttachmentDraft]) async throws -> [IssueAttachment]
+    func linkSubIssue(parentReadableID: String, childReadableID: String) async throws
 }
 
 struct IssueQuery: Equatable, Hashable, Sendable {
@@ -130,6 +131,7 @@ struct IssueDraft: Equatable, Codable {
     var module: String?
     var priority: IssuePriority
     var assigneeID: String?
+    var parentIssueReadableID: String? = nil
     var customFields: [IssueDraftField] = []
     var attachments: [IssueAttachmentDraft] = []
 }

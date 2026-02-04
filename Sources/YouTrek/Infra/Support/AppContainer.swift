@@ -571,6 +571,51 @@ final class AppContainer: ObservableObject {
         appState.setIssueDetailLoading(issueID, isLoading: false)
     }
 
+    func loadSubIssues(for issue: IssueSummary) async throws -> [IssueSummary] {
+        let trimmedID = issue.readableID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedID.isEmpty, !issue.isDraft else { return [] }
+        let queries = subIssueQueryCandidates(parentReadableID: trimmedID)
+        guard !queries.isEmpty else { return [] }
+
+        let page = IssueQuery.Page(size: 50, offset: 0)
+        var results: [IssueSummary] = []
+        var seen = Set<IssueSummary.ID>()
+
+        for queryString in queries {
+            do {
+                let query = IssueQuery.saved(queryString, page: page)
+                let fetched = try await issueRepositorySwitcher.fetchIssues(query: query)
+                for candidate in fetched where candidate.id != issue.id {
+                    if seen.insert(candidate.id).inserted {
+                        results.append(candidate)
+                    }
+                }
+            } catch let error as YouTrackAPIError {
+                if case .http(let statusCode, _) = error, statusCode == 400 {
+                    continue
+                }
+                throw error
+            }
+        }
+
+        return results.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private func subIssueQueryCandidates(parentReadableID: String) -> [String] {
+        let wrapped = wrapQueryValue(parentReadableID)
+        guard !wrapped.isEmpty else { return [] }
+        return [
+            "subtask of: \(wrapped)",
+            "parent for: \(wrapped)"
+        ]
+    }
+
+    private func wrapQueryValue(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        return "{\(trimmed)}"
+    }
+
     func refreshBoardIssues(for item: SidebarItem) async {
         guard item.isBoard else { return }
         let isSelected = appState.selectedSidebarItem?.id == item.id
@@ -894,6 +939,10 @@ final class AppContainer: ObservableObject {
         appState.presentNewIssueDialog(state: NewIssueDialogState(title: trimmedTitle))
     }
 
+    func presentNewIssueDialog(state: NewIssueDialogState) {
+        appState.presentNewIssueDialog(state: state)
+    }
+
     func submitDraftFromDialog(_ draft: IssueDraft) {
         Task { [weak self] in
             guard let self else { return }
@@ -907,6 +956,7 @@ final class AppContainer: ObservableObject {
                     self.appState.updateIssue(created)
                     self.markIssueSeen(created)
                 }
+                await self.linkSubIssueIfNeeded(parentReadableID: draft.parentIssueReadableID, childIssue: created)
                 await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
             } catch {
                 _ = await issueDraftStore.markDraftFailed(id: record.id, errorDescription: error.localizedDescription)
@@ -940,6 +990,7 @@ final class AppContainer: ObservableObject {
                     self.appState.updateIssue(created)
                     self.markIssueSeen(created)
                 }
+                await self.linkSubIssueIfNeeded(parentReadableID: draft.parentIssueReadableID, childIssue: created)
                 await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
             } catch {
                 _ = await issueDraftStore.markDraftFailed(id: record.id, errorDescription: error.localizedDescription)
@@ -997,6 +1048,7 @@ final class AppContainer: ObservableObject {
                     self.appState.removeDraft(id: recordID)
                     self.issueComposer.resetDraft()
                 }
+                await self.linkSubIssueIfNeeded(parentReadableID: draft.parentIssueReadableID, childIssue: created)
                 await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
             } catch {
                 let record = await issueDraftStore.markDraftFailed(id: recordID, errorDescription: error.localizedDescription)
@@ -1015,6 +1067,25 @@ final class AppContainer: ObservableObject {
             _ = try await addAttachments(to: issue, attachments: draft.attachments)
         } catch {
             print("Failed to upload attachments: \(error.localizedDescription)")
+        }
+    }
+
+    private func linkSubIssueIfNeeded(parentReadableID: String?, childIssue: IssueSummary) async {
+        let trimmedParent = parentReadableID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedParent.isEmpty else { return }
+        let trimmedChild = childIssue.readableID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedChild.isEmpty else { return }
+        do {
+            try await syncCoordinator.enqueue(label: "Link sub-issue") {
+                try await self.issueRepositorySwitcher.linkSubIssue(
+                    parentReadableID: trimmedParent,
+                    childReadableID: trimmedChild
+                )
+            }
+        } catch {
+            LoggingService.sync.error(
+                "Failed to link sub-issue \(trimmedChild, privacy: .public) -> \(trimmedParent, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 
@@ -2132,6 +2203,7 @@ final class IssueComposer: ObservableObject {
     @Published var draftModule: String = ""
     @Published var draftAssigneeID: String = ""
     @Published var draftPriority: IssuePriority = .normal
+    @Published var draftParentIssueReadableID: String = ""
     @Published var draftFields: [IssueDraftField] = []
     @Published var draftAttachments: [IssueAttachmentDraft] = []
 
@@ -2147,6 +2219,7 @@ final class IssueComposer: ObservableObject {
         draftModule = ""
         draftAssigneeID = ""
         draftPriority = .normal
+        draftParentIssueReadableID = ""
         draftFields = []
         draftAttachments = []
     }
@@ -2158,6 +2231,7 @@ final class IssueComposer: ObservableObject {
         draftModule = draft.module ?? ""
         draftAssigneeID = draft.assigneeID ?? ""
         draftPriority = draft.priority
+        draftParentIssueReadableID = draft.parentIssueReadableID ?? ""
         draftFields = draft.customFields
         draftAttachments = draft.attachments
     }
@@ -2175,6 +2249,9 @@ final class IssueComposer: ObservableObject {
         if draftPriority == .normal {
             draftPriority = draft.priority
         }
+        if draftParentIssueReadableID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draftParentIssueReadableID = draft.parentIssueReadableID ?? ""
+        }
         applyDefaultFields(draft.customFields)
     }
 
@@ -2186,6 +2263,7 @@ final class IssueComposer: ObservableObject {
         let trimmedDescription = draftDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedModule = draftModule.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedAssignee = draftAssigneeID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedParent = draftParentIssueReadableID.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return IssueDraft(
             title: trimmedTitle,
@@ -2194,6 +2272,7 @@ final class IssueComposer: ObservableObject {
             module: trimmedModule.isEmpty ? nil : trimmedModule,
             priority: draftPriority,
             assigneeID: trimmedAssignee.isEmpty ? nil : trimmedAssignee,
+            parentIssueReadableID: trimmedParent.isEmpty ? nil : trimmedParent,
             customFields: normalizedDraftFields(excluding: ["priority", "assignee", "subsystem", "module"]),
             attachments: draftAttachments
         )
@@ -2205,6 +2284,7 @@ final class IssueComposer: ObservableObject {
         let trimmedProject = draftProjectID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedModule = draftModule.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedAssignee = draftAssigneeID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedParent = draftParentIssueReadableID.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return IssueDraft(
             title: trimmedTitle,
@@ -2213,6 +2293,7 @@ final class IssueComposer: ObservableObject {
             module: trimmedModule.isEmpty ? nil : trimmedModule,
             priority: draftPriority,
             assigneeID: trimmedAssignee.isEmpty ? nil : trimmedAssignee,
+            parentIssueReadableID: trimmedParent.isEmpty ? nil : trimmedParent,
             customFields: normalizedDraftFields(excluding: ["priority", "assignee", "subsystem", "module"]),
             attachments: draftAttachments
         )
@@ -2225,6 +2306,7 @@ final class IssueComposer: ObservableObject {
         draftModule = ""
         draftAssigneeID = ""
         draftPriority = .normal
+        draftParentIssueReadableID = ""
         draftFields = []
         draftAttachments = []
     }
@@ -2392,6 +2474,10 @@ private struct PreviewIssueRepository: IssueRepository {
     func uploadAttachments(issueReadableID: String, attachments: [IssueAttachmentDraft]) async throws -> [IssueAttachment] {
         throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support mutations")
     }
+
+    func linkSubIssue(parentReadableID: String, childReadableID: String) async throws {
+        throw YouTrackAPIError.http(statusCode: 501, body: "Preview repository does not support mutations")
+    }
 }
 
 private struct EmptyIssueRepository: IssueRepository {
@@ -2420,6 +2506,10 @@ private struct EmptyIssueRepository: IssueRepository {
     }
 
     func uploadAttachments(issueReadableID: String, attachments: [IssueAttachmentDraft]) async throws -> [IssueAttachment] {
+        throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
+    }
+
+    func linkSubIssue(parentReadableID: String, childReadableID: String) async throws {
         throw YouTrackAPIError.http(statusCode: 503, body: "Issue repository is not configured")
     }
 }

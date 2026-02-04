@@ -36,6 +36,22 @@ struct NewIssueDialog: View {
         )
     }
 
+    private var isSubIssue: Bool {
+        let trimmed = state.parentIssueReadableID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !trimmed.isEmpty
+    }
+
+    private var parentIssueLabel: String? {
+        let trimmedID = state.parentIssueReadableID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedID.isEmpty else { return nil }
+        return "of \(trimmedID)"
+    }
+
+    private var parentIssueTooltip: String? {
+        let trimmedTitle = state.parentIssueTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmedTitle.isEmpty ? nil : trimmedTitle
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             dialogHeader
@@ -67,8 +83,15 @@ struct NewIssueDialog: View {
             projectChip
             Text("›")
                 .foregroundStyle(.tertiary)
-            Text("New issue")
+            Text(isSubIssue ? "New sub-issue" : "New issue")
                 .font(.headline)
+            if let parentLabel = parentIssueLabel {
+                Text(parentLabel)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help(parentIssueTooltip ?? "")
+            }
             Spacer()
             Button {
                 container.router.openNewIssueWindow()
@@ -184,7 +207,8 @@ struct NewIssueDialog: View {
                     Button {
                         state.statusOption = option
                     } label: {
-                        Text(option.displayName)
+                        let colors = option.badgeColors(fallback: IssueStatus(option: option).badgeColors)
+                        IssueStatusOptionRow(text: option.displayName, colors: colors)
                     }
                 }
             }
@@ -213,7 +237,7 @@ struct NewIssueDialog: View {
                             displayName: priority.displayName
                         )
                     } label: {
-                        priorityMenuLabel(title: priority.displayName, isTopPriority: priority.isTopPriority)
+                        IssuePriorityOptionRow(text: priority.displayName, isTopPriority: priority.isTopPriority)
                     }
                 }
             } else {
@@ -226,7 +250,7 @@ struct NewIssueDialog: View {
                         state.priorityOption = option
                     } label: {
                         let isTop = IssuePriority(option: option).isTopPriority
-                        priorityMenuLabel(title: option.displayName, isTopPriority: isTop)
+                        IssuePriorityOptionRow(text: option.displayName, isTopPriority: isTop)
                     }
                 }
             }
@@ -364,16 +388,6 @@ struct NewIssueDialog: View {
                     .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
             )
             .foregroundStyle(.secondary)
-    }
-
-    private func priorityMenuLabel(title: String, isTopPriority: Bool) -> some View {
-        HStack(spacing: 6) {
-            if isTopPriority {
-                Image(systemName: "flag.fill")
-                    .foregroundStyle(Color.red)
-            }
-            Text(title)
-        }
     }
 
     private var statusChipColors: IssueBadgeColors {
@@ -727,6 +741,7 @@ struct NewIssueDialog: View {
             module: nil,
             priority: priority,
             assigneeID: assigneeID,
+            parentIssueReadableID: state.parentIssueReadableID,
             customFields: customFields,
             attachments: state.attachments
         )
@@ -736,6 +751,8 @@ struct NewIssueDialog: View {
         if state.createMore {
             state = NewIssueDialogState(
                 projectID: projectID,
+                parentIssueReadableID: state.parentIssueReadableID,
+                parentIssueTitle: state.parentIssueTitle,
                 createMore: true
             )
             isTitleFocused = true

@@ -484,6 +484,8 @@ struct ConflictNotice: Identifiable, Hashable, Sendable {
 struct NewIssueDialogState: Identifiable, Hashable, Sendable {
     let id: UUID
     var projectID: String?
+    var parentIssueReadableID: String?
+    var parentIssueTitle: String?
     var title: String
     var description: String
     var statusOption: IssueFieldOption?
@@ -497,6 +499,8 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
     init(
         id: UUID = UUID(),
         projectID: String? = nil,
+        parentIssueReadableID: String? = nil,
+        parentIssueTitle: String? = nil,
         title: String = "",
         description: String = "",
         statusOption: IssueFieldOption? = nil,
@@ -509,6 +513,8 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
     ) {
         self.id = id
         self.projectID = projectID
+        self.parentIssueReadableID = parentIssueReadableID
+        self.parentIssueTitle = parentIssueTitle
         self.title = title
         self.description = description
         self.statusOption = statusOption

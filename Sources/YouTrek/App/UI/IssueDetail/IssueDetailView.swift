@@ -10,6 +10,9 @@ struct IssueDetailView: View {
     @State private var priorityOptions: [IssueFieldOption] = []
     @State private var projectOptions: [IssueProject] = []
     @State private var isLoadingProjects: Bool = false
+    @State private var subIssues: [IssueSummary] = []
+    @State private var isLoadingSubIssues: Bool = false
+    @State private var subIssuesError: String?
     @State private var commentText: String = ""
     @State private var isSubmittingComment: Bool = false
     @State private var commentError: String?
@@ -41,6 +44,8 @@ struct IssueDetailView: View {
                 Divider()
                 attachmentsSection
                 Divider()
+                subIssuesSection
+                Divider()
                 timelineSection
                 Divider()
                 commentComposer
@@ -65,6 +70,9 @@ struct IssueDetailView: View {
             projectOptions = await container.loadProjects()
             statusOptions = await container.loadStatusOptions(for: issue)
             priorityOptions = await container.loadPriorityOptions(for: issue)
+        }
+        .task(id: issue.readableID) {
+            await loadSubIssues()
         }
         .onChange(of: issue.projectName) { _, _ in
             Task {
@@ -133,20 +141,20 @@ struct IssueDetailView: View {
                 }
             }
             if !customFieldRows.isEmpty {
-                ForEach(visibleCustomFieldRows) { field in
-                    metadataRow(systemImage: "square.grid.2x2") {
-                        Text("\(field.name): \(field.values.joined(separator: ", "))")
+                Button {
+                    showsAllCustomFields.toggle()
+                } label: {
+                    metadataRow(systemImage: showsAllCustomFields ? "chevron.up" : "chevron.down") {
+                        Text(customFieldsToggleLabel)
                     }
                 }
-                if customFieldRows.count > IssueDetailMetrics.customFieldPreviewLimit {
-                    Button {
-                        showsAllCustomFields.toggle()
-                    } label: {
-                        metadataRow(systemImage: showsAllCustomFields ? "chevron.up" : "chevron.down") {
-                            Text(customFieldsToggleLabel)
+                .buttonStyle(.plain)
+                if showsAllCustomFields {
+                    ForEach(customFieldRows) { field in
+                        metadataRow(systemImage: "square.grid.2x2") {
+                            Text("\(field.name): \(field.values.joined(separator: ", "))")
                         }
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -174,18 +182,11 @@ struct IssueDetailView: View {
         }
     }
 
-    private var visibleCustomFieldRows: [IssueDetailCustomField] {
-        guard !showsAllCustomFields, customFieldRows.count > IssueDetailMetrics.customFieldPreviewLimit else {
-            return customFieldRows
-        }
-        return Array(customFieldRows.prefix(IssueDetailMetrics.customFieldPreviewLimit))
-    }
-
     private var customFieldsToggleLabel: String {
         if showsAllCustomFields {
-            return "Show fewer custom fields"
+            return "Hide custom fields"
         }
-        return "Show all \(customFieldRows.count) custom fields"
+        return "Custom fields (\(customFieldRows.count))"
     }
 
     private func customFieldDisplayName(for key: String) -> String {
@@ -298,6 +299,64 @@ struct IssueDetailView: View {
         )
     }
 
+    private var subIssuesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("Sub-issues")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    presentSubIssueDialog()
+                } label: {
+                    Label("Add sub-issue", systemImage: "plus")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .help(issue.isDraft ? "Create the issue before adding sub-issues." : "Add a sub-issue")
+                .disabled(issue.isDraft)
+            }
+
+            if issue.isDraft {
+                Text("Create the issue to start linking sub-issues.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else if isLoadingSubIssues {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading sub-issues…")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let subIssuesError {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                    Text(subIssuesError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    Spacer()
+                    Button("Retry") {
+                        Task { await loadSubIssues() }
+                    }
+                    .buttonStyle(.link)
+                }
+            } else if subIssues.isEmpty {
+                Text("No sub-issues yet.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(subIssues) { subIssue in
+                        SubIssueRow(issue: subIssue) {
+                            openSubIssue(subIssue)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private var timelineSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Timeline")
@@ -318,6 +377,52 @@ struct IssueDetailView: View {
         guard let detail else { return nil }
         let trimmed = detail.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func loadSubIssues() async {
+        subIssues = []
+        subIssuesError = nil
+        guard !issue.isDraft else {
+            isLoadingSubIssues = false
+            return
+        }
+        isLoadingSubIssues = true
+        defer { isLoadingSubIssues = false }
+        do {
+            subIssues = try await container.loadSubIssues(for: issue)
+        } catch {
+            subIssuesError = error.localizedDescription
+        }
+    }
+
+    private func presentSubIssueDialog() {
+        let parentID = issue.readableID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !parentID.isEmpty else { return }
+        let priorityOption = IssueFieldOption(
+            id: issue.priority.rawValue,
+            name: issue.priority.displayName,
+            displayName: issue.priority.displayName
+        )
+        let state = NewIssueDialogState(
+            projectID: issue.projectName,
+            parentIssueReadableID: parentID,
+            parentIssueTitle: issue.title,
+            title: "",
+            description: "",
+            statusOption: nil,
+            priorityOption: priorityOption,
+            assigneeOption: issue.assignee?.issueFieldOption
+        )
+        container.presentNewIssueDialog(state: state)
+    }
+
+    private func openSubIssue(_ issue: IssueSummary) {
+        let isInList = container.appState.issues.contains { $0.id == issue.id }
+        container.appState.selectedIssue = issue
+        container.appState.selectedIssueIDs = isInList ? [issue.id] : []
+        Task {
+            await container.loadIssueDetail(for: issue)
+        }
     }
 
     private func handleAttachmentImport(_ result: Result<[URL], Error>) {
@@ -411,22 +516,24 @@ struct IssueDetailView: View {
                 title: "Comment",
                 date: comment.createdAt,
                 person: comment.author,
-                body: trimmed.isEmpty ? nil : trimmed
+                body: trimmed.isEmpty ? nil : comment.text
             ))
         }
         return entries.sorted { $0.date < $1.date }
     }
 
     private var statusMenu: some View {
-        Menu {
+        let isClosed = issue.status.isClosed
+        return Menu {
             ForEach(statusMenuOptions, id: \.stableID) { option in
                 Button {
                     updateStatus(option)
                 } label: {
                     let colors = statusColors(for: option)
-                    statusMenuRow(
-                        title: option.displayName,
+                    IssueStatusOptionRow(
+                        text: option.displayName,
                         colors: colors,
+                        showsSelection: true,
                         isSelected: optionMatchesStatus(option)
                     )
                 }
@@ -434,7 +541,9 @@ struct IssueDetailView: View {
         } label: {
             IssueStatusBadge(
                 text: issue.status.displayName,
-                colors: issue.status.badgeColors
+                colors: issue.status.badgeColors,
+                textOpacity: isClosed ? 0.62 : 0.86,
+                dotOpacity: isClosed ? 0.6 : 1.0
             )
             .font(.callout.weight(.semibold))
         }
@@ -447,21 +556,23 @@ struct IssueDetailView: View {
     }
 
     private var priorityMenu: some View {
-        Menu {
+        let isClosed = issue.status.isClosed
+        return Menu {
             ForEach(priorityMenuOptions, id: \.stableID) { option in
                 Button {
                     updatePriority(option)
                 } label: {
                     let priority = IssuePriority(option: option)
-                    priorityMenuRow(
-                        title: option.displayName,
+                    IssuePriorityOptionRow(
+                        text: option.displayName,
                         isTopPriority: priority.isTopPriority,
+                        showsSelection: true,
                         isSelected: optionMatchesPriority(option)
                     )
                 }
             }
         } label: {
-            IssuePriorityBadge(priority: issue.priority)
+            IssuePriorityBadge(priority: issue.priority, isMuted: isClosed)
                 .font(.callout.weight(.semibold))
         }
         .menuStyle(.borderlessButton)
@@ -516,40 +627,6 @@ struct IssueDetailView: View {
 
     private func optionMatchesPriority(_ option: IssueFieldOption) -> Bool {
         optionMatches(option, name: issue.priority.displayName)
-    }
-
-    private func statusMenuRow(title: String, colors: IssueBadgeColors, isSelected: Bool) -> some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(colors.foreground)
-                .frame(width: 6, height: 6)
-            Text(title)
-                .foregroundStyle(.primary)
-            Spacer()
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func priorityMenuRow(title: String, isTopPriority: Bool, isSelected: Bool) -> some View {
-        HStack(spacing: 8) {
-            if isTopPriority {
-                Image(systemName: "flag.fill")
-                    .foregroundStyle(Color.red)
-            } else {
-                Color.clear
-                    .frame(width: 10, height: 10)
-            }
-            Text(title)
-                .foregroundStyle(.primary)
-            Spacer()
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .foregroundStyle(.secondary)
-            }
-        }
     }
 
     private func updateStatus(_ option: IssueFieldOption) {
@@ -658,7 +735,6 @@ struct IssueDetailView: View {
 private enum IssueDetailMetrics {
     static let metadataIconSize: CGFloat = 22
     static let assigneeOptionAvatarSize: CGFloat = 20
-    static let customFieldPreviewLimit: Int = 3
 }
 
 private struct IssueDetailCustomField: Identifiable {
@@ -1168,5 +1244,61 @@ private struct TimelineRow: View {
         .padding(12)
         .background(.quaternary.opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+private struct SubIssueRow: View {
+    let issue: IssueSummary
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(alignment: .top, spacing: 12) {
+                UserAvatarView(person: issue.assignee, size: 22)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(issue.readableID)
+                            .foregroundStyle(.secondary.opacity(secondaryOpacity))
+                        IssueStatusBadge(
+                            text: issue.status.displayName,
+                            colors: issue.status.badgeColors,
+                            textOpacity: isClosed ? 0.62 : 0.86,
+                            dotOpacity: isClosed ? 0.6 : 1.0
+                        )
+                        .font(.caption2)
+                        if !issue.priority.isNormalSemantic {
+                            IssuePriorityBadge(priority: issue.priority, isMuted: isClosed)
+                                .font(.caption2)
+                        }
+                    }
+                    .font(.caption)
+                    Text(issue.title)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(titleColor)
+                        .lineLimit(2)
+                }
+                Spacer()
+                Text(IssueTimestampFormatter.label(for: issue.updatedAt))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary.opacity(secondaryOpacity))
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.35))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var isClosed: Bool {
+        issue.status.isClosed
+    }
+
+    private var secondaryOpacity: Double {
+        isClosed ? 0.65 : 1.0
+    }
+
+    private var titleColor: Color {
+        isClosed ? .secondary.opacity(0.8) : .primary
     }
 }

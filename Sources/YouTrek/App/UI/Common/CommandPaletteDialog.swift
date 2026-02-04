@@ -136,9 +136,15 @@ struct CommandPaletteDialog: View {
             Divider()
             dialogFooter
         }
-        .frame(minWidth: 560, idealWidth: 640, maxWidth: 720)
-        .frame(minHeight: 420, idealHeight: 520)
-        .background(.regularMaterial)
+        .frame(minWidth: 520, idealWidth: 600, maxWidth: 720)
+        .frame(minHeight: 400, idealHeight: 480)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(.separator.opacity(0.55), lineWidth: 1)
+        )
         .background(
             KeyEventHandlingView(
                 onMove: { offset in

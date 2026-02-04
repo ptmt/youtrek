@@ -790,9 +790,7 @@ private struct MainToolbar: CustomizableToolbarContent {
             accountSwitcher
         }
 
-        toolbarSpacer(id: "spacer-search")
-
-        ToolbarItem(id: "search-field") {
+        ToolbarItem(id: "search-field", placement: .principal) {
             SearchToolbarField(text: $searchQuery)
         }
 
@@ -815,8 +813,6 @@ private struct MainToolbar: CustomizableToolbarContent {
             .disabled(!hasUnreadIssues)
             .help("Mark all issues in the current list as read")
         }
-
-        toolbarSpacer(id: "spacer-new-issue")
 
         ToolbarItem(id: "new-issue") {
             NewIssueToolbar(container: container)
@@ -882,27 +878,6 @@ private struct MainToolbar: CustomizableToolbarContent {
             login: account.login,
             remoteID: account.userID
         )
-    }
-
-    @ToolbarContentBuilder
-    private func toolbarSpacer(id: String) -> some CustomizableToolbarContent {
-        if #available(macOS 26.0, *) {
-            ToolbarSpacer(.flexible)
-        } else {
-            ToolbarItem(id: id) {
-                LegacyToolbarSpacer(width: 120)
-            }
-        }
-    }
-}
-
-private struct LegacyToolbarSpacer: View {
-    let width: CGFloat
-
-    var body: some View {
-        Color.clear
-            .frame(width: width, height: 1)
-            .accessibilityHidden(true)
     }
 }
 

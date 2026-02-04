@@ -46,3 +46,43 @@ struct IssuePriorityBadge: View {
         }
     }
 }
+
+struct IssueStatusOptionRow: View {
+    let text: String
+    let colors: IssueBadgeColors
+    var showsSelection: Bool = false
+    var isSelected: Bool = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            IssueStatusBadge(text: text, colors: colors)
+            if showsSelection {
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+struct IssuePriorityOptionRow: View {
+    let text: String
+    let isTopPriority: Bool
+    var showsSelection: Bool = false
+    var isSelected: Bool = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            IssuePriorityBadge(text: text, isTopPriority: isTopPriority)
+            if showsSelection {
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}

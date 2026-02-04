@@ -67,6 +67,10 @@ actor SwitchableIssueRepository: IssueRepository {
     func uploadAttachments(issueReadableID: String, attachments: [IssueAttachmentDraft]) async throws -> [IssueAttachment] {
         try await current.uploadAttachments(issueReadableID: issueReadableID, attachments: attachments)
     }
+
+    func linkSubIssue(parentReadableID: String, childReadableID: String) async throws {
+        try await current.linkSubIssue(parentReadableID: parentReadableID, childReadableID: childReadableID)
+    }
 }
 
 actor SwitchableSavedQueryRepository: SavedQueryRepository {

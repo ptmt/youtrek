@@ -223,8 +223,54 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
         return decoded.compactMap(mapAttachment(_:))
     }
 
+    func linkSubIssue(parentReadableID: String, childReadableID: String) async throws {
+        let trimmedParent = parentReadableID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedChild = childReadableID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedParent.isEmpty, !trimmedChild.isEmpty else {
+            throw YouTrackAPIError.http(statusCode: 400, body: "Missing issue identifiers for sub-issue link")
+        }
+
+        let commands = Self.subIssueLinkCommands(parentID: trimmedParent)
+        var lastError: Error?
+        for command in commands {
+            do {
+                try await applyCommand(query: trimmedChild, command: command)
+                return
+            } catch let error as YouTrackAPIError {
+                if case .http(let statusCode, _) = error, statusCode == 400 {
+                    lastError = error
+                    continue
+                }
+                throw error
+            } catch {
+                throw error
+            }
+        }
+
+        throw lastError ?? YouTrackAPIError.invalidResponse
+    }
+
     private static func makeDecoder() -> JSONDecoder {
         JSONDecoder()
+    }
+
+    private static func subIssueLinkCommands(parentID: String) -> [String] {
+        let trimmed = parentID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let wrapped = trimmed.contains(" ") ? "{\(trimmed)}" : trimmed
+        return [
+            "subtask of \(wrapped)",
+            "parent for \(wrapped)"
+        ]
+    }
+
+    private func applyCommand(query: String, command: String) async throws {
+        let payload = IssueCommandPayload(query: query, command: command)
+        let body = try JSONEncoder().encode(payload)
+        _ = try await client.post(
+            path: "commands",
+            queryItems: [URLQueryItem(name: "fields", value: "id")],
+            body: body
+        )
     }
 
     private func mapIssue(_ issue: YouTrackIssue) -> IssueSummary {
@@ -947,6 +993,11 @@ private struct IssueCreatePayload: Encodable {
 
 private struct IssueCommentPayload: Encodable {
     let text: String
+}
+
+private struct IssueCommandPayload: Encodable {
+    let query: String
+    let command: String
 }
 
 private struct IssueUpdatePayload: Encodable {
