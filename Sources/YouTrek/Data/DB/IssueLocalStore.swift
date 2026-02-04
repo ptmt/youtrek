@@ -584,6 +584,18 @@ actor IssueLocalStore {
         let resolvedProjectName = patch.projectName ?? issue.projectName
         let resolvedStatus = patch.statusOption.map(IssueStatus.init(option:)) ?? patch.status ?? issue.status
         let resolvedPriority = patch.priorityOption.map(IssuePriority.init(option:)) ?? patch.priority ?? issue.priority
+        var resolvedCustomFields = issue.customFieldValues
+        if !patch.customFields.isEmpty {
+            for field in patch.customFields {
+                let key = field.normalizedName
+                let values = customFieldValues(from: field)
+                if values.isEmpty {
+                    resolvedCustomFields.removeValue(forKey: key)
+                } else {
+                    resolvedCustomFields[key] = values
+                }
+            }
+        }
         return IssueSummary(
             id: issue.id,
             readableID: issue.readableID,
@@ -595,9 +607,40 @@ actor IssueLocalStore {
             reporter: issue.reporter,
             priority: resolvedPriority,
             status: resolvedStatus,
-            tags: issue.tags
+            tags: issue.tags,
+            customFieldValues: resolvedCustomFields,
+            draftID: issue.draftID
         )
     }
+
+    private func customFieldValues(from field: IssueDraftField) -> [String] {
+        switch field.value {
+        case .none:
+            return []
+        case .string(let value):
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? [] : [trimmed]
+        case .integer(let value):
+            return [String(value)]
+        case .number(let value):
+            return [String(value)]
+        case .bool(let value):
+            return [value ? "Yes" : "No"]
+        case .date(let value):
+            return [Self.customFieldDateFormatter.string(from: value)]
+        case .option(let option):
+            return [option.displayName]
+        case .options(let options):
+            return options.map(\.displayName)
+        }
+    }
+
+    private static let customFieldDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
 
     private func applySearchAndSort(_ issues: [IssueSummary], query: IssueQuery) -> [IssueSummary] {
         let filtered: [IssueSummary]

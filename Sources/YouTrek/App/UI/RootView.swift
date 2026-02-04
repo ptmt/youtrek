@@ -135,14 +135,17 @@ private struct RootContentView: View {
         .onChange(of: appState.selectedSidebarItem) { _, selection in
             guard let selection else { return }
             container.recordSidebarSelection(selection)
-            if selection.isBoard, isInspectorVisible {
-                isInspectorVisible = false
-                appState.setInspectorVisible(false)
-            }
-            if !selectionShowsDrafts(selection), appState.selectedIssue?.isDraft == true {
-                appState.selectedDraftID = nil
-                appState.selectedIssue = nil
-                appState.selectedIssueIDs.removeAll()
+            Task { @MainActor in
+                await Task.yield()
+                if selection.isBoard, isInspectorVisible {
+                    isInspectorVisible = false
+                    appState.setInspectorVisible(false)
+                }
+                if !selectionShowsDrafts(selection), appState.selectedIssue?.isDraft == true {
+                    appState.selectedDraftID = nil
+                    appState.selectedIssue = nil
+                    appState.selectedIssueIDs.removeAll()
+                }
             }
             Task {
                 await container.loadIssues(for: selection)
@@ -160,6 +163,22 @@ private struct RootContentView: View {
                     state: commandPaletteBinding,
                     onClose: { appState.dismissCommandPalette() }
                 )
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if let toast = appState.activeToast {
+                ToastView(toast: toast)
+                    .padding(.top, 12)
+                    .padding(.trailing, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task(id: toast.id) {
+                        try? await Task.sleep(nanoseconds: 2_500_000_000)
+                        await MainActor.run {
+                            if appState.activeToast?.id == toast.id {
+                                appState.dismissToast()
+                            }
+                        }
+                    }
             }
         }
         #if DEBUG
@@ -1099,5 +1118,25 @@ struct SyncStatusIndicator: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 8)
+    }
+}
+
+private struct ToastView: View {
+    let toast: ToastNotice
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            Text(toast.message)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: Capsule())
+        .shadow(radius: 6, y: 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(toast.message)
     }
 }

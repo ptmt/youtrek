@@ -1,4 +1,4 @@
-- [ ] Render issue status color and issue priority icons in issue details the same way as in issue list (with color circles). Then port same component to "new issue" dialog
-- [ ] Add support for markdown in issue timeline comments too
-- [ ] Support code snippets rendering in markdown
-- [ ] Add sub-issues section in issue details and easy way to add a subissue - with most of the same parameters pre-filled
+- [ ] When issue created or modified (meaning there's one more operation in sync queue), when it finished show toas notification (e.g.: issue bla-bla-id created)
+- [ ] Render issue status color and issue priority icons in issue details the same way as in issue list (with color circles). Allow filter issue status. Then port same component to "new issue" dialog
+- [ ] Add support for changing custom fields too, with filtering by text
+- [ ] I addes sub-issue but I don't see it in the parent issue subissue list.

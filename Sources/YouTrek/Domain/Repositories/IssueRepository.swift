@@ -147,6 +147,7 @@ struct IssuePatch: Equatable, Codable {
     var priorityOption: IssueFieldOption? = nil
     var assignee: AssigneeChange? = nil
     var issueReadableID: String? = nil
+    var customFields: [IssueDraftField] = []
 }
 
 enum AssigneeChange: Equatable, Codable {
@@ -219,6 +220,41 @@ extension IssuePatch {
                 parts.append("Assignee: \(option.displayName)")
             }
         }
+        if !customFields.isEmpty {
+            for field in customFields {
+                parts.append("\(field.name): \(field.value.descriptionLabel)")
+            }
+        }
         return parts.isEmpty ? "No local changes captured." : parts.joined(separator: "\n")
     }
+}
+
+private extension IssueDraftFieldValue {
+    var descriptionLabel: String {
+        switch self {
+        case .none:
+            return "Cleared"
+        case .string(let value):
+            return value
+        case .integer(let value):
+            return String(value)
+        case .number(let value):
+            return String(value)
+        case .bool(let value):
+            return value ? "Yes" : "No"
+        case .date(let value):
+            return IssueDraftFieldValue.formatter.string(from: value)
+        case .option(let option):
+            return option.displayName
+        case .options(let options):
+            return options.map(\.displayName).joined(separator: ", ")
+        }
+    }
+
+    private static let formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
 }

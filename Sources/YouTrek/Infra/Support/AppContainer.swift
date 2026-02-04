@@ -79,7 +79,10 @@ final class AppContainer: ObservableObject {
         self.boardLocalStore = boardLocalStore
         self.savedQueryLocalStore = savedQueryLocalStore
         self.appStateCancellable = appState.objectWillChange.sink { [weak self] in
-            self?.objectWillChange.send()
+            Task { @MainActor in
+                await Task.yield()
+                self?.objectWillChange.send()
+            }
         }
         refreshAccounts()
     }
@@ -129,6 +132,14 @@ final class AppContainer: ObservableObject {
             conflictHandler: { [weak state] conflict in
                 await MainActor.run {
                     state?.presentConflict(conflict)
+                }
+            },
+            mutationHandler: { [weak state] mutation, updatedIssue in
+                let fallbackID = mutation.patch.issueReadableID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let resolvedID = updatedIssue?.readableID.trimmingCharacters(in: .whitespacesAndNewlines) ?? fallbackID
+                let message = resolvedID.isEmpty ? "Issue updated" : "Issue \(resolvedID) updated"
+                await MainActor.run {
+                    state?.showToast(message)
                 }
             }
         )
@@ -190,6 +201,14 @@ final class AppContainer: ObservableObject {
             conflictHandler: { [weak state] conflict in
                 await MainActor.run {
                     state?.presentConflict(conflict)
+                }
+            },
+            mutationHandler: { [weak state] mutation, updatedIssue in
+                let fallbackID = mutation.patch.issueReadableID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let resolvedID = updatedIssue?.readableID.trimmingCharacters(in: .whitespacesAndNewlines) ?? fallbackID
+                let message = resolvedID.isEmpty ? "Issue updated" : "Issue \(resolvedID) updated"
+                await MainActor.run {
+                    state?.showToast(message)
                 }
             }
         )
@@ -955,6 +974,7 @@ final class AppContainer: ObservableObject {
                 await MainActor.run {
                     self.appState.updateIssue(created)
                     self.markIssueSeen(created)
+                    self.appState.showToast("Issue \(created.readableID) created")
                 }
                 await self.linkSubIssueIfNeeded(parentReadableID: draft.parentIssueReadableID, childIssue: created)
                 await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
@@ -989,6 +1009,7 @@ final class AppContainer: ObservableObject {
                 await MainActor.run {
                     self.appState.updateIssue(created)
                     self.markIssueSeen(created)
+                    self.appState.showToast("Issue \(created.readableID) created")
                 }
                 await self.linkSubIssueIfNeeded(parentReadableID: draft.parentIssueReadableID, childIssue: created)
                 await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
@@ -1047,6 +1068,7 @@ final class AppContainer: ObservableObject {
                     self.appState.updateIssue(created)
                     self.appState.removeDraft(id: recordID)
                     self.issueComposer.resetDraft()
+                    self.appState.showToast("Issue \(created.readableID) created")
                 }
                 await self.linkSubIssueIfNeeded(parentReadableID: draft.parentIssueReadableID, childIssue: created)
                 await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
@@ -1081,6 +1103,9 @@ final class AppContainer: ObservableObject {
                     parentReadableID: trimmedParent,
                     childReadableID: trimmedChild
                 )
+            }
+            await MainActor.run {
+                self.appState.recordSubIssueLink(parentReadableID: trimmedParent)
             }
         } catch {
             LoggingService.sync.error(

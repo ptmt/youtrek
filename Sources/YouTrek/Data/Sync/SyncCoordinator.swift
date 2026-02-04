@@ -10,17 +10,20 @@ actor SyncCoordinator {
     private let localStore: IssueLocalStore
     private let operationQueue: SyncOperationQueue
     private let conflictHandler: (@Sendable (ConflictNotice) async -> Void)?
+    private let mutationHandler: (@Sendable (PendingIssueMutation, IssueSummary?) async -> Void)?
 
     init(
         issueRepository: IssueRepository,
         localStore: IssueLocalStore = IssueLocalStore(),
         operationQueue: SyncOperationQueue = SyncOperationQueue(),
-        conflictHandler: (@Sendable (ConflictNotice) async -> Void)? = nil
+        conflictHandler: (@Sendable (ConflictNotice) async -> Void)? = nil,
+        mutationHandler: (@Sendable (PendingIssueMutation, IssueSummary?) async -> Void)? = nil
     ) {
         self.issueRepository = issueRepository
         self.localStore = localStore
         self.operationQueue = operationQueue
         self.conflictHandler = conflictHandler
+        self.mutationHandler = mutationHandler
     }
 
     func refreshIssues(using query: IssueQuery) async throws -> [IssueSummary] {
@@ -231,6 +234,7 @@ actor SyncCoordinator {
                         try await self.issueRepository.updateIssue(id: mutation.issueID, patch: mutation.patch)
                     }
                     await localStore.markMutationApplied(mutation, updatedIssue: updated)
+                    await mutationHandler?(mutation, updated)
                 } catch {
                     await localStore.markMutationAttempted(id: mutation.id, errorDescription: error.localizedDescription)
                 }

@@ -237,7 +237,7 @@ struct NewIssueDialog: View {
                             displayName: priority.displayName
                         )
                     } label: {
-                        IssuePriorityOptionRow(text: priority.displayName, isTopPriority: priority.isTopPriority)
+                        IssuePriorityOptionRow(text: priority.displayName, colors: priority.badgeColors)
                     }
                 }
             } else {
@@ -249,8 +249,8 @@ struct NewIssueDialog: View {
                     Button {
                         state.priorityOption = option
                     } label: {
-                        let isTop = IssuePriority(option: option).isTopPriority
-                        IssuePriorityOptionRow(text: option.displayName, isTopPriority: isTop)
+                        let colors = option.badgeColors(fallback: IssuePriority(option: option).badgeColors)
+                        IssuePriorityOptionRow(text: option.displayName, colors: colors)
                     }
                 }
             }
@@ -258,7 +258,7 @@ struct NewIssueDialog: View {
             chipContainer {
                 IssuePriorityBadge(
                     text: state.priorityOption?.displayName ?? "Priority",
-                    isTopPriority: state.priorityOption.map { IssuePriority(option: $0).isTopPriority } ?? false,
+                    colors: priorityChipColors,
                     isMuted: state.priorityOption == nil
                 )
                 .font(.caption)
@@ -393,6 +393,13 @@ struct NewIssueDialog: View {
     private var statusChipColors: IssueBadgeColors {
         if let option = state.statusOption {
             return option.badgeColors(fallback: IssueStatus(option: option).badgeColors)
+        }
+        return IssueBadgeColors(background: .clear, foreground: .secondary, border: .clear)
+    }
+
+    private var priorityChipColors: IssueBadgeColors {
+        if let option = state.priorityOption {
+            return option.badgeColors(fallback: IssuePriority(option: option).badgeColors)
         }
         return IssueBadgeColors(background: .clear, foreground: .secondary, border: .clear)
     }

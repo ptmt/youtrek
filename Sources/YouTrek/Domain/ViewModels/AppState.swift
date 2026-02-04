@@ -22,6 +22,7 @@ final class AppState: ObservableObject {
     @Published private(set) var isSidebarVisible: Bool = true
     @Published private(set) var isSyncing: Bool = false
     @Published private(set) var syncStatusMessage: String? = nil
+    @Published var activeToast: ToastNotice?
     @Published private(set) var isLoadingIssues: Bool = false
     @Published private(set) var hasCompletedIssueSync: Bool = false
     @Published private(set) var hasCompletedBoardSync: Bool = false
@@ -36,6 +37,7 @@ final class AppState: ObservableObject {
     @Published var activeConflict: ConflictNotice?
     @Published var activeNewIssueDialog: NewIssueDialogState?
     @Published var activeCommandPalette: CommandPaletteState?
+    @Published var subIssueRefresh: SubIssueRefresh?
     private var didLogIssueListRendered = false
     private let boardDataSourceEventLimit = 60
     private let issueListDataSourceEventLimit = 60
@@ -201,10 +203,21 @@ final class AppState: ObservableObject {
     }
 
     func filteredIssues(_ issues: [IssueSummary], searchQuery: String) -> [IssueSummary] {
-        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return issues }
+        let parsed = parseSearchQuery(searchQuery)
+        var filtered = issues
+        if !parsed.statusFilters.isEmpty {
+            let statusKeys = Set(parsed.statusFilters.map(Self.normalizedStatusKey))
+            filtered = filtered.filter { issue in
+                let displayKey = Self.normalizedStatusKey(issue.status.displayName)
+                let rawKey = Self.normalizedStatusKey(issue.status.rawValue)
+                return statusKeys.contains(displayKey) || statusKeys.contains(rawKey)
+            }
+        }
+
+        let trimmed = parsed.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return filtered }
         let lowercased = trimmed.lowercased()
-        return issues.filter { issue in
+        return filtered.filter { issue in
             issue.title.lowercased().contains(lowercased) ||
             issue.readableID.lowercased().contains(lowercased) ||
             issue.projectName.lowercased().contains(lowercased)
@@ -217,6 +230,53 @@ final class AppState: ObservableObject {
 
     func updateSearch(query: String) {
         searchQuery = query
+    }
+
+    func showToast(_ message: String) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            activeToast = ToastNotice(message: trimmed)
+        }
+    }
+
+    func dismissToast() {
+        withAnimation(.easeIn(duration: 0.2)) {
+            activeToast = nil
+        }
+    }
+
+    private func parseSearchQuery(_ query: String) -> (text: String, statusFilters: [String]) {
+        let pattern = #"(?i)\b(status|state)\s*:\s*(\"([^\"]+)\"|'([^']+)'|([^\s]+))"#
+        let regex = try? NSRegularExpression(pattern: pattern)
+        guard let regex else {
+            return (query, [])
+        }
+
+        let range = NSRange(query.startIndex..., in: query)
+        let matches = regex.matches(in: query, range: range)
+        var filters: [String] = []
+        for match in matches {
+            let captureRanges = [3, 4, 5]
+            for index in captureRanges {
+                let captureRange = match.range(at: index)
+                if captureRange.location != NSNotFound,
+                   let range = Range(captureRange, in: query) {
+                    let raw = query[range]
+                    let parts = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    filters.append(contentsOf: parts.filter { !$0.isEmpty })
+                    break
+                }
+            }
+        }
+
+        let stripped = regex.stringByReplacingMatches(in: query, range: range, withTemplate: "")
+        return (stripped, filters)
+    }
+
+    private static func normalizedStatusKey(_ value: String) -> String {
+        let scalars = value.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
+        return String(String.UnicodeScalarView(scalars)).lowercased()
     }
 
     func toggleSidebarVisibility(source: String = "menu") {
@@ -255,6 +315,12 @@ final class AppState: ObservableObject {
 
     func recordSavedSearchSyncCompleted() {
         hasCompletedSavedSearchSync = true
+    }
+
+    func recordSubIssueLink(parentReadableID: String) {
+        let trimmed = parentReadableID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        subIssueRefresh = SubIssueRefresh(parentReadableID: trimmed)
     }
 
     func prefillInitialSyncState(issues: Bool, boards: Bool, savedSearches: Bool) {
@@ -395,6 +461,16 @@ final class AppState: ObservableObject {
             "Startup: issue list rendered in \(formatted, privacy: .public)s (issues: \(issueCount, privacy: .public))"
         )
     }
+}
+
+struct ToastNotice: Identifiable, Equatable {
+    let id = UUID()
+    let message: String
+}
+
+struct SubIssueRefresh: Identifiable, Equatable {
+    let id = UUID()
+    let parentReadableID: String
 }
 
 private extension AppState {

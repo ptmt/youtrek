@@ -150,6 +150,11 @@ final class YouTrackIssueRepository: IssueRepository, Sendable {
                 customFields.append(.assignee(option))
             }
         }
+        if !patch.customFields.isEmpty {
+            let excluded: Set<String> = ["assignee", "state", "status", "priority"]
+            let updates = patch.customFields.filter { !excluded.contains($0.normalizedName) }
+            customFields.append(contentsOf: updates.compactMap { IssueUpdatePayload.CustomField.from(draftField: $0) })
+        }
 
         let trimmedProjectID = patch.projectID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let projectReference = trimmedProjectID.isEmpty
@@ -1076,21 +1081,116 @@ private struct IssueUpdatePayload: Encodable {
                 value: .clear
             )
         }
+
+        static func from(draftField: IssueDraftField) -> CustomField? {
+            guard let value = CustomFieldValue.from(draftField: draftField) else { return nil }
+            return CustomField(
+                typeName: draftField.kind.issueCustomFieldTypeName(allowsMultiple: draftField.allowsMultiple),
+                name: draftField.name,
+                value: value
+            )
+        }
     }
 
     enum CustomFieldValue: Encodable {
         case option(OptionPayload)
+        case options([OptionPayload])
+        case string(String)
+        case text(String)
+        case integer(Int)
+        case float(Double)
+        case bool(Bool)
+        case date(Date)
+        case period(minutes: Int)
         case clear
+
+        static func from(draftField: IssueDraftField) -> CustomFieldValue? {
+            let value = draftField.value
+            if value.isEmpty {
+                return .clear
+            }
+
+            switch draftField.kind {
+            case .enumeration, .state, .version, .build, .ownedField:
+                if draftField.allowsMultiple {
+                    let options = value.optionValues.map(OptionPayload.init(option:))
+                    return options.isEmpty ? .clear : .options(options)
+                } else if let option = value.optionValue {
+                    return .option(OptionPayload(option: option))
+                } else if let string = value.stringValue {
+                    return .option(OptionPayload(name: string))
+                }
+                return nil
+            case .user:
+                if draftField.allowsMultiple {
+                    let options = value.optionValues.map(OptionPayload.init(option:))
+                    return options.isEmpty ? .clear : .options(options)
+                } else if let option = value.optionValue {
+                    return .option(OptionPayload(option: option))
+                } else if let string = value.stringValue {
+                    return .option(OptionPayload(identifier: string))
+                }
+                return nil
+            case .string:
+                guard let string = value.stringValue else { return nil }
+                return .string(string)
+            case .text:
+                guard let string = value.stringValue else { return nil }
+                return .text(string)
+            case .integer:
+                guard let number = value.intValue else { return nil }
+                return .integer(number)
+            case .float:
+                guard let number = value.doubleValue else { return nil }
+                return .float(number)
+            case .boolean:
+                guard let flag = value.boolValue else { return nil }
+                return .bool(flag)
+            case .date, .dateTime:
+                guard let date = value.dateValue else { return nil }
+                return .date(date)
+            case .period:
+                guard let minutes = value.intValue else { return nil }
+                return .period(minutes: minutes)
+            case .unknown:
+                guard let string = value.stringValue else { return nil }
+                return .string(string)
+            }
+        }
 
         func encode(to encoder: Encoder) throws {
             switch self {
             case .option(let payload):
                 try payload.encode(to: encoder)
+            case .options(let payloads):
+                try payloads.encode(to: encoder)
+            case .string(let value), .text(let value):
+                var container = encoder.singleValueContainer()
+                try container.encode(value)
+            case .integer(let value):
+                var container = encoder.singleValueContainer()
+                try container.encode(value)
+            case .float(let value):
+                var container = encoder.singleValueContainer()
+                try container.encode(value)
+            case .bool(let value):
+                var container = encoder.singleValueContainer()
+                try container.encode(value)
+            case .date(let value):
+                var container = encoder.singleValueContainer()
+                let milliseconds = Int64(value.timeIntervalSince1970 * 1000.0)
+                try container.encode(milliseconds)
+            case .period(let minutes):
+                try PeriodPayload(minutes: minutes).encode(to: encoder)
             case .clear:
                 var container = encoder.singleValueContainer()
                 try container.encodeNil()
             }
         }
+    }
+
+    struct PeriodPayload: Encodable {
+        let minutes: Int
     }
 
     struct OptionPayload: Encodable {

@@ -19,30 +19,31 @@ struct IssueStatusBadge: View {
 
 struct IssuePriorityBadge: View {
     let text: String
-    let isTopPriority: Bool
-    var isMuted: Bool = false
+    let colors: IssueBadgeColors
+    var textOpacity: Double = 0.78
+    var dotOpacity: Double = 1.0
 
     init(priority: IssuePriority, isMuted: Bool = false) {
         self.text = priority.displayName
-        self.isTopPriority = priority.isTopPriority
-        self.isMuted = isMuted
+        self.colors = priority.badgeColors
+        self.textOpacity = isMuted ? 0.55 : 0.78
+        self.dotOpacity = isMuted ? 0.6 : 1.0
     }
 
-    init(text: String, isTopPriority: Bool, isMuted: Bool = false) {
+    init(text: String, colors: IssueBadgeColors, isMuted: Bool = false) {
         self.text = text
-        self.isTopPriority = isTopPriority
-        self.isMuted = isMuted
+        self.colors = colors
+        self.textOpacity = isMuted ? 0.55 : 0.78
+        self.dotOpacity = isMuted ? 0.6 : 1.0
     }
 
     var body: some View {
         HStack(spacing: 5) {
-            if isTopPriority {
-                Image(systemName: "flag.fill")
-                    .font(.caption2)
-                    .foregroundStyle(Color.red.opacity(isMuted ? 0.7 : 1.0))
-            }
+            Circle()
+                .fill(colors.foreground.opacity(dotOpacity))
+                .frame(width: 6, height: 6)
             Text(text)
-                .foregroundStyle(Color.primary.opacity(isMuted ? 0.55 : 0.78))
+                .foregroundStyle(Color.primary.opacity(textOpacity))
         }
     }
 }
@@ -69,13 +70,13 @@ struct IssueStatusOptionRow: View {
 
 struct IssuePriorityOptionRow: View {
     let text: String
-    let isTopPriority: Bool
+    let colors: IssueBadgeColors
     var showsSelection: Bool = false
     var isSelected: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
-            IssuePriorityBadge(text: text, isTopPriority: isTopPriority)
+            IssuePriorityBadge(text: text, colors: colors)
             if showsSelection {
                 Spacer()
                 if isSelected {

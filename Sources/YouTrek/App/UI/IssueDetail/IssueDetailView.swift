@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Foundation
 
 struct IssueDetailView: View {
     @EnvironmentObject private var container: AppContainer
@@ -10,6 +11,8 @@ struct IssueDetailView: View {
     @State private var priorityOptions: [IssueFieldOption] = []
     @State private var projectOptions: [IssueProject] = []
     @State private var isLoadingProjects: Bool = false
+    @State private var customFields: [IssueField] = []
+    @State private var isLoadingCustomFields: Bool = false
     @State private var subIssues: [IssueSummary] = []
     @State private var isLoadingSubIssues: Bool = false
     @State private var subIssuesError: String?
@@ -60,6 +63,7 @@ struct IssueDetailView: View {
             statusOptions = []
             priorityOptions = []
             projectOptions = []
+            customFields = []
             commentText = ""
             commentError = nil
             lastIssueCopyTimestamp = nil
@@ -70,6 +74,9 @@ struct IssueDetailView: View {
             projectOptions = await container.loadProjects()
             statusOptions = await container.loadStatusOptions(for: issue)
             priorityOptions = await container.loadPriorityOptions(for: issue)
+            isLoadingCustomFields = true
+            customFields = await loadCustomFields()
+            isLoadingCustomFields = false
         }
         .task(id: issue.readableID) {
             await loadSubIssues()
@@ -80,7 +87,18 @@ struct IssueDetailView: View {
                 priorityOptions = []
                 statusOptions = await container.loadStatusOptions(for: issue)
                 priorityOptions = await container.loadPriorityOptions(for: issue)
+                isLoadingCustomFields = true
+                customFields = await loadCustomFields()
+                isLoadingCustomFields = false
             }
+        }
+        .onChange(of: container.appState.subIssueRefresh) { _, refresh in
+            guard let refresh else { return }
+            let trimmedParent = refresh.parentReadableID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedIssue = issue.readableID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedParent.isEmpty,
+                  trimmedParent.caseInsensitiveCompare(trimmedIssue) == .orderedSame else { return }
+            Task { await loadSubIssues() }
         }
     }
 
@@ -140,7 +158,7 @@ struct IssueDetailView: View {
                     Text("Tags: \(issue.tags.joined(separator: ", "))")
                 }
             }
-            if !customFieldRows.isEmpty {
+            if hasCustomFields {
                 Button {
                     showsAllCustomFields.toggle()
                 } label: {
@@ -149,11 +167,23 @@ struct IssueDetailView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                if showsAllCustomFields {
-                    ForEach(customFieldRows) { field in
-                        metadataRow(systemImage: "square.grid.2x2") {
-                            Text("\(field.name): \(field.values.joined(separator: ", "))")
-                        }
+                if isLoadingCustomFields {
+                    metadataRow(systemImage: "square.grid.2x2") {
+                        Text("Loading custom fields…")
+                    }
+                }
+                let displayItems = showsAllCustomFields ? customFieldItems : customFieldItems.filter { !$0.values.isEmpty }
+                if displayItems.isEmpty, !isLoadingCustomFields {
+                    metadataRow(systemImage: "square.grid.2x2") {
+                        Text("No custom fields.")
+                    }
+                } else {
+                    ForEach(displayItems) { item in
+                        CustomFieldEditorRow(
+                            item: item,
+                            initialValue: item.field.map { draftValue(for: $0, values: item.values) } ?? .none,
+                            onUpdate: updateCustomField
+                        )
                     }
                 }
             }
@@ -163,10 +193,9 @@ struct IssueDetailView: View {
     }
 
     private var customFieldRows: [IssueDetailCustomField] {
-        let excludedKeys: Set<String> = ["assignee", "state", "status", "priority"]
         return issue.customFieldValues.compactMap { key, values in
             let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            guard !trimmedKey.isEmpty, !excludedKeys.contains(trimmedKey) else { return nil }
+            guard !trimmedKey.isEmpty, !excludedCustomFieldNames.contains(trimmedKey) else { return nil }
             let cleanedValues = values
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
@@ -182,11 +211,42 @@ struct IssueDetailView: View {
         }
     }
 
+    private var customFieldItems: [CustomFieldDisplayItem] {
+        if customFields.isEmpty {
+            return customFieldRows.map {
+                CustomFieldDisplayItem(id: $0.id, name: $0.name, values: $0.values, field: nil)
+            }
+        }
+
+        let valuesByKey = issue.customFieldValues
+        let ordered = orderedCustomFields(customFields)
+        var items: [CustomFieldDisplayItem] = ordered.map { field in
+            let values = valuesByKey[field.normalizedName] ?? []
+            return CustomFieldDisplayItem(
+                id: field.normalizedName,
+                name: field.displayName,
+                values: values,
+                field: field
+            )
+        }
+
+        let known = Set(items.map(\.id))
+        for row in customFieldRows where !known.contains(row.id) {
+            items.append(CustomFieldDisplayItem(id: row.id, name: row.name, values: row.values, field: nil))
+        }
+        return items
+    }
+
+    private var hasCustomFields: Bool {
+        !customFieldItems.isEmpty
+    }
+
     private var customFieldsToggleLabel: String {
         if showsAllCustomFields {
             return "Hide custom fields"
         }
-        return "Custom fields (\(customFieldRows.count))"
+        let count = customFieldItems.filter { !$0.values.isEmpty }.count
+        return "Custom fields (\(count))"
     }
 
     private func customFieldDisplayName(for key: String) -> String {
@@ -200,6 +260,200 @@ struct IssueDetailView: View {
             .map { $0.capitalized }
             .joined(separator: " ")
     }
+
+    private var excludedCustomFieldNames: Set<String> {
+        ["assignee", "state", "status", "priority"]
+    }
+
+    private func orderedCustomFields(_ fields: [IssueField]) -> [IssueField] {
+        fields.sorted { left, right in
+            let leftOrdinal = left.ordinal ?? Int.max
+            let rightOrdinal = right.ordinal ?? Int.max
+            if leftOrdinal != rightOrdinal {
+                return leftOrdinal < rightOrdinal
+            }
+            return left.displayName.localizedCaseInsensitiveCompare(right.displayName) == .orderedAscending
+        }
+    }
+
+    private func loadCustomFields() async -> [IssueField] {
+        guard let project = projectOptions.first(where: { $0.matches(identifier: issue.projectName) }) else {
+            return []
+        }
+        let fetched = await container.loadFields(for: project.id)
+        let filtered = fetched.filter { !excludedCustomFieldNames.contains($0.normalizedName) }
+        guard !filtered.isEmpty else { return [] }
+
+        let optionsByField = await fetchCustomFieldOptions(for: filtered)
+        var resolved = filtered
+        for index in resolved.indices {
+            if let options = optionsByField[resolved[index].id] {
+                resolved[index].options = options
+            }
+        }
+
+        if resolved.contains(where: { $0.kind.usesPeople }) {
+            let people = await container.searchPeople(query: nil, projectID: project.id)
+            if !people.isEmpty {
+                for index in resolved.indices where resolved[index].kind.usesPeople {
+                    resolved[index].options = people
+                }
+            }
+        }
+
+        return orderedCustomFields(resolved)
+    }
+
+    private func fetchCustomFieldOptions(for fields: [IssueField]) async -> [String: [IssueFieldOption]] {
+        var results: [String: [IssueFieldOption]] = [:]
+        await withTaskGroup(of: (String, [IssueFieldOption]).self) { group in
+            for field in fields {
+                guard field.kind.usesOptions, let bundleID = field.bundleID else { continue }
+                group.addTask {
+                    let options = await container.loadBundleOptions(bundleID: bundleID, kind: field.kind)
+                    return (field.id, options)
+                }
+            }
+            for await (fieldID, options) in group {
+                results[fieldID] = options
+            }
+        }
+        return results
+    }
+
+    private func draftValue(for field: IssueField, values: [String]) -> IssueDraftFieldValue {
+        let cleaned = values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { return .none }
+
+        switch field.kind {
+        case .enumeration, .state, .version, .build, .ownedField, .user:
+            let options = cleaned.map { value -> IssueFieldOption in
+                if let match = option(for: value, in: field.options) {
+                    return match
+                }
+                return IssueFieldOption(id: "", name: value, displayName: value)
+            }
+            if field.allowsMultiple {
+                return .options(options)
+            }
+            return options.first.map { .option($0) } ?? .none
+        case .string, .text:
+            return .string(cleaned[0])
+        case .integer:
+            if let value = Int(cleaned[0]) {
+                return .integer(value)
+            }
+            return .string(cleaned[0])
+        case .float:
+            if let value = Double(cleaned[0]) {
+                return .number(value)
+            }
+            return .string(cleaned[0])
+        case .boolean:
+            if let value = parseBool(cleaned[0]) {
+                return .bool(value)
+            }
+            return .string(cleaned[0])
+        case .date, .dateTime:
+            if let value = parseDate(cleaned[0]) {
+                return .date(value)
+            }
+            return .string(cleaned[0])
+        case .period:
+            if let value = Int(cleaned[0]) {
+                return .integer(value)
+            }
+            return .string(cleaned[0])
+        case .unknown:
+            return .string(cleaned[0])
+        }
+    }
+
+    private func option(for value: String, in options: [IssueFieldOption]) -> IssueFieldOption? {
+        let needle = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return nil }
+        return options.first { option in
+            let candidates = [
+                option.displayName,
+                option.name,
+                option.login ?? ""
+            ]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            return candidates.contains(needle)
+        }
+    }
+
+    private func parseBool(_ value: String) -> Bool? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalized {
+        case "true", "yes", "1": return true
+        case "false", "no", "0": return false
+        default: return nil
+        }
+    }
+
+    private func parseDate(_ value: String) -> Date? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let date = Self.isoDateTimeFractionFormatter.date(from: trimmed) {
+            return date
+        }
+        if let date = Self.isoDateTimeFormatter.date(from: trimmed) {
+            return date
+        }
+        if let date = Self.isoDateFormatter.date(from: trimmed) {
+            return date
+        }
+        for formatter in Self.fallbackDateFormatters {
+            if let date = formatter.date(from: trimmed) {
+                return date
+            }
+        }
+        return nil
+    }
+
+    private func updateCustomField(_ field: IssueField, value: IssueDraftFieldValue) {
+        let trimmedName = field.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        var patch = IssuePatch(title: nil, description: nil, status: nil, priority: nil)
+        patch.issueReadableID = issue.readableID
+        patch.customFields = [
+            IssueDraftField(name: trimmedName, kind: field.kind, allowsMultiple: field.allowsMultiple, value: value)
+        ]
+        Task {
+            await container.updateIssue(id: issue.id, patch: patch)
+        }
+    }
+
+    private static let isoDateTimeFractionFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let isoDateTimeFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let isoDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        return formatter
+    }()
+
+    private static let fallbackDateFormatters: [DateFormatter] = {
+        let formats = ["yyyy-MM-dd", "MM/dd/yyyy", "MMM d, yyyy", "MMM d, yyyy h:mm a"]
+        return formats.map { format in
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = format
+            return formatter
+        }
+    }()
 
     private func updateProject(_ project: IssueProject) {
         let currentProjectID = projectOptions.first { $0.matches(identifier: issue.projectName) }?.id
@@ -562,10 +816,10 @@ struct IssueDetailView: View {
                 Button {
                     updatePriority(option)
                 } label: {
-                    let priority = IssuePriority(option: option)
+                    let colors = option.badgeColors(fallback: IssuePriority(option: option).badgeColors)
                     IssuePriorityOptionRow(
                         text: option.displayName,
-                        isTopPriority: priority.isTopPriority,
+                        colors: colors,
                         showsSelection: true,
                         isSelected: optionMatchesPriority(option)
                     )
@@ -743,6 +997,13 @@ private struct IssueDetailCustomField: Identifiable {
     let values: [String]
 }
 
+private struct CustomFieldDisplayItem: Identifiable {
+    let id: String
+    let name: String
+    let values: [String]
+    let field: IssueField?
+}
+
 private struct MetadataIcon: View {
     let systemName: String
     let size: CGFloat
@@ -751,6 +1012,278 @@ private struct MetadataIcon: View {
         Image(systemName: systemName)
             .font(.system(size: size * 0.55, weight: .semibold))
             .frame(width: size, height: size)
+    }
+}
+
+private struct CustomFieldEditorRow: View {
+    @EnvironmentObject private var container: AppContainer
+    let item: CustomFieldDisplayItem
+    let initialValue: IssueDraftFieldValue
+    let onUpdate: (IssueField, IssueDraftFieldValue) -> Void
+    @State private var isPresented = false
+
+    var body: some View {
+        if let field = item.field {
+            Button {
+                isPresented.toggle()
+            } label: {
+                rowLabel(showChevron: true)
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+                CustomFieldEditorPopover(
+                    field: field,
+                    initialValue: initialValue,
+                    onSubmit: { value in
+                        onUpdate(field, value)
+                        isPresented = false
+                    }
+                )
+                .environmentObject(container)
+            }
+        } else {
+            rowLabel(showChevron: false)
+        }
+    }
+
+    private func rowLabel(showChevron: Bool) -> some View {
+        HStack(spacing: 8) {
+            MetadataIcon(systemName: "square.grid.2x2", size: IssueDetailMetrics.metadataIconSize)
+            Text("\(item.name): \(valueLabel)")
+            if showChevron {
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var valueLabel: String {
+        let cleaned = item.values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return cleaned.isEmpty ? "None" : cleaned.joined(separator: ", ")
+    }
+}
+
+private struct CustomFieldEditorPopover: View {
+    let field: IssueField
+    let initialValue: IssueDraftFieldValue
+    let onSubmit: (IssueDraftFieldValue) -> Void
+
+    @State private var value: IssueDraftFieldValue
+    @State private var query: String = ""
+
+    init(field: IssueField, initialValue: IssueDraftFieldValue, onSubmit: @escaping (IssueDraftFieldValue) -> Void) {
+        self.field = field
+        self.initialValue = initialValue
+        self.onSubmit = onSubmit
+        _value = State(initialValue: initialValue)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(field.displayName)
+                .font(.headline)
+
+            content
+
+            HStack {
+                if !value.isEmpty {
+                    Button("Clear") {
+                        value = .none
+                    }
+                    .buttonStyle(.link)
+                }
+                Spacer()
+                Button("Apply") {
+                    onSubmit(value)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(value == initialValue)
+            }
+        }
+        .padding(12)
+        .frame(width: 320)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch field.kind {
+        case .enumeration, .state, .version, .build, .ownedField, .user:
+            optionEditor
+        case .boolean:
+            Toggle("Enabled", isOn: boolBinding)
+        case .text:
+            TextField("", text: stringBinding, axis: .vertical)
+                .lineLimit(3...6)
+        case .integer:
+            TextField("", text: intBinding)
+                .monospacedDigit()
+        case .float:
+            TextField("", text: floatBinding)
+                .monospacedDigit()
+        case .date, .dateTime:
+            DatePicker(
+                "",
+                selection: dateBinding,
+                displayedComponents: field.kind == .date ? .date : [.date, .hourAndMinute]
+            )
+            .labelsHidden()
+        case .period:
+            HStack(spacing: 8) {
+                TextField("Minutes", text: intBinding)
+                    .monospacedDigit()
+                Text("min")
+                    .foregroundStyle(.secondary)
+            }
+        case .string, .unknown:
+            TextField("", text: stringBinding)
+        }
+    }
+
+    @ViewBuilder
+    private var optionEditor: some View {
+        let options = filteredOptions
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Filter options", text: $query)
+            if options.isEmpty {
+                Text("No matching options")
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        if field.allowsMultiple {
+                            ForEach(options, id: \.stableID) { option in
+                                Toggle(isOn: toggleBinding(for: option)) {
+                                    Text(option.displayName)
+                                }
+                                .toggleStyle(.checkbox)
+                            }
+                        } else {
+                            ForEach(options, id: \.stableID) { option in
+                                Button {
+                                    value = .option(option)
+                                } label: {
+                                    CustomFieldOptionRow(
+                                        option: option,
+                                        isSelected: value.optionValue?.stableID == option.stableID
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 200)
+            }
+        }
+    }
+
+    private var filteredOptions: [IssueFieldOption] {
+        guard !field.options.isEmpty else { return [] }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return field.options }
+        let needle = trimmed.lowercased()
+        return field.options.filter { option in
+            let candidates = [
+                option.displayName,
+                option.name,
+                option.login ?? ""
+            ]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            return candidates.contains { !$0.isEmpty && $0.contains(needle) }
+        }
+    }
+
+    private func toggleBinding(for option: IssueFieldOption) -> Binding<Bool> {
+        Binding(
+            get: { value.optionValues.contains(where: { $0.stableID == option.stableID }) },
+            set: { isSelected in
+                var selected = value.optionValues
+                if isSelected {
+                    if !selected.contains(where: { $0.stableID == option.stableID }) {
+                        selected.append(option)
+                    }
+                } else {
+                    selected.removeAll { $0.stableID == option.stableID }
+                }
+                value = selected.isEmpty ? .none : .options(selected)
+            }
+        )
+    }
+
+    private var stringBinding: Binding<String> {
+        Binding(
+            get: { value.stringValue ?? "" },
+            set: {
+                let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                value = trimmed.isEmpty ? .none : .string($0)
+            }
+        )
+    }
+
+    private var intBinding: Binding<String> {
+        Binding(
+            get: { value.stringValue ?? value.intValue.map(String.init) ?? "" },
+            set: {
+                let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty {
+                    value = .none
+                } else if let intValue = Int(trimmed) {
+                    value = .integer(intValue)
+                } else {
+                    value = .string($0)
+                }
+            }
+        )
+    }
+
+    private var floatBinding: Binding<String> {
+        Binding(
+            get: { value.stringValue ?? value.doubleValue.map { String($0) } ?? "" },
+            set: {
+                let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty {
+                    value = .none
+                } else if let doubleValue = Double(trimmed) {
+                    value = .number(doubleValue)
+                } else {
+                    value = .string($0)
+                }
+            }
+        )
+    }
+
+    private var boolBinding: Binding<Bool> {
+        Binding(
+            get: { value.boolValue ?? false },
+            set: { value = .bool($0) }
+        )
+    }
+
+    private var dateBinding: Binding<Date> {
+        Binding(
+            get: { value.dateValue ?? Date() },
+            set: { value = .date($0) }
+        )
+    }
+}
+
+private struct CustomFieldOptionRow: View {
+    let option: IssueFieldOption
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(option.displayName)
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .contentShape(Rectangle())
     }
 }
 
