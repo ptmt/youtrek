@@ -100,6 +100,14 @@ struct IssueDetailView: View {
                   trimmedParent.caseInsensitiveCompare(trimmedIssue) == .orderedSame else { return }
             Task { await loadSubIssues() }
         }
+        .onChange(of: container.appState.issueDetailRefresh) { _, refresh in
+            guard let refresh else { return }
+            let trimmedRefresh = refresh.readableID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedIssue = issue.readableID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedRefresh.isEmpty,
+                  trimmedRefresh.caseInsensitiveCompare(trimmedIssue) == .orderedSame else { return }
+            Task { await container.loadIssueDetail(for: issue) }
+        }
     }
 
     private var header: some View {
@@ -167,23 +175,25 @@ struct IssueDetailView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                if isLoadingCustomFields {
-                    metadataRow(systemImage: "square.grid.2x2") {
-                        Text("Loading custom fields…")
+                if showsAllCustomFields {
+                    if isLoadingCustomFields {
+                        metadataRow(systemImage: "square.grid.2x2") {
+                            Text("Loading custom fields…")
+                        }
                     }
-                }
-                let displayItems = showsAllCustomFields ? customFieldItems : customFieldItems.filter { !$0.values.isEmpty }
-                if displayItems.isEmpty, !isLoadingCustomFields {
-                    metadataRow(systemImage: "square.grid.2x2") {
-                        Text("No custom fields.")
-                    }
-                } else {
-                    ForEach(displayItems) { item in
-                        CustomFieldEditorRow(
-                            item: item,
-                            initialValue: item.field.map { draftValue(for: $0, values: item.values) } ?? .none,
-                            onUpdate: updateCustomField
-                        )
+                    let displayItems = customFieldItems.filter { !$0.values.isEmpty }
+                    if displayItems.isEmpty, !isLoadingCustomFields {
+                        metadataRow(systemImage: "square.grid.2x2") {
+                            Text("No custom fields.")
+                        }
+                    } else {
+                        ForEach(displayItems) { item in
+                            CustomFieldEditorRow(
+                                item: item,
+                                initialValue: item.field.map { draftValue(for: $0, values: item.values) } ?? .none,
+                                onUpdate: updateCustomField
+                            )
+                        }
                     }
                 }
             }
@@ -238,7 +248,7 @@ struct IssueDetailView: View {
     }
 
     private var hasCustomFields: Bool {
-        !customFieldItems.isEmpty
+        customFieldItems.contains { !$0.values.isEmpty }
     }
 
     private var customFieldsToggleLabel: String {
@@ -799,7 +809,7 @@ struct IssueDetailView: View {
                 textOpacity: isClosed ? 0.62 : 0.86,
                 dotOpacity: isClosed ? 0.6 : 1.0
             )
-            .font(.callout.weight(.semibold))
+            .font(headerBadgeFont)
         }
         .menuStyle(.borderlessButton)
     }
@@ -827,9 +837,16 @@ struct IssueDetailView: View {
             }
         } label: {
             IssuePriorityBadge(priority: issue.priority, isMuted: isClosed)
-                .font(.callout.weight(.semibold))
+                .font(headerBadgeFont)
         }
         .menuStyle(.borderlessButton)
+    }
+
+    private var headerBadgeFont: Font {
+        let isClosed = issue.status.isClosed
+        let isUnread = container.appState.isIssueUnread(issue)
+        let weight: Font.Weight = isUnread && !isClosed ? .medium : .regular
+        return .caption.weight(weight)
     }
 
     private var priorityMenuOptions: [IssueFieldOption] {

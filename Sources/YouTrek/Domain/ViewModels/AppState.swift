@@ -38,6 +38,7 @@ final class AppState: ObservableObject {
     @Published var activeNewIssueDialog: NewIssueDialogState?
     @Published var activeCommandPalette: CommandPaletteState?
     @Published var subIssueRefresh: SubIssueRefresh?
+    @Published var issueDetailRefresh: IssueDetailRefresh?
     private var didLogIssueListRendered = false
     private let boardDataSourceEventLimit = 60
     private let issueListDataSourceEventLimit = 60
@@ -323,6 +324,12 @@ final class AppState: ObservableObject {
         subIssueRefresh = SubIssueRefresh(parentReadableID: trimmed)
     }
 
+    func recordIssueDetailRefresh(readableID: String) {
+        let trimmed = readableID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        issueDetailRefresh = IssueDetailRefresh(readableID: trimmed)
+    }
+
     func prefillInitialSyncState(issues: Bool, boards: Bool, savedSearches: Bool) {
         hasCompletedIssueSync = issues
         hasCompletedBoardSync = boards
@@ -471,6 +478,11 @@ struct ToastNotice: Identifiable, Equatable {
 struct SubIssueRefresh: Identifiable, Equatable {
     let id = UUID()
     let parentReadableID: String
+}
+
+struct IssueDetailRefresh: Identifiable, Equatable {
+    let id = UUID()
+    let readableID: String
 }
 
 private extension AppState {

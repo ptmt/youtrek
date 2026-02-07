@@ -140,6 +140,9 @@ final class AppContainer: ObservableObject {
                 let message = resolvedID.isEmpty ? "Issue updated" : "Issue \(resolvedID) updated"
                 await MainActor.run {
                     state?.showToast(message)
+                    if !resolvedID.isEmpty {
+                        state?.recordIssueDetailRefresh(readableID: resolvedID)
+                    }
                 }
             }
         )
@@ -209,6 +212,9 @@ final class AppContainer: ObservableObject {
                 let message = resolvedID.isEmpty ? "Issue updated" : "Issue \(resolvedID) updated"
                 await MainActor.run {
                     state?.showToast(message)
+                    if !resolvedID.isEmpty {
+                        state?.recordIssueDetailRefresh(readableID: resolvedID)
+                    }
                 }
             }
         )
