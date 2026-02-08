@@ -24,10 +24,12 @@ final class AppContainer: ObservableObject {
     private let peopleRepositorySwitcher: SwitchablePeopleRepository
     private var boardLocalStore: IssueBoardLocalStore
     private var savedQueryLocalStore: SavedQueryLocalStore
+    private var todoListStore: TodoListMarkdownStore
     private var lastLoadedIssueQuery: IssueQuery?
     private var cachedProjects: [IssueProject] = []
     private var cachedSavedQueries: [SavedQuery] = []
     private var cachedBoards: [IssueBoard] = []
+    private var cachedTodoLists: [TodoListDocument] = []
     private var statusOptionsCache: [String: [IssueFieldOption]] = [:]
     private var priorityOptionsCache: [String: [IssueFieldOption]] = [:]
     private var hasStartedBoardPrefetch = false
@@ -58,7 +60,8 @@ final class AppContainer: ObservableObject {
         issueFieldRepositorySwitcher: SwitchableIssueFieldRepository,
         peopleRepositorySwitcher: SwitchablePeopleRepository,
         boardLocalStore: IssueBoardLocalStore,
-        savedQueryLocalStore: SavedQueryLocalStore
+        savedQueryLocalStore: SavedQueryLocalStore,
+        todoListStore: TodoListMarkdownStore
     ) {
         self.appState = appState
         self.issueComposer = issueComposer
@@ -78,6 +81,7 @@ final class AppContainer: ObservableObject {
         self.peopleRepositorySwitcher = peopleRepositorySwitcher
         self.boardLocalStore = boardLocalStore
         self.savedQueryLocalStore = savedQueryLocalStore
+        self.todoListStore = todoListStore
         self.appStateCancellable = appState.objectWillChange.sink { [weak self] in
             Task { @MainActor in
                 await Task.yield()
@@ -119,6 +123,7 @@ final class AppContainer: ObservableObject {
         let peopleSwitcher = SwitchablePeopleRepository(initial: EmptyPeopleRepository())
         let boardStore = IssueBoardLocalStore(accountID: activeAccountID)
         let savedQueryStore = SavedQueryLocalStore(accountID: activeAccountID)
+        let todoListStore = TodoListMarkdownStore(accountID: activeAccountID)
         let issueLocalStore = IssueLocalStore(accountID: activeAccountID)
         let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
             await MainActor.run {
@@ -164,7 +169,8 @@ final class AppContainer: ObservableObject {
             issueFieldRepositorySwitcher: fieldSwitcher,
             peopleRepositorySwitcher: peopleSwitcher,
             boardLocalStore: boardStore,
-            savedQueryLocalStore: savedQueryStore
+            savedQueryLocalStore: savedQueryStore,
+            todoListStore: todoListStore
         )
         container.requiresSetup = initialRequiresSetup
         Task { await container.configureIfNeeded() }
@@ -191,6 +197,7 @@ final class AppContainer: ObservableObject {
         let peopleSwitcher = SwitchablePeopleRepository(initial: PreviewPeopleRepository())
         let boardStore = IssueBoardLocalStore(accountID: activeAccountID)
         let savedQueryStore = SavedQueryLocalStore(accountID: activeAccountID)
+        let todoListStore = TodoListMarkdownStore(accountID: activeAccountID)
         let issueLocalStore = IssueLocalStore(accountID: activeAccountID)
         let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
             await MainActor.run {
@@ -236,7 +243,8 @@ final class AppContainer: ObservableObject {
             issueFieldRepositorySwitcher: fieldSwitcher,
             peopleRepositorySwitcher: peopleSwitcher,
             boardLocalStore: boardStore,
-            savedQueryLocalStore: savedQueryStore
+            savedQueryLocalStore: savedQueryStore,
+            todoListStore: todoListStore
         )
     }()
 
@@ -248,11 +256,14 @@ final class AppContainer: ObservableObject {
         }
         let cachedBoards = await boardLocalStore.loadBoards()
         let cachedSavedQueries = await savedQueryLocalStore.loadSavedQueries()
+        let cachedTodoLists = (try? await todoListStore.listDocuments()) ?? []
         self.cachedBoards = cachedBoards
         self.cachedSavedQueries = cachedSavedQueries
+        self.cachedTodoLists = cachedTodoLists
         LoggingService.sync.info("Bootstrap: cached boards loaded (\(cachedBoards.count, privacy: .public)).")
         LoggingService.sync.info("Bootstrap: cached saved searches loaded (\(cachedSavedQueries.count, privacy: .public)).")
-        let initialSections = buildSidebarSections(savedQueries: cachedSavedQueries, boards: cachedBoards)
+        LoggingService.sync.info("Bootstrap: cached todo lists loaded (\(cachedTodoLists.count, privacy: .public)).")
+        let initialSections = buildSidebarSections(savedQueries: cachedSavedQueries, boards: cachedBoards, todoLists: cachedTodoLists)
         let initialPreferredSelectionID = storedSidebarSelectionID() ?? preferredSelectionID(from: cachedSavedQueries)
 
         appState.updateSidebar(sections: initialSections, preferredSelectionID: initialPreferredSelectionID)
@@ -331,6 +342,7 @@ final class AppContainer: ObservableObject {
         issueDraftStore = IssueDraftStore(accountID: accountID)
         boardLocalStore = IssueBoardLocalStore(accountID: accountID)
         savedQueryLocalStore = SavedQueryLocalStore(accountID: accountID)
+        todoListStore = TodoListMarkdownStore(accountID: accountID)
         let issueLocalStore = IssueLocalStore(accountID: accountID)
         let syncQueue = SyncOperationQueue { [weak appState] pendingCount, label in
             await MainActor.run {
@@ -375,6 +387,7 @@ final class AppContainer: ObservableObject {
         priorityOptionsCache.removeAll()
         cachedSavedQueries = []
         cachedBoards = []
+        cachedTodoLists = []
     }
 
     private func recordIssueSyncCompleted() {
@@ -402,7 +415,7 @@ final class AppContainer: ObservableObject {
     }
 
     func loadIssues(for selection: SidebarItem) async {
-        guard !selection.isDraft else { return }
+        guard !selection.isDraft, !selection.isTodoList else { return }
         if !appState.hasCompletedInitialSync {
             LoggingService.sync.info("Initial sync: loading issues for \(selection.id, privacy: .public).")
         }
@@ -480,12 +493,13 @@ final class AppContainer: ObservableObject {
                 "Local DB: cached issues loaded (\(cachedIssues.count, privacy: .public)) in \(cachedLoadDuration, privacy: .public) for \(selection.id, privacy: .public)."
             )
             recordDataEvent("Local DB cached issues loaded: \(cachedIssues.count) in \(cachedLoadDuration).")
-            let filtered = applySprintFilterIfNeeded(
+            let filteredByBoard = applySprintFilterIfNeeded(
                 cachedIssues,
                 board: board,
                 filter: sprintFilter,
                 sprintIssueIDs: sprintIssueIDs
             )
+            let filtered = filteredByBoard
             if filtered != appState.issues {
                 appState.replaceIssues(with: filtered)
             }
@@ -552,12 +566,13 @@ final class AppContainer: ObservableObject {
                 recordDataEvent("Local DB sprint fallback empty (\(fallbackDuration)).")
             }
         }
-        let filtered = applySprintFilterIfNeeded(
+        let filteredByBoard = applySprintFilterIfNeeded(
             resolvedIssues,
             board: board,
             filter: sprintFilter,
             sprintIssueIDs: sprintIssueIDs
         )
+        let filtered = filteredByBoard
         if filtered != appState.issues {
             appState.replaceIssues(with: filtered)
         }
@@ -753,12 +768,13 @@ final class AppContainer: ObservableObject {
                     )
                 }
             }
-            let filtered = applySprintFilterIfNeeded(
+            let filteredByBoard = applySprintFilterIfNeeded(
                 resolvedIssues,
                 board: board,
                 filter: sprintFilter,
                 sprintIssueIDs: sprintIssueIDs
             )
+            let filtered = filteredByBoard
             if filtered != appState.issues {
                 appState.replaceIssues(with: filtered)
             }
@@ -796,7 +812,11 @@ final class AppContainer: ObservableObject {
     }
 
     func issueWebURL(for issue: IssueSummary) -> URL? {
-        let trimmedID = issue.readableID.trimmingCharacters(in: .whitespacesAndNewlines)
+        issueWebURL(readableID: issue.readableID)
+    }
+
+    func issueWebURL(readableID: String) -> URL? {
+        let trimmedID = readableID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedID.isEmpty else { return nil }
         guard let apiBase = configurationStore.loadBaseURL() else { return nil }
         var uiBase = apiBase
@@ -816,6 +836,59 @@ final class AppContainer: ObservableObject {
     func openIssueInWeb(_ issue: IssueSummary) {
         guard let url = issueWebURL(for: issue) else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    func openIssueReadableIDInWeb(_ readableID: String) {
+        guard let url = issueWebURL(readableID: readableID) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    func openIssueFromTodoLink(_ readableID: String) async {
+        let normalized = normalizeIssueReadableID(readableID)
+        guard !normalized.isEmpty else { return }
+        guard let issue = await resolveIssueByReadableID(normalized) else {
+            appState.showToast("Issue \(normalized) not found")
+            return
+        }
+        appState.setInspectorVisible(true)
+        appState.selectedIssue = issue
+        appState.selectedIssueIDs = [issue.id]
+        await loadIssueDetail(for: issue)
+    }
+
+    func loadTodoIssueStyles(readableIDs: Set<String>) async -> [String: TodoIssueInlineStyle] {
+        let normalizedIDs = Set(readableIDs.map(normalizeIssueReadableID).filter { !$0.isEmpty })
+        guard !normalizedIDs.isEmpty else { return [:] }
+        var resolved: [String: IssueSummary] = [:]
+
+        for issue in appState.issues {
+            let key = normalizeIssueReadableID(issue.readableID)
+            guard normalizedIDs.contains(key) else { continue }
+            resolved[key] = issue
+        }
+
+        let unresolvedIDs = normalizedIDs.subtracting(Set(resolved.keys))
+        if !unresolvedIDs.isEmpty {
+            let cached = await syncCoordinator.loadIssues(readableIDs: Array(unresolvedIDs))
+            for issue in cached {
+                let key = normalizeIssueReadableID(issue.readableID)
+                guard unresolvedIDs.contains(key) else { continue }
+                resolved[key] = issue
+            }
+        }
+
+        let remainingIDs = normalizedIDs.subtracting(Set(resolved.keys))
+        if !remainingIDs.isEmpty {
+            let page = IssueQuery.Page(size: 20, offset: 0)
+            for readableID in remainingIDs {
+                guard let fetched = await fetchIssueByReadableID(readableID, page: page) else { continue }
+                resolved[readableID] = fetched
+            }
+        }
+
+        return resolved.reduce(into: [String: TodoIssueInlineStyle]()) { partial, entry in
+            partial[entry.key] = TodoIssueInlineStyle(issueID: entry.key, status: entry.value.status)
+        }
     }
 
     func clearCacheAndRefetch() {
@@ -1143,9 +1216,72 @@ final class AppContainer: ObservableObject {
         let boards = await boardLocalStore.loadBoards()
         cachedSavedQueries = savedQueries
         cachedBoards = boards
-        let sections = buildSidebarSections(savedQueries: savedQueries, boards: boards)
+        let todoLists = (try? await todoListStore.listDocuments()) ?? []
+        cachedTodoLists = todoLists
+        let sections = buildSidebarSections(savedQueries: savedQueries, boards: boards, todoLists: todoLists)
         let preferredSelectionID = preferredSelectionID(from: savedQueries)
         appState.updateSidebar(sections: sections, preferredSelectionID: preferredSelectionID)
+    }
+
+    func createTodoList(named name: String) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackName = "Todo List"
+        let resolvedName = trimmedName.isEmpty ? fallbackName : trimmedName
+        do {
+            let created = try await todoListStore.createDocument(named: resolvedName)
+            await refreshTodoLists(preferredSelectionID: "todo-list:\(created.id.uuidString)")
+        } catch {
+            appState.showToast("Failed to create todo list")
+        }
+    }
+
+    func renameTodoList(id: UUID, name: String) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        do {
+            try await todoListStore.renameDocument(id: id, to: trimmedName)
+            await refreshTodoLists(preferredSelectionID: "todo-list:\(id.uuidString)")
+        } catch {
+            appState.showToast("Failed to rename todo list")
+        }
+    }
+
+    func deleteTodoList(id: UUID) async {
+        do {
+            try await todoListStore.deleteDocument(id: id)
+            await refreshTodoLists(preferredSelectionID: nil)
+        } catch {
+            appState.showToast("Failed to delete todo list")
+        }
+    }
+
+    func loadTodoListMarkdown(id: UUID) async -> String {
+        do {
+            return try await todoListStore.loadMarkdown(id: id)
+        } catch {
+            return ""
+        }
+    }
+
+    func saveTodoListMarkdown(id: UUID, markdown: String) async {
+        do {
+            try await todoListStore.saveMarkdown(id: id, markdown: markdown)
+            let previousName = cachedTodoLists.first(where: { $0.id == id })?.name
+            let updatedDocuments = try await todoListStore.listDocuments()
+            cachedTodoLists = updatedDocuments
+            let updatedName = updatedDocuments.first(where: { $0.id == id })?.name
+            if previousName != updatedName {
+                rebuildSidebar(preferredSelectionID: "todo-list:\(id.uuidString)")
+            }
+        } catch {
+            appState.showToast("Failed to save todo list")
+        }
+    }
+
+    private func refreshTodoLists(preferredSelectionID: SidebarItem.ID?) async {
+        let updatedDocuments = (try? await todoListStore.listDocuments()) ?? cachedTodoLists
+        cachedTodoLists = updatedDocuments
+        rebuildSidebar(preferredSelectionID: preferredSelectionID)
     }
 
     func beginSignIn() {
@@ -1652,7 +1788,9 @@ private extension AppContainer {
             "Sidebar refresh: savedQueries=\(resolvedSavedQueries.count, privacy: .public) boards=\(resolvedBoards.count, privacy: .public) duration=\(duration, privacy: .public)s."
         )
 
-        let sections = buildSidebarSections(savedQueries: resolvedSavedQueries, boards: resolvedBoards)
+        let resolvedTodoLists = (try? await todoListStore.listDocuments()) ?? cachedTodoLists
+        cachedTodoLists = resolvedTodoLists
+        let sections = buildSidebarSections(savedQueries: resolvedSavedQueries, boards: resolvedBoards, todoLists: resolvedTodoLists)
         let preferredSelectionID = storedSidebarSelectionID() ?? preferredSelectionID(from: resolvedSavedQueries)
         let previousSelectionID = appState.selectedSidebarItem?.id
 
@@ -1665,7 +1803,7 @@ private extension AppContainer {
 
     }
 
-    func buildSidebarSections(savedQueries: [SavedQuery], boards: [IssueBoard]) -> [SidebarSection] {
+    func buildSidebarSections(savedQueries: [SavedQuery], boards: [IssueBoard], todoLists: [TodoListDocument]) -> [SidebarSection] {
         let visibleSavedQueries = limitedSavedQueries(from: savedQueries)
         let listPage = IssueQuery.Page(size: 50, offset: 0)
         let boardPage = IssueQuery.Page(size: 0, offset: 0)
@@ -1677,6 +1815,7 @@ private extension AppContainer {
         }
         smartItems.append(.assignedToMe(page: listPage))
         smartItems.append(.createdByMe(page: listPage))
+        let todoItems = todoLists.map { SidebarItem.todoList($0, page: listPage) }
 
         let savedItems = visibleSavedQueries.map { SidebarItem.savedSearch($0, page: listPage) }
         let favoriteBoards = boards.filter(\.isFavorite)
@@ -1685,6 +1824,11 @@ private extension AppContainer {
         var sections: [SidebarSection] = []
         if !smartItems.isEmpty {
             sections.append(SidebarSection(id: "smart", title: "Smart Filters", items: smartItems))
+        }
+        if !todoItems.isEmpty {
+            sections.append(SidebarSection(id: "todo", title: "Todo Lists", items: todoItems))
+        } else {
+            sections.append(SidebarSection(id: "todo", title: "Todo Lists", items: [], emptyMessage: "No todo lists yet"))
         }
         let boardEmptyMessage = appState.hasCompletedBoardSync ? "No favorite boards" : nil
         sections.append(
@@ -1709,7 +1853,7 @@ private extension AppContainer {
     }
 
     func rebuildSidebar(preferredSelectionID: SidebarItem.ID? = nil) {
-        let sections = buildSidebarSections(savedQueries: cachedSavedQueries, boards: cachedBoards)
+        let sections = buildSidebarSections(savedQueries: cachedSavedQueries, boards: cachedBoards, todoLists: cachedTodoLists)
         appState.updateSidebar(sections: sections, preferredSelectionID: preferredSelectionID)
     }
 
@@ -2017,6 +2161,46 @@ private extension AppContainer {
         if shouldSeedInitialRead {
             markIssuesSeen(issues)
         }
+    }
+
+    private func resolveIssueByReadableID(_ readableID: String) async -> IssueSummary? {
+        let normalized = normalizeIssueReadableID(readableID)
+        guard !normalized.isEmpty else { return nil }
+        if let inMemory = appState.issues.first(where: { normalizeIssueReadableID($0.readableID) == normalized }) {
+            return inMemory
+        }
+
+        let cached = await syncCoordinator.loadIssues(readableIDs: [normalized])
+        if let match = cached.first(where: { normalizeIssueReadableID($0.readableID) == normalized }) {
+            return match
+        }
+
+        let page = IssueQuery.Page(size: 20, offset: 0)
+        return await fetchIssueByReadableID(normalized, page: page)
+    }
+
+    private func fetchIssueByReadableID(_ readableID: String, page: IssueQuery.Page) async -> IssueSummary? {
+        let queryCandidates: [IssueQuery] = [
+            IssueQuery.saved("id: {\(readableID)}", page: page),
+            IssueQuery.saved(readableID, page: page)
+        ]
+        for query in queryCandidates {
+            guard let fetched = try? await issueRepositorySwitcher.fetchIssues(query: query),
+                  !fetched.isEmpty else {
+                continue
+            }
+            if let exactMatch = fetched.first(where: { normalizeIssueReadableID($0.readableID) == readableID }) {
+                return exactMatch
+            }
+            if let first = fetched.first {
+                return first
+            }
+        }
+        return nil
+    }
+
+    private func normalizeIssueReadableID(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     }
 
 }
@@ -2462,6 +2646,8 @@ private final class PreviewAuthRepository: AuthRepository {
     }
 }
 
+extension AppContainer: TodoListMarkdownStoring, TodoIssueLinkHandling, TodoListManaging {}
+
 private struct PreviewIssueRepository: IssueRepository {
     func fetchIssues(query: IssueQuery) async throws -> [IssueSummary] {
         AppStatePlaceholder.sampleIssues()
@@ -2753,5 +2939,138 @@ private struct PreviewIssueBoardRepository: IssueBoardRepository {
             return match
         }
         throw YouTrackAPIError.invalidResponse
+    }
+}
+
+actor TodoListMarkdownStore {
+    private let fileManager: FileManager
+    private let directoryURL: URL
+
+    init(accountID: UUID?, fileManager: FileManager = .default, baseDirectory: URL? = nil) {
+        self.fileManager = fileManager
+        let resolvedBaseDirectory: URL
+        if let baseDirectory {
+            resolvedBaseDirectory = baseDirectory
+        } else if let appSupportDirectory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            resolvedBaseDirectory = appSupportDirectory
+        } else {
+            resolvedBaseDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        }
+        var directory = resolvedBaseDirectory
+            .appendingPathComponent("YouTrek", isDirectory: true)
+            .appendingPathComponent("TodoLists", isDirectory: true)
+        directory.appendPathComponent(accountID?.uuidString ?? "default", isDirectory: true)
+        self.directoryURL = directory
+    }
+
+    func listDocuments() throws -> [TodoListDocument] {
+        try ensureDirectoryExists()
+        let fileURLs = try fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+        let markdownURLs = fileURLs.filter { $0.pathExtension.lowercased() == "md" }
+        let documents = markdownURLs.compactMap { document(from: $0) }
+        return documents.sorted { lhs, rhs in
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt > rhs.updatedAt
+            }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    func createDocument(named name: String) throws -> TodoListDocument {
+        try ensureDirectoryExists()
+        let id = UUID()
+        let fileURL = documentURL(for: id)
+        let markdown = "# \(name)\n\n"
+        try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
+        guard let document = document(from: fileURL) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return document
+    }
+
+    func renameDocument(id: UUID, to name: String) throws {
+        let markdown = (try? loadMarkdown(id: id)) ?? ""
+        let updated = replacingTopLevelTitle(in: markdown, with: name)
+        try saveMarkdown(id: id, markdown: updated)
+    }
+
+    func deleteDocument(id: UUID) throws {
+        let fileURL = documentURL(for: id)
+        if fileManager.fileExists(atPath: fileURL.path) {
+            try fileManager.removeItem(at: fileURL)
+        }
+    }
+
+    func loadMarkdown(id: UUID) throws -> String {
+        let fileURL = documentURL(for: id)
+        guard fileManager.fileExists(atPath: fileURL.path) else { return "" }
+        return try String(contentsOf: fileURL, encoding: .utf8)
+    }
+
+    func saveMarkdown(id: UUID, markdown: String) throws {
+        try ensureDirectoryExists()
+        let fileURL = documentURL(for: id)
+        try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
+    }
+
+    private func documentURL(for id: UUID) -> URL {
+        directoryURL.appendingPathComponent("\(id.uuidString).md", isDirectory: false)
+    }
+
+    private func ensureDirectoryExists() throws {
+        if !fileManager.fileExists(atPath: directoryURL.path) {
+            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        }
+    }
+
+    private func document(from url: URL) -> TodoListDocument? {
+        let baseName = url.deletingPathExtension().lastPathComponent
+        guard let id = UUID(uuidString: baseName) else { return nil }
+        let markdown = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        let name = parsedName(from: markdown, fallbackID: id)
+        let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+        let updatedAt = values?.contentModificationDate ?? Date.distantPast
+        return TodoListDocument(id: id, name: name, fileName: url.lastPathComponent, updatedAt: updatedAt)
+    }
+
+    private func parsedName(from markdown: String, fallbackID: UUID) -> String {
+        let lines = markdown.split(whereSeparator: \.isNewline)
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if trimmed.hasPrefix("#") {
+                let title = trimmed.drop { $0 == "#" || $0.isWhitespace }.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !title.isEmpty {
+                    return title
+                }
+            }
+            break
+        }
+        return "Todo \(fallbackID.uuidString.prefix(4))"
+    }
+
+    private func replacingTopLevelTitle(in markdown: String, with name: String) -> String {
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedName.isEmpty else { return markdown }
+        var lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        for index in lines.indices {
+            let trimmed = lines[index].trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                continue
+            }
+            if trimmed.hasPrefix("#") {
+                lines[index] = "# \(normalizedName)"
+                return lines.joined(separator: "\n")
+            }
+            break
+        }
+        if markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "# \(normalizedName)\n\n"
+        }
+        return "# \(normalizedName)\n\n\(markdown)"
     }
 }

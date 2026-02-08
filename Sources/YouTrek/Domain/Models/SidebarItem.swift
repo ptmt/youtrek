@@ -1,11 +1,28 @@
 import Foundation
 import SwiftUI
 
+struct TodoListDocument: Identifiable, Hashable, Sendable {
+    let id: UUID
+    let name: String
+    let fileName: String
+    let updatedAt: Date
+}
+
+struct TodoIssueInlineStyle: Hashable, Sendable {
+    let issueID: String
+    let status: IssueStatus
+
+    var isClosed: Bool {
+        status.isClosed
+    }
+}
+
 struct SidebarItem: Identifiable, Hashable, Sendable {
     enum Kind: String, Hashable, Sendable {
         case inbox
         case assignedToMe
         case createdByMe
+        case todoList
         case board
         case savedSearch
         case draft
@@ -24,6 +41,7 @@ struct SidebarItem: Identifiable, Hashable, Sendable {
     var isBoard: Bool { kind == .board }
     var isSavedSearch: Bool { kind == .savedSearch }
     var isDraft: Bool { kind == .draft }
+    var isTodoList: Bool { kind == .todoList }
     var savedQueryID: String? {
         guard isSavedSearch, id.hasPrefix("saved:") else { return nil }
         return String(id.dropFirst("saved:".count))
@@ -35,6 +53,10 @@ struct SidebarItem: Identifiable, Hashable, Sendable {
     var draftID: UUID? {
         guard isDraft, id.hasPrefix("draft:") else { return nil }
         return UUID(uuidString: String(id.dropFirst("draft:".count)))
+    }
+    var todoListID: UUID? {
+        guard isTodoList, id.hasPrefix("todo-list:") else { return nil }
+        return UUID(uuidString: String(id.dropFirst("todo-list:".count)))
     }
 }
 
@@ -73,6 +95,23 @@ extension SidebarItem {
                 rawQuery: nil,
                 search: "",
                 filters: ["for: me", "#Unresolved"],
+                sort: .updated(descending: true),
+                page: page
+            ),
+            board: nil
+        )
+    }
+
+    static func todoList(_ list: TodoListDocument, page: IssueQuery.Page) -> SidebarItem {
+        SidebarItem(
+            id: "todo-list:\(list.id.uuidString)",
+            kind: .todoList,
+            title: list.name,
+            iconName: "checklist.unchecked",
+            query: IssueQuery(
+                rawQuery: nil,
+                search: "",
+                filters: [],
                 sort: .updated(descending: true),
                 page: page
             ),

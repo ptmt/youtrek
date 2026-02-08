@@ -137,9 +137,14 @@ private struct RootContentView: View {
             container.recordSidebarSelection(selection)
             Task { @MainActor in
                 await Task.yield()
-                if selection.isBoard, isInspectorVisible {
+                if (selection.isBoard || selection.isTodoList), isInspectorVisible {
                     isInspectorVisible = false
                     appState.setInspectorVisible(false)
+                }
+                if selection.isTodoList {
+                    appState.selectedDraftID = nil
+                    appState.selectedIssue = nil
+                    appState.selectedIssueIDs.removeAll()
                 }
                 if !selectionShowsDrafts(selection), appState.selectedIssue?.isDraft == true {
                     appState.selectedDraftID = nil
@@ -225,6 +230,35 @@ private struct RootContentView: View {
             boardSyncStatus: { item in
                 appState.boardSyncStatus(for: item)
             },
+            onCreateTodoList: {
+                let suggestedName = "Todo List"
+                guard let resolvedName = promptForTodoListName(
+                    title: "New Todo List",
+                    message: "Name your new todo list.",
+                    defaultValue: suggestedName
+                ) else { return }
+                Task {
+                    await container.createTodoList(named: resolvedName)
+                }
+            },
+            onRenameTodoList: { item in
+                guard let listID = item.todoListID else { return }
+                guard let resolvedName = promptForTodoListName(
+                    title: "Rename Todo List",
+                    message: "Set a new name for this todo list.",
+                    defaultValue: item.title
+                ) else { return }
+                Task {
+                    await container.renameTodoList(id: listID, name: resolvedName)
+                }
+            },
+            onDeleteTodoList: { item in
+                guard let listID = item.todoListID else { return }
+                guard confirmDeleteTodoList(named: item.title) else { return }
+                Task {
+                    await container.deleteTodoList(id: listID)
+                }
+            },
             onToggleSidebar: toggleSidebar
         )
         .toolbar(removing: .sidebarToggle)
@@ -232,40 +266,56 @@ private struct RootContentView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        if let selection = appState.selectedSidebarItem, selection.isBoard {
-            BoardContentView(
-                appState: appState,
-                selection: selection,
-                searchQuery: searchQuery,
-                showDiagnostics: showBoardDiagnostics
-            )
+        if let selection = appState.selectedSidebarItem {
+            if selection.isBoard {
+                BoardContentView(
+                    appState: appState,
+                    selection: selection,
+                    searchQuery: searchQuery,
+                    showDiagnostics: showBoardDiagnostics
+                )
+            } else if selection.isTodoList, let todoListID = selection.todoListID {
+                TodoListContentView(
+                    listID: todoListID,
+                    title: selection.title,
+                    markdownStore: container,
+                    issueLinkHandler: container,
+                    todoListManager: container
+                )
+                .id(todoListID)
+            } else {
+                let listID = selection.id
+                let diagnosticEvents = appState.issueListDataSourceEvents(for: listID)
+                let diagnosticsQuery = selection.query.diagnosticsLabel
+                IssueListView(
+                    issues: visibleIssues,
+                    selection: $appState.selectedIssue,
+                    selectedIDs: $appState.selectedIssueIDs,
+                    showAssigneeColumn: showAssigneeColumn,
+                    isLoading: appState.isLoadingIssues,
+                    hasCompletedSync: appState.hasCompletedIssueSync,
+                    showDiagnostics: showIssueListDiagnostics,
+                    diagnosticEvents: diagnosticEvents,
+                    diagnosticsTitle: selection.title,
+                    diagnosticsID: selection.id,
+                    diagnosticsQuery: diagnosticsQuery,
+                    diagnosticsSearch: searchQuery,
+                    isIssueUnread: { issue in
+                        appState.isIssueUnread(issue)
+                    },
+                    onIssuesRendered: { count in
+                        appState.recordIssueListRendered(issueCount: count)
+                    },
+                    onDeleteDraft: { draftID in
+                        container.discardDraft(recordID: draftID)
+                    }
+                )
+            }
         } else {
-            let listSelection = appState.selectedSidebarItem
-            let listID = listSelection?.id
-            let diagnosticEvents = listID.map { appState.issueListDataSourceEvents(for: $0) } ?? []
-            let diagnosticsQuery = listSelection?.query.diagnosticsLabel
-            IssueListView(
-                issues: visibleIssues,
-                selection: $appState.selectedIssue,
-                selectedIDs: $appState.selectedIssueIDs,
-                showAssigneeColumn: showAssigneeColumn,
-                isLoading: appState.isLoadingIssues,
-                hasCompletedSync: appState.hasCompletedIssueSync,
-                showDiagnostics: showIssueListDiagnostics,
-                diagnosticEvents: diagnosticEvents,
-                diagnosticsTitle: listSelection?.title,
-                diagnosticsID: listSelection?.id,
-                diagnosticsQuery: diagnosticsQuery,
-                diagnosticsSearch: searchQuery,
-                isIssueUnread: { issue in
-                    appState.isIssueUnread(issue)
-                },
-                onIssuesRendered: { count in
-                    appState.recordIssueListRendered(issueCount: count)
-                },
-                onDeleteDraft: { draftID in
-                    container.discardDraft(recordID: draftID)
-                }
+            ContentUnavailableView(
+                "Select a section",
+                systemImage: "sidebar.left",
+                description: Text("Pick an item from the sidebar to continue.")
             )
         }
     }
@@ -319,6 +369,32 @@ private struct RootContentView: View {
             #selector(NSSplitViewController.toggleSidebar(_:)),
             with: nil
         )
+    }
+
+    private func promptForTodoListName(title: String, message: String, defaultValue: String) -> String? {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        let textField = NSTextField(string: defaultValue)
+        textField.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
+        alert.accessoryView = textField
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return nil }
+        let resolved = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return resolved.isEmpty ? nil : resolved
+    }
+
+    private func confirmDeleteTodoList(named name: String) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Delete Todo List"
+        alert.informativeText = "Delete \"\(name)\" permanently?"
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
 }

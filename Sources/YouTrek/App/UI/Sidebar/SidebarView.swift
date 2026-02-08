@@ -10,6 +10,9 @@ struct SidebarView: View {
     let onRefreshBoard: ((SidebarItem) -> Void)?
     let onOpenBoardInWeb: ((SidebarItem) -> Void)?
     let boardSyncStatus: ((SidebarItem) -> String?)?
+    let onCreateTodoList: (() -> Void)?
+    let onRenameTodoList: ((SidebarItem) -> Void)?
+    let onDeleteTodoList: ((SidebarItem) -> Void)?
     let onToggleSidebar: (() -> Void)?
 
     var body: some View {
@@ -18,13 +21,21 @@ struct SidebarView: View {
                 .ignoresSafeArea(.container, edges: .top)
             List(selection: $selection) {
                 ForEach(sections) { section in
-                    Section(section.title) {
+                    Section {
                         if section.items.isEmpty {
                             if let emptyMessage = section.emptyMessage {
-                                Text(emptyMessage)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .disabled(true)
+                                if section.id == "todo" {
+                                    Button(action: { onCreateTodoList?() }) {
+                                        Label(emptyMessage, systemImage: "plus.circle.fill")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    Text(emptyMessage)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .disabled(true)
+                                }
                             }
                         } else {
                             ForEach(section.items) { item in
@@ -54,11 +65,35 @@ struct SidebarView: View {
                                                 .disabled(true)
                                         }
                                     }
+                                } else if item.isTodoList {
+                                    NavigationLink(value: item) {
+                                        Label(item.displayTitle, systemImage: item.iconName)
+                                    }
+                                    .contextMenu {
+                                        Button("Rename") {
+                                            onRenameTodoList?(item)
+                                        }
+                                        Button("Delete", role: .destructive) {
+                                            onDeleteTodoList?(item)
+                                        }
+                                    }
                                 } else {
                                     NavigationLink(value: item) {
                                         Label(item.displayTitle, systemImage: item.iconName)
                                     }
                                 }
+                            }
+                        }
+                    } header: {
+                        HStack(spacing: 6) {
+                            Text(section.title)
+                            Spacer()
+                            if section.id == "todo" {
+                                Button(action: { onCreateTodoList?() }) {
+                                    Image(systemName: "plus")
+                                }
+                                .buttonStyle(.plain)
+                                .help("Create todo list")
                             }
                         }
                     }
