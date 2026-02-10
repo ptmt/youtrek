@@ -116,7 +116,7 @@ private struct TodoMarkdownTextView: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: 16, height: 12)
         textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         textView.delegate = context.coordinator
-        textView.string = text
+        textView.string = Coordinator.checklistRenderer.displayText(fromMarkdown: text)
         context.coordinator.applyInlineMarkup(textView: textView)
 
         scrollView.documentView = textView
@@ -128,9 +128,10 @@ private struct TodoMarkdownTextView: NSViewRepresentable {
         context.coordinator.onOpenIssueID = onOpenIssueID
         context.coordinator.onOpenURL = onOpenURL
         context.coordinator.issueStyles = issueStyles
-        if textView.string != text {
+        let renderedText = Coordinator.checklistRenderer.displayText(fromMarkdown: text)
+        if textView.string != renderedText {
             context.coordinator.isSyncingFromModel = true
-            textView.string = text
+            textView.string = renderedText
             context.coordinator.applyInlineMarkup(textView: textView)
             context.coordinator.isSyncingFromModel = false
         } else {
@@ -149,6 +150,8 @@ private struct TodoMarkdownTextView: NSViewRepresentable {
         var onOpenIssueID: (String) -> Void
         var onOpenURL: (URL) -> Void
         var isSyncingFromModel = false
+
+        static let checklistRenderer = TodoChecklistMarkdownRenderer()
 
         private static let issueIDPattern = #"\b([A-Z][A-Z0-9]+-\d+)\b"#
         private static let urlPattern = #"\bhttps?://[^\s<>()]+"#
@@ -171,7 +174,22 @@ private struct TodoMarkdownTextView: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             guard !isSyncingFromModel else { return }
             isSyncingFromModel = true
-            text = textView.string
+            let displayedText = textView.string
+            let markdownText = Self.checklistRenderer.markdownText(fromDisplayText: displayedText)
+            text = markdownText
+            let renderedText = Self.checklistRenderer.displayText(fromMarkdown: markdownText)
+            if renderedText != displayedText {
+                let selectedRange = textView.selectedRange()
+                let oldLength = (displayedText as NSString).length
+                let newLength = (renderedText as NSString).length
+                textView.string = renderedText
+                if selectedRange.location != NSNotFound {
+                    let delta = newLength - oldLength
+                    let clampedLocation = max(0, min(newLength, selectedRange.location + delta))
+                    let clampedLength = max(0, min(selectedRange.length, newLength - clampedLocation))
+                    textView.setSelectedRange(NSRange(location: clampedLocation, length: clampedLength))
+                }
+            }
             applyInlineMarkup(textView: textView)
             isSyncingFromModel = false
         }

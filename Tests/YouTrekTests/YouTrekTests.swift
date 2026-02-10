@@ -55,4 +55,35 @@ final class YouTrekTests: XCTestCase {
         let updated = try XCTUnwrap(documents.first { $0.id == created.id })
         XCTAssertEqual(updated.name, "Release Plan")
     }
+
+    @MainActor
+    func testNewIssueDialogStateFromSelectedTextReturnsBlankForEmptyInput() {
+        let state = AppContainer.newIssueDialogState(fromSelectedText: "   \n  ")
+        XCTAssertEqual(state.title, "")
+        XCTAssertEqual(state.description, "")
+    }
+
+    @MainActor
+    func testNewIssueDialogStateFromSelectedTextUsesSingleLineAsTitle() {
+        let state = AppContainer.newIssueDialogState(fromSelectedText: "Fix flaky sync toast")
+        XCTAssertEqual(state.title, "Fix flaky sync toast")
+        XCTAssertEqual(state.description, "")
+    }
+
+    @MainActor
+    func testNewIssueDialogStateFromSelectedTextUsesFirstLineAsTitleAndFullDescription() {
+        let state = AppContainer.newIssueDialogState(
+            fromSelectedText: "Sync failure in background\n1. Open app\n2. Wait for sync"
+        )
+        XCTAssertEqual(state.title, "Sync failure in background")
+        XCTAssertEqual(state.description, "Sync failure in background\n1. Open app\n2. Wait for sync")
+    }
+
+    @MainActor
+    func testNewIssueDialogStateFromSelectedTextTruncatesLongTitleAndPreservesDescription() {
+        let longSelection = String(repeating: "A", count: 130)
+        let state = AppContainer.newIssueDialogState(fromSelectedText: longSelection)
+        XCTAssertEqual(state.title, String(repeating: "A", count: 120) + "...")
+        XCTAssertEqual(state.description, longSelection)
+    }
 }

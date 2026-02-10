@@ -1037,8 +1037,54 @@ final class AppContainer: ObservableObject {
         appState.presentNewIssueDialog(state: NewIssueDialogState(title: trimmedTitle))
     }
 
+    func presentNewIssueDialog(fromSelectedText selectedText: String?) {
+        appState.presentNewIssueDialog(state: Self.newIssueDialogState(fromSelectedText: selectedText))
+    }
+
     func presentNewIssueDialog(state: NewIssueDialogState) {
         appState.presentNewIssueDialog(state: state)
+    }
+
+    static func newIssueDialogState(fromSelectedText selectedText: String?) -> NewIssueDialogState {
+        guard let normalizedSelection = normalizeSelectedText(selectedText) else {
+            return NewIssueDialogState()
+        }
+
+        let title = issueTitlePrefill(from: normalizedSelection)
+        if normalizedSelection.contains("\n") || normalizedSelection.count > selectedTextIssueTitleLimit {
+            return NewIssueDialogState(title: title, description: normalizedSelection)
+        }
+        return NewIssueDialogState(title: normalizedSelection)
+    }
+
+    private static let selectedTextIssueTitleLimit = 120
+
+    private static func normalizeSelectedText(_ selectedText: String?) -> String? {
+        guard let selectedText else { return nil }
+        let normalized = selectedText
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        return normalized
+    }
+
+    private static func issueTitlePrefill(from selectedText: String) -> String {
+        let firstNonEmptyLine = selectedText
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .lazy
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty }) ?? selectedText
+        return truncateIssueTitle(firstNonEmptyLine)
+    }
+
+    private static func truncateIssueTitle(_ rawTitle: String) -> String {
+        let trimmedTitle = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedTitle.count > selectedTextIssueTitleLimit else {
+            return trimmedTitle
+        }
+        let endIndex = trimmedTitle.index(trimmedTitle.startIndex, offsetBy: selectedTextIssueTitleLimit)
+        return "\(trimmedTitle[..<endIndex])..."
     }
 
     func submitDraftFromDialog(_ draft: IssueDraft) {

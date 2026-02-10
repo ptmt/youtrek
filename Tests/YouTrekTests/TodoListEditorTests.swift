@@ -15,6 +15,50 @@ final class TodoListEditorTests: XCTestCase {
         XCTAssertEqual(ids, Set(["YT-101", "API-7"]))
     }
 
+    func testChecklistRendererConvertsMarkdownCheckboxesToRenderedSymbols() {
+        let renderer = TodoChecklistMarkdownRenderer()
+        let markdown = """
+        - [ ] First task
+          * [x] Done task
+        + [X]Immediate
+        - regular bullet
+        """
+
+        let rendered = renderer.displayText(fromMarkdown: markdown)
+
+        XCTAssertEqual(
+            rendered,
+            """
+            - ☐ First task
+              * ☑ Done task
+            + ☑ Immediate
+            - regular bullet
+            """
+        )
+    }
+
+    func testChecklistRendererConvertsRenderedSymbolsBackToMarkdown() {
+        let renderer = TodoChecklistMarkdownRenderer()
+        let rendered = """
+        - ☐ First task
+          * ☑ Done task
+        + ☑ Immediate
+        - regular bullet
+        """
+
+        let markdown = renderer.markdownText(fromDisplayText: rendered)
+
+        XCTAssertEqual(
+            markdown,
+            """
+            - [ ] First task
+              * [x] Done task
+            + [x] Immediate
+            - regular bullet
+            """
+        )
+    }
+
     func testViewModelLoadUsesHeadingWhenDocumentIsEmpty() async {
         let store = MockTodoMarkdownStore()
         let issues = MockTodoIssueLinkHandler()

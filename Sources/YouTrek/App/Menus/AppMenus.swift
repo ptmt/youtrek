@@ -18,11 +18,20 @@ struct AppMenus: Commands {
                 openNewIssue()
             }
             .keyboardShortcut("n", modifiers: [.command])
+
+            Button("New Issue from Selection") {
+                openNewIssueFromSelection()
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
         }
 
         CommandMenu("Issues") {
             Button("New Issue") {
                 openNewIssue()
+            }
+
+            Button("New Issue from Selection") {
+                openNewIssueFromSelection()
             }
 
             Button("Command Palette…") {
@@ -98,6 +107,52 @@ struct AppMenus: Commands {
 
     private func openNewIssue() {
         container.presentNewIssueDialog()
+    }
+
+    private func openNewIssueFromSelection() {
+        container.presentNewIssueDialog(fromSelectedText: selectedTextFromFocusedResponder())
+    }
+
+    private func selectedTextFromFocusedResponder() -> String? {
+        let firstResponder = NSApp.keyWindow?.firstResponder ?? NSApp.mainWindow?.firstResponder
+        return selectedText(from: firstResponder)
+    }
+
+    private func selectedText(from responder: NSResponder?) -> String? {
+        guard let responder else { return nil }
+        if let textView = responder as? NSTextView {
+            return selectedText(from: textView)
+        }
+        if let text = selectedTextFromResponderChain(startingAt: responder) {
+            return text
+        }
+        if let view = responder as? NSView,
+           let fieldEditor = view.window?.fieldEditor(false, for: view) as? NSTextView {
+            return selectedText(from: fieldEditor)
+        }
+        return nil
+    }
+
+    private func selectedTextFromResponderChain(startingAt responder: NSResponder) -> String? {
+        var currentResponder: NSResponder? = responder
+        while let current = currentResponder {
+            if let textView = current as? NSTextView,
+               let selectedText = selectedText(from: textView) {
+                return selectedText
+            }
+            currentResponder = current.nextResponder
+        }
+        return nil
+    }
+
+    private func selectedText(from textView: NSTextView) -> String? {
+        let range = textView.selectedRange()
+        guard range.location != NSNotFound, range.length > 0 else { return nil }
+        let fullText = textView.string as NSString
+        guard NSMaxRange(range) <= fullText.length else { return nil }
+        let selectedText = fullText.substring(with: range)
+        guard !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return selectedText
     }
 
     private func showAlert(title: String, message: String, style: NSAlert.Style) {
