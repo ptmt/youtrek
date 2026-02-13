@@ -10,9 +10,6 @@
 		00FEB9220801E5364D578CD8 /* IssueRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413164C575D17B66BEBD006E /* IssueRepository.swift */; };
 		03C386F12EEB26CD00BF8B68 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 03C386EF2EEB26BC00BF8B68 /* Assets.xcassets */; };
 		08C5D4B53937B5F198D5F1A4 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D3751AABB25A233B2008788 /* AppState.swift */; };
-		0B7E05DB1C0B6E4858EB9AB6 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 640A2F928E349C7C5BAB8CB3 /* Dependencies */; };
-		14F94D3D712769C7D4817042 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 86777B1ACB09764827902986 /* ComposableArchitecture */; };
-		16A7FB3C60588B9DE5336F59 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 3ABE086E9D2CCBAE575E6B6E /* Sentry */; };
 		17484CD88BC62E1E13CF6D9D /* IssueLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */; };
 		1E4C578BD3384B5530AB96DE /* YouTrackIssueRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EBD085B49E4D2450109D389 /* YouTrackIssueRepositoryTests.swift */; };
 		2A3B4C5D6E7F8091A2B3C4D5 /* SavedQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708192A3B4C5 /* SavedQuery.swift */; };
@@ -28,7 +25,6 @@
 		5AD0AADC8F374977AD5209A1 /* SyncOperationQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE80E5F4EA04BE5A252AD14 /* SyncOperationQueueTests.swift */; };
 		5E2253FC639018566A8117DC /* YouTrackOAuthConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4FE22D10515F3D19C04518D /* YouTrackOAuthConfiguration.swift */; };
 		5FF6DD8ABD04D24EB1CB3B43 /* PeopleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE25293D0B475678E0E9AAD /* PeopleRepository.swift */; };
-		601C7017EBC7D39C44ABD474 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = 2F538221E5E814FFE04DB9BB /* Nuke */; };
 		67267D8D7D4B0FE29F5DEB44 /* SidebarItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F838F96136D2FC3F66D4B91 /* SidebarItem.swift */; };
 		6A1F91B3569145A98D660C5E /* ConflictResolutionDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE4E28048614444791892CC7 /* ConflictResolutionDialog.swift */; };
 		6B0CC68F84764DA397C2D889 /* SyncOperationQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCADEBB49EB84E5BB481AFA5 /* SyncOperationQueue.swift */; };
@@ -52,6 +48,11 @@
 		A1B2C3D4E5F60718293A4B6D /* TodoListEditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B6C /* TodoListEditorViewModel.swift */; };
 		A1B2C3D4E5F60718293A4B6F /* TodoListContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B6E /* TodoListContentView.swift */; };
 		A1B2C3D4E5F60718293A4B72 /* TodoListEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B71 /* TodoListEditorTests.swift */; };
+		7B01B951558244F8B758DFB5 /* TodoListEditorDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138A65DE64414C11B8195521 /* TodoListEditorDependencies.swift */; };
+		553B1161EE25492CBD4E5960 /* TodoIssueIDParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB27A62160674AF58AB8D782 /* TodoIssueIDParser.swift */; };
+		C4B1BC2E20F44F49838A214A /* TodoInlineMarkdownParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C31721A6EE9426BACCAE11D /* TodoInlineMarkdownParser.swift */; };
+		7AE22AB917B4430D9243B77F /* TodoChecklistMarkdownRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E1E46F7C4BD4B5E8068A8C6 /* TodoChecklistMarkdownRenderer.swift */; };
+		9DB8D80B206C40708C943193 /* TodoChecklistParsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408D4303547C4927B7B39CC9 /* TodoChecklistParsing.swift */; };
 		A9B8C7D6E5F40123456789AC /* NetworkRequestMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B8C7D6E5F40123456789AB /* NetworkRequestMonitor.swift */; };
 		A9B8C7D6E5F40123456789AE /* NetworkRequestFooterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B8C7D6E5F40123456789AD /* NetworkRequestFooterView.swift */; };
 		ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7250E3A5DD409013899A4B /* RootView.swift */; };
@@ -128,6 +129,11 @@
 		96D7F507180F29C1DBEBFD1A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		96F1E15A048870421DA67DD8 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		9834245476CD9C6340D38207 /* IssueWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueWindows.swift; sourceTree = "<group>"; };
+		138A65DE64414C11B8195521 /* TodoListEditorDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoListEditorDependencies.swift; sourceTree = "<group>"; };
+		FB27A62160674AF58AB8D782 /* TodoIssueIDParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoIssueIDParser.swift; sourceTree = "<group>"; };
+		0C31721A6EE9426BACCAE11D /* TodoInlineMarkdownParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoInlineMarkdownParser.swift; sourceTree = "<group>"; };
+		4E1E46F7C4BD4B5E8068A8C6 /* TodoChecklistMarkdownRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoChecklistMarkdownRenderer.swift; sourceTree = "<group>"; };
+		408D4303547C4927B7B39CC9 /* TodoChecklistParsing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoChecklistParsing.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B6C /* TodoListEditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoListEditorViewModel.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B6E /* TodoListContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoListContentView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B71 /* TodoListEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoListEditorTests.swift; sourceTree = "<group>"; };
@@ -176,10 +182,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				14F94D3D712769C7D4817042 /* ComposableArchitecture in Frameworks */,
-				0B7E05DB1C0B6E4858EB9AB6 /* Dependencies in Frameworks */,
-				601C7017EBC7D39C44ABD474 /* Nuke in Frameworks */,
-				16A7FB3C60588B9DE5336F59 /* Sentry in Frameworks */,
 				B5E95DA444F525E699F17F2F /* AppAuth in Frameworks */,
 				4C6245368EDF72B81D7E85EB /* SQLite in Frameworks */,
 			);
@@ -376,6 +378,11 @@
 			children = (
 				A1B2C3D4E5F60718293A4B6E /* TodoListContentView.swift */,
 				A1B2C3D4E5F60718293A4B6C /* TodoListEditorViewModel.swift */,
+				138A65DE64414C11B8195521 /* TodoListEditorDependencies.swift */,
+				FB27A62160674AF58AB8D782 /* TodoIssueIDParser.swift */,
+				0C31721A6EE9426BACCAE11D /* TodoInlineMarkdownParser.swift */,
+				4E1E46F7C4BD4B5E8068A8C6 /* TodoChecklistMarkdownRenderer.swift */,
+				408D4303547C4927B7B39CC9 /* TodoChecklistParsing.swift */,
 			);
 			path = Todo;
 			sourceTree = "<group>";
@@ -532,10 +539,6 @@
 			);
 			name = YouTrek;
 			packageProductDependencies = (
-				86777B1ACB09764827902986 /* ComposableArchitecture */,
-				640A2F928E349C7C5BAB8CB3 /* Dependencies */,
-				2F538221E5E814FFE04DB9BB /* Nuke */,
-				3ABE086E9D2CCBAE575E6B6E /* Sentry */,
 				79FB59A8C56FB49F29358D40 /* AppAuth */,
 				B83164E55F38E5918B1AC16B /* SQLite */,
 			);
@@ -591,11 +594,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				6FD98FFEE4686191886A9284 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */,
-				AB6EE94D2863D4BF80A2269C /* XCRemoteSwiftPackageReference "Nuke" */,
 				82E23A91878F56103FFB6768 /* XCRemoteSwiftPackageReference "SQLite" */,
-				580F90418119E8988260B215 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
-				8381814756C1ACD264FC6FED /* XCRemoteSwiftPackageReference "swift-composable-architecture" */,
-				AF28F1D14CE46919DBF59779 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
 			);
 			projectDirPath = "";
 			projectRoot = "";
@@ -677,6 +676,11 @@
 				C0FFEE1234567890ABCDEF02 /* IssueBadgeViews.swift in Sources */,
 				B6F7001D7CF24BDB9EF0D0A7 /* MarkdownTextView.swift in Sources */,
 				240719BA093F4DB3B371E4BC /* AttachmentViews.swift in Sources */,
+				7B01B951558244F8B758DFB5 /* TodoListEditorDependencies.swift in Sources */,
+				553B1161EE25492CBD4E5960 /* TodoIssueIDParser.swift in Sources */,
+				C4B1BC2E20F44F49838A214A /* TodoInlineMarkdownParser.swift in Sources */,
+				7AE22AB917B4430D9243B77F /* TodoChecklistMarkdownRenderer.swift in Sources */,
+				9DB8D80B206C40708C943193 /* TodoChecklistParsing.swift in Sources */,
 				A1B2C3D4E5F60718293A4B6D /* TodoListEditorViewModel.swift in Sources */,
 				A1B2C3D4E5F60718293A4B6F /* TodoListContentView.swift in Sources */,
 				ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */,
@@ -984,14 +988,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		580F90418119E8988260B215 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 8.33.0;
-			};
-		};
 		6FD98FFEE4686191886A9284 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/openid/AppAuth-iOS.git";
@@ -1008,57 +1004,13 @@
 				minimumVersion = 0.15.0;
 			};
 		};
-		8381814756C1ACD264FC6FED /* XCRemoteSwiftPackageReference "swift-composable-architecture" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/pointfreeco/swift-composable-architecture";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.10.0;
-			};
-		};
-		AB6EE94D2863D4BF80A2269C /* XCRemoteSwiftPackageReference "Nuke" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/kean/Nuke";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 12.0.0;
-			};
-		};
-		AF28F1D14CE46919DBF59779 /* XCRemoteSwiftPackageReference "swift-dependencies" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/pointfreeco/swift-dependencies";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.4.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		2F538221E5E814FFE04DB9BB /* Nuke */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = AB6EE94D2863D4BF80A2269C /* XCRemoteSwiftPackageReference "Nuke" */;
-			productName = Nuke;
-		};
-		3ABE086E9D2CCBAE575E6B6E /* Sentry */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 580F90418119E8988260B215 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
-			productName = Sentry;
-		};
-		640A2F928E349C7C5BAB8CB3 /* Dependencies */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = AF28F1D14CE46919DBF59779 /* XCRemoteSwiftPackageReference "swift-dependencies" */;
-			productName = Dependencies;
-		};
 		79FB59A8C56FB49F29358D40 /* AppAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6FD98FFEE4686191886A9284 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
 			productName = AppAuth;
-		};
-		86777B1ACB09764827902986 /* ComposableArchitecture */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 8381814756C1ACD264FC6FED /* XCRemoteSwiftPackageReference "swift-composable-architecture" */;
-			productName = ComposableArchitecture;
 		};
 		B83164E55F38E5918B1AC16B /* SQLite */ = {
 			isa = XCSwiftPackageProductDependency;

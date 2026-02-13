@@ -164,9 +164,7 @@ struct NewIssueDialog: View {
                         .foregroundStyle(.tertiary)
                         .allowsHitTesting(false)
                 }
-                TextEditor(text: $state.description)
-                    .scrollContentBackground(.hidden)
-                    .font(.body)
+                ClipboardImageMarkdownTextEditor(text: $state.description)
                     .frame(minHeight: 120)
             }
         }
@@ -519,7 +517,7 @@ struct NewIssueDialog: View {
                 .toggleStyle(.checkbox)
                 .controlSize(.small)
 
-            Button("Create issue") {
+            Button(createButtonTitle) {
                 createIssue()
             }
             .buttonStyle(.borderedProminent)
@@ -533,6 +531,10 @@ struct NewIssueDialog: View {
     private var canCreate: Bool {
         !state.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         state.projectID != nil
+    }
+
+    private var createButtonTitle: String {
+        state.queueAsUncommitted ? "Queue change" : "Create issue"
     }
 
     // MARK: - Data Loading
@@ -753,13 +755,14 @@ struct NewIssueDialog: View {
             attachments: state.attachments
         )
 
-        container.submitDraftFromDialog(draft)
+        container.submitDraftFromDialog(draft, queueAsUncommitted: state.queueAsUncommitted)
 
         if state.createMore {
             state = NewIssueDialogState(
                 projectID: projectID,
                 parentIssueReadableID: state.parentIssueReadableID,
                 parentIssueTitle: state.parentIssueTitle,
+                queueAsUncommitted: state.queueAsUncommitted,
                 createMore: true
             )
             isTitleFocused = true

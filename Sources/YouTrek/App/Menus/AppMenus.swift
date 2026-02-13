@@ -110,7 +110,11 @@ struct AppMenus: Commands {
     }
 
     private func openNewIssueFromSelection() {
-        container.presentNewIssueDialog(fromSelectedText: selectedTextFromFocusedResponder())
+        let shouldQueueAsUncommitted = container.appState.selectedSidebarItem?.isTodoList == true
+        container.presentNewIssueDialog(
+            fromSelectedText: selectedTextFromFocusedResponder(),
+            queueAsUncommitted: shouldQueueAsUncommitted
+        )
     }
 
     private func selectedTextFromFocusedResponder() -> String? {

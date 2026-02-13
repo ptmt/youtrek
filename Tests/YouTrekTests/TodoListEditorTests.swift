@@ -15,48 +15,177 @@ final class TodoListEditorTests: XCTestCase {
         XCTAssertEqual(ids, Set(["YT-101", "API-7"]))
     }
 
-    func testChecklistRendererConvertsMarkdownCheckboxesToRenderedSymbols() {
-        let renderer = TodoChecklistMarkdownRenderer()
+    func testChecklistParserDetectsChecklistMarkersAndIssueID() {
+        let parser = RegexTodoChecklistMarkerParser()
         let markdown = """
         - [ ] First task
-          * [x] Done task
-        + [X]Immediate
-        - regular bullet
+          1. [x] YT-42 done task
+        2. [X]Immediate
+        regular text
         """
 
-        let rendered = renderer.displayText(fromMarkdown: markdown)
+        let markers = parser.checklistMarkers(in: markdown)
+
+        XCTAssertEqual(markers.count, 3)
+        XCTAssertEqual(markers[0].isChecked, false)
+        XCTAssertTrue(markers[0].hasExplicitCheckbox)
+        XCTAssertNil(markers[0].issueID)
+        XCTAssertEqual(markers[1].isChecked, true)
+        XCTAssertTrue(markers[1].hasExplicitCheckbox)
+        XCTAssertEqual(markers[1].issueID, "YT-42")
+        XCTAssertEqual(markers[2].isChecked, true)
+        XCTAssertTrue(markers[2].hasExplicitCheckbox)
+    }
+
+    func testChecklistParserAppliesCheckStateToMarkdown() {
+        let parser = RegexTodoChecklistMarkerParser()
+        let markdown = """
+        - [ ] First task
+        - [x] YT-7 done task
+        """
+        let markers = parser.checklistMarkers(in: markdown)
+        XCTAssertEqual(markers.count, 2)
+
+        let checked = parser.applyingCheckState(true, to: markdown, marker: markers[0])
+        let unchecked = parser.applyingCheckState(false, to: checked, marker: markers[1])
 
         XCTAssertEqual(
-            rendered,
+            unchecked,
             """
-            - ☐ First task
-              * ☑ Done task
-            + ☑ Immediate
-            - regular bullet
+            - [x] First task
+            - [ ] YT-7 done task
             """
         )
     }
 
-    func testChecklistRendererConvertsRenderedSymbolsBackToMarkdown() {
-        let renderer = TodoChecklistMarkdownRenderer()
-        let rendered = """
-        - ☐ First task
-          * ☑ Done task
-        + ☑ Immediate
-        - regular bullet
+    func testChecklistParserDetectsPlainDashAndNumericListMarkers() {
+        let parser = RegexTodoChecklistMarkerParser()
+        let markdown = """
+        - plain bullet
+        \t2. numbered bullet
+        * unsupported star bullet
+        4) unsupported numeric style
+        plain text
+        """
+        let markers = parser.checklistMarkers(in: markdown)
+        XCTAssertEqual(markers.count, 2)
+        XCTAssertFalse(markers[0].hasExplicitCheckbox)
+        XCTAssertFalse(markers[1].hasExplicitCheckbox)
+        XCTAssertFalse(markers[0].isChecked)
+        XCTAssertFalse(markers[1].isChecked)
+    }
+
+    func testChecklistParserToggleOnlyReplacesStateCharacterLength() {
+        let parser = RegexTodoChecklistMarkerParser()
+        let markdown = "- [ ] plain bullet"
+        let markers = parser.checklistMarkers(in: markdown)
+        XCTAssertEqual(markers.count, 1)
+        let toggled = parser.applyingCheckState(true, to: markdown, marker: markers[0])
+        XCTAssertEqual(toggled.count, markdown.count)
+        XCTAssertEqual(toggled, "- [x] plain bullet")
+    }
+
+    func testChecklistParserTogglePlainListDoesNotModifyMarkdown() {
+        let parser = RegexTodoChecklistMarkerParser()
+        let markdown = "- plain bullet"
+        let markers = parser.checklistMarkers(in: markdown)
+        XCTAssertEqual(markers.count, 1)
+        XCTAssertFalse(markers[0].hasExplicitCheckbox)
+
+        let toggled = parser.applyingCheckState(true, to: markdown, marker: markers[0])
+
+        XCTAssertEqual(toggled, markdown)
+    }
+
+    func testChecklistParserSkipsLinesInsideCodeFence() {
+        let parser = RegexTodoChecklistMarkerParser()
+        let markdown = """
+        - [ ] outside
+        ```
+        - [x] inside code fence
+        ```
+        - [x] outside 2
+        """
+        let markers = parser.checklistMarkers(in: markdown)
+        XCTAssertEqual(markers.count, 2)
+        XCTAssertEqual(markers[0].isChecked, false)
+        XCTAssertEqual(markers[1].isChecked, true)
+    }
+
+    func testChecklistDetectorDetectsDashAndNumericListsWithOptionalTabs() {
+        let detector = RegexTodoChecklistDetector()
+        let markdown = """
+        - plain
+        \t- tabbed
+        1. ordered
+        \t2. [x] checked
+        3. [ ] unchecked
+        * unsupported star
+        4) unsupported numeric style
         """
 
-        let markdown = renderer.markdownText(fromDisplayText: rendered)
+        let matches = detector.checklistLines(in: markdown)
 
-        XCTAssertEqual(
-            markdown,
-            """
-            - [ ] First task
-              * [x] Done task
-            + [x] Immediate
-            - regular bullet
-            """
-        )
+        XCTAssertEqual(matches.map(\.lineIndex), [0, 1, 2, 3, 4])
+        XCTAssertEqual(matches.map(\.isChecked), [false, false, false, true, false])
+        XCTAssertTrue(matches.allSatisfy { $0.issueID == nil })
+    }
+
+    func testDashListContinuationDetectorReturnsIndentationForDashLists() {
+        let detector = RegexTodoDashListContinuationDetector()
+
+        XCTAssertEqual(detector.continuationIndentation(in: "- item"), "")
+        XCTAssertEqual(detector.continuationIndentation(in: "\t- item"), "\t")
+        XCTAssertEqual(detector.continuationIndentation(in: "  - [x] done"), "  ")
+        XCTAssertNil(detector.continuationIndentation(in: "1. ordered item"))
+        XCTAssertNil(detector.continuationIndentation(in: "* bullet"))
+        XCTAssertNil(detector.continuationIndentation(in: "plain text"))
+    }
+
+    func testInlineMarkdownParserDetectsInlineElements() {
+        let parser = RegexTodoInlineMarkdownParser()
+        let markdown = """
+        Prefix **bold** *italic* _italic2_ `code` ~~strike~~ [docs](https://example.com/docs)
+        """
+        let nsText = markdown as NSString
+        let matches = parser.matches(in: markdown)
+
+        let boldMatch = matches.first { match in
+            if case .bold = match.kind { return true }
+            return false
+        }
+        let italicMatch = matches.first { match in
+            if case .italic = match.kind { return true }
+            return false
+        }
+        let codeMatch = matches.first { match in
+            if case .code = match.kind { return true }
+            return false
+        }
+        let strikeMatch = matches.first { match in
+            if case .strikethrough = match.kind { return true }
+            return false
+        }
+        let linkMatch = matches.first { match in
+            if case .link = match.kind { return true }
+            return false
+        }
+
+        XCTAssertEqual(matches.count, 6)
+        XCTAssertEqual(boldMatch.map { nsText.substring(with: $0.contentRange) }, "bold")
+        XCTAssertNotNil(italicMatch)
+        XCTAssertEqual(codeMatch.map { nsText.substring(with: $0.contentRange) }, "code")
+        XCTAssertEqual(strikeMatch.map { nsText.substring(with: $0.contentRange) }, "strike")
+        if let linkMatch {
+            XCTAssertEqual(nsText.substring(with: linkMatch.contentRange), "docs")
+            if case .link(let url) = linkMatch.kind {
+                XCTAssertEqual(url.absoluteString, "https://example.com/docs")
+            } else {
+                XCTFail("Expected link kind")
+            }
+        } else {
+            XCTFail("Expected link match")
+        }
     }
 
     func testViewModelLoadUsesHeadingWhenDocumentIsEmpty() async {
@@ -119,6 +248,23 @@ final class TodoListEditorTests: XCTestCase {
         XCTAssertEqual(issues.openedIssueIDs, ["YT-404"])
     }
 
+    func testViewModelSetIssueClosedDelegatesToHandler() async {
+        let store = MockTodoMarkdownStore()
+        let issues = MockTodoIssueLinkHandler()
+        let viewModel = TodoListEditorViewModel(
+            listID: UUID(),
+            title: "Daily",
+            markdownStore: store,
+            issueLinkHandler: issues,
+            saveDebounceNanoseconds: 0
+        )
+
+        await viewModel.setIssueClosed(fromChecklist: "YT-404", isClosed: true)
+        XCTAssertEqual(issues.closedUpdates.count, 1)
+        XCTAssertEqual(issues.closedUpdates.first?.id, "YT-404")
+        XCTAssertEqual(issues.closedUpdates.first?.isClosed, true)
+    }
+
     func testViewModelRenameDelegatesAndUpdatesHeading() async {
         let store = MockTodoMarkdownStore()
         let issues = MockTodoIssueLinkHandler()
@@ -149,6 +295,8 @@ private final class MockTodoMarkdownStore: TodoListMarkdownStoring {
     var loadedMarkdown: String = ""
     var loadedIDs: [UUID] = []
     var savedEntries: [(id: UUID, markdown: String)] = []
+    var savedAttachments: [(id: UUID, data: Data, ext: String)] = []
+    var attachmentDataByReference: [String: Data] = [:]
 
     func loadTodoListMarkdown(id: UUID) async -> String {
         loadedIDs.append(id)
@@ -158,6 +306,17 @@ private final class MockTodoMarkdownStore: TodoListMarkdownStoring {
     func saveTodoListMarkdown(id: UUID, markdown: String) async {
         savedEntries.append((id: id, markdown: markdown))
     }
+
+    func saveTodoListImageAttachment(id: UUID, data: Data, preferredFileExtension: String) async -> String? {
+        savedAttachments.append((id: id, data: data, ext: preferredFileExtension))
+        let reference = "\(UUID().uuidString).\(preferredFileExtension)"
+        attachmentDataByReference[reference] = data
+        return reference
+    }
+
+    func loadTodoListImageAttachment(id: UUID, reference: String) async -> Data? {
+        attachmentDataByReference[reference]
+    }
 }
 
 @MainActor
@@ -165,6 +324,7 @@ private final class MockTodoIssueLinkHandler: TodoIssueLinkHandling {
     var styles: [String: TodoIssueInlineStyle] = [:]
     var requestedIDs: [Set<String>] = []
     var openedIssueIDs: [String] = []
+    var closedUpdates: [(id: String, isClosed: Bool)] = []
 
     func loadTodoIssueStyles(readableIDs: Set<String>) async -> [String: TodoIssueInlineStyle] {
         requestedIDs.append(readableIDs)
@@ -173,6 +333,10 @@ private final class MockTodoIssueLinkHandler: TodoIssueLinkHandling {
 
     func openIssueFromTodoLink(_ readableID: String) async {
         openedIssueIDs.append(readableID)
+    }
+
+    func setIssueClosedFromTodoLink(_ readableID: String, isClosed: Bool) async {
+        closedUpdates.append((id: readableID, isClosed: isClosed))
     }
 }
 

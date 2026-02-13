@@ -942,9 +942,8 @@ struct IssueDetailView: View {
                     .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             } else {
                 ZStack(alignment: .topLeading) {
-                    TextEditor(text: $commentText)
+                    ClipboardImageMarkdownTextEditor(text: $commentText)
                         .frame(minHeight: 120)
-                        .font(.callout)
                         .accessibilityLabel("Comment text")
                     if commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text("Write a comment…")

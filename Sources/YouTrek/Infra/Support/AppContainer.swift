@@ -3,6 +3,12 @@ import Combine
 import SwiftUI
 import AppKit
 
+struct TodoUncommittedChange: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let summary: String
+    let createdAt: Date
+}
+
 @MainActor
 final class AppContainer: ObservableObject {
     let appState: AppState
@@ -35,12 +41,36 @@ final class AppContainer: ObservableObject {
     private var hasStartedBoardPrefetch = false
     private var appStateCancellable: AnyCancellable?
     private var draftSaveTask: Task<Void, Never>?
+    private var todoUncommittedQueue: [TodoUncommittedQueueEntry] = []
     @Published private(set) var supportsBrowserAuth: Bool = false
     @Published private(set) var requiresSetup: Bool = true
     @Published private(set) var accounts: [StoredAccount] = []
     @Published private(set) var activeAccountID: UUID?
+    @Published private(set) var todoUncommittedChanges: [TodoUncommittedChange] = []
+    @Published private(set) var isCommittingTodoUncommittedChanges: Bool = false
     private var oauthConfiguration: YouTrackOAuthConfiguration?
     private var oauthRepository: AppAuthRepository?
+
+    private struct TodoUncommittedQueueEntry {
+        let change: TodoUncommittedChange
+        let operation: TodoUncommittedOperation
+    }
+
+    private enum TodoUncommittedOperation {
+        case setIssueClosed(readableID: String, isClosed: Bool)
+        case createIssue(draft: IssueDraft)
+    }
+
+    private enum TodoUncommittedOperationError: LocalizedError {
+        case issueNotFound(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .issueNotFound(let readableID):
+                return "Issue \(readableID) not found"
+            }
+        }
+    }
 
     private init(
         appState: AppState,
@@ -388,6 +418,9 @@ final class AppContainer: ObservableObject {
         cachedSavedQueries = []
         cachedBoards = []
         cachedTodoLists = []
+        todoUncommittedQueue = []
+        todoUncommittedChanges = []
+        isCommittingTodoUncommittedChanges = false
     }
 
     private func recordIssueSyncCompleted() {
@@ -856,6 +889,54 @@ final class AppContainer: ObservableObject {
         await loadIssueDetail(for: issue)
     }
 
+    func setIssueClosedFromTodoLink(_ readableID: String, isClosed: Bool) async {
+        let normalized = normalizeIssueReadableID(readableID)
+        guard !normalized.isEmpty else { return }
+        enqueueTodoUncommittedOperation(
+            summary: isClosed ? "Close \(normalized)" : "Reopen \(normalized)",
+            operation: .setIssueClosed(readableID: normalized, isClosed: isClosed)
+        )
+    }
+
+    func commitTodoUncommittedChanges() async {
+        guard !isCommittingTodoUncommittedChanges else { return }
+        guard !todoUncommittedQueue.isEmpty else { return }
+
+        isCommittingTodoUncommittedChanges = true
+        defer { isCommittingTodoUncommittedChanges = false }
+
+        let queued = todoUncommittedQueue
+        todoUncommittedQueue.removeAll()
+        todoUncommittedChanges = []
+
+        var failedEntries: [TodoUncommittedQueueEntry] = []
+        var committedCount = 0
+
+        for entry in queued {
+            do {
+                try await runTodoUncommittedOperation(entry.operation)
+                committedCount += 1
+            } catch {
+                failedEntries.append(entry)
+                LoggingService.sync.error(
+                    "Failed to commit todo change '\(entry.change.summary, privacy: .public)': \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+
+        if !failedEntries.isEmpty {
+            todoUncommittedQueue = failedEntries + todoUncommittedQueue
+            todoUncommittedChanges = todoUncommittedQueue.map(\.change)
+        }
+
+        if failedEntries.isEmpty {
+            let message = committedCount == 1 ? "Committed 1 change" : "Committed \(committedCount) changes"
+            appState.showToast(message)
+        } else {
+            appState.showToast("Committed \(committedCount), failed \(failedEntries.count)")
+        }
+    }
+
     func loadTodoIssueStyles(readableIDs: Set<String>) async -> [String: TodoIssueInlineStyle] {
         let normalizedIDs = Set(readableIDs.map(normalizeIssueReadableID).filter { !$0.isEmpty })
         guard !normalizedIDs.isEmpty else { return [:] }
@@ -889,6 +970,69 @@ final class AppContainer: ObservableObject {
         return resolved.reduce(into: [String: TodoIssueInlineStyle]()) { partial, entry in
             partial[entry.key] = TodoIssueInlineStyle(issueID: entry.key, status: entry.value.status)
         }
+    }
+
+    private func enqueueTodoUncommittedOperation(summary: String, operation: TodoUncommittedOperation) {
+        if case .setIssueClosed(let readableID, _) = operation {
+            if let index = todoUncommittedQueue.lastIndex(where: {
+                if case .setIssueClosed(let existingReadableID, _) = $0.operation {
+                    return existingReadableID == readableID
+                }
+                return false
+            }) {
+                todoUncommittedQueue.remove(at: index)
+            }
+        }
+
+        let change = TodoUncommittedChange(id: UUID(), summary: summary, createdAt: Date())
+        todoUncommittedQueue.append(TodoUncommittedQueueEntry(change: change, operation: operation))
+        todoUncommittedChanges = todoUncommittedQueue.map(\.change)
+    }
+
+    private func runTodoUncommittedOperation(_ operation: TodoUncommittedOperation) async throws {
+        switch operation {
+        case .setIssueClosed(let readableID, let isClosed):
+            try await applyTodoIssueClosedState(readableID: readableID, isClosed: isClosed)
+        case .createIssue(let draft):
+            _ = try await createIssueFromTodoUncommittedChange(draft: draft)
+        }
+    }
+
+    private func applyTodoIssueClosedState(readableID: String, isClosed: Bool) async throws {
+        guard let issue = await resolveIssueByReadableID(readableID) else {
+            throw TodoUncommittedOperationError.issueNotFound(readableID)
+        }
+        let patch = await todoChecklistStatusPatch(for: issue, isClosed: isClosed)
+        await updateIssue(id: issue.id, patch: patch)
+    }
+
+    @discardableResult
+    private func createIssueFromTodoUncommittedChange(draft: IssueDraft) async throws -> IssueSummary {
+        let created = try await syncCoordinator.enqueue(label: "Create issue") {
+            try await self.issueRepositorySwitcher.createIssue(draft: draft)
+        }
+        appState.updateIssue(created)
+        markIssueSeen(created)
+        await linkSubIssueIfNeeded(parentReadableID: draft.parentIssueReadableID, childIssue: created)
+        await uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
+        return created
+    }
+
+    private func queuedIssueCreationSummary(for draft: IssueDraft) -> String {
+        let trimmedTitle = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseTitle = trimmedTitle.isEmpty ? "Untitled issue" : trimmedTitle
+        let shortenedTitle: String
+        if baseTitle.count > 72 {
+            let endIndex = baseTitle.index(baseTitle.startIndex, offsetBy: 72)
+            shortenedTitle = "\(baseTitle[..<endIndex])..."
+        } else {
+            shortenedTitle = baseTitle
+        }
+        if let parent = draft.parentIssueReadableID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !parent.isEmpty {
+            return "Create sub-issue \"\(shortenedTitle)\" under \(parent)"
+        }
+        return "Create issue \"\(shortenedTitle)\""
     }
 
     func clearCacheAndRefetch() {
@@ -1038,23 +1182,42 @@ final class AppContainer: ObservableObject {
     }
 
     func presentNewIssueDialog(fromSelectedText selectedText: String?) {
-        appState.presentNewIssueDialog(state: Self.newIssueDialogState(fromSelectedText: selectedText))
+        presentNewIssueDialog(fromSelectedText: selectedText, queueAsUncommitted: false)
+    }
+
+    func presentNewIssueDialog(fromSelectedText selectedText: String?, queueAsUncommitted: Bool) {
+        appState.presentNewIssueDialog(
+            state: Self.newIssueDialogState(
+                fromSelectedText: selectedText,
+                queueAsUncommitted: queueAsUncommitted
+            )
+        )
     }
 
     func presentNewIssueDialog(state: NewIssueDialogState) {
         appState.presentNewIssueDialog(state: state)
     }
 
-    static func newIssueDialogState(fromSelectedText selectedText: String?) -> NewIssueDialogState {
+    static func newIssueDialogState(
+        fromSelectedText selectedText: String?,
+        queueAsUncommitted: Bool = false
+    ) -> NewIssueDialogState {
         guard let normalizedSelection = normalizeSelectedText(selectedText) else {
-            return NewIssueDialogState()
+            return NewIssueDialogState(queueAsUncommitted: queueAsUncommitted)
         }
 
         let title = issueTitlePrefill(from: normalizedSelection)
         if normalizedSelection.contains("\n") || normalizedSelection.count > selectedTextIssueTitleLimit {
-            return NewIssueDialogState(title: title, description: normalizedSelection)
+            return NewIssueDialogState(
+                queueAsUncommitted: queueAsUncommitted,
+                title: title,
+                description: normalizedSelection
+            )
         }
-        return NewIssueDialogState(title: normalizedSelection)
+        return NewIssueDialogState(
+            queueAsUncommitted: queueAsUncommitted,
+            title: normalizedSelection
+        )
     }
 
     private static let selectedTextIssueTitleLimit = 120
@@ -1087,7 +1250,19 @@ final class AppContainer: ObservableObject {
         return "\(trimmedTitle[..<endIndex])..."
     }
 
-    func submitDraftFromDialog(_ draft: IssueDraft) {
+    func submitDraftFromDialog(_ draft: IssueDraft, queueAsUncommitted: Bool = false) {
+        if queueAsUncommitted {
+            enqueueTodoUncommittedOperation(
+                summary: queuedIssueCreationSummary(for: draft),
+                operation: .createIssue(draft: draft)
+            )
+            let pendingCount = todoUncommittedChanges.count
+            let message = pendingCount == 1
+                ? "Queued 1 uncommitted change"
+                : "Queued \(pendingCount) uncommitted changes"
+            appState.showToast(message)
+            return
+        }
         Task { [weak self] in
             guard let self else { return }
             let record = await issueDraftStore.saveDraft(draft)
@@ -1322,6 +1497,23 @@ final class AppContainer: ObservableObject {
         } catch {
             appState.showToast("Failed to save todo list")
         }
+    }
+
+    func saveTodoListImageAttachment(id: UUID, data: Data, preferredFileExtension: String) async -> String? {
+        do {
+            return try await todoListStore.saveImageAttachment(
+                id: id,
+                data: data,
+                preferredFileExtension: preferredFileExtension
+            )
+        } catch {
+            appState.showToast("Failed to save pasted image")
+            return nil
+        }
+    }
+
+    func loadTodoListImageAttachment(id: UUID, reference: String) async -> Data? {
+        try? await todoListStore.loadImageAttachment(id: id, reference: reference)
     }
 
     private func refreshTodoLists(preferredSelectionID: SidebarItem.ID?) async {
@@ -2249,6 +2441,104 @@ private extension AppContainer {
         value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     }
 
+    private func todoChecklistStatusPatch(for issue: IssueSummary, isClosed: Bool) async -> IssuePatch {
+        if let option = await preferredStatusOption(for: issue, isClosed: isClosed) {
+            return IssuePatch(
+                title: nil,
+                description: nil,
+                status: nil,
+                statusOption: option,
+                priority: nil,
+                issueReadableID: issue.readableID
+            )
+        }
+
+        return IssuePatch(
+            title: nil,
+            description: nil,
+            status: isClosed ? .done : .open,
+            priority: nil,
+            issueReadableID: issue.readableID
+        )
+    }
+
+    private func preferredStatusOption(for issue: IssueSummary, isClosed: Bool) async -> IssueFieldOption? {
+        let options = await loadStatusOptions(for: issue)
+        guard !options.isEmpty else { return nil }
+
+        let normalizedCurrent = normalizeTodoStatusName(issue.status.displayName)
+        if isClosed, isClosedStatusName(normalizedCurrent) {
+            return nil
+        }
+        if !isClosed, isOpenStatusName(normalizedCurrent) {
+            return nil
+        }
+
+        let scored = options.map { option in
+            (option, todoStatusScore(for: option, isClosed: isClosed))
+        }
+
+        if let exact = scored.first(where: { $0.1 == 3 })?.0 {
+            return exact
+        }
+        if let strong = scored.first(where: { $0.1 == 2 })?.0 {
+            return strong
+        }
+        return scored.first(where: { $0.1 == 1 })?.0
+    }
+
+    private func todoStatusScore(for option: IssueFieldOption, isClosed: Bool) -> Int {
+        let candidates = [option.displayName, option.name].map(normalizeTodoStatusName)
+        if candidates.contains(where: { isClosed ? isClosedStatusName($0) : isOpenStatusName($0) }) {
+            return 3
+        }
+        if candidates.contains(where: { isClosed ? containsClosedStatusHint($0) : containsOpenStatusHint($0) }) {
+            return 2
+        }
+        return 0
+    }
+
+    private func normalizeTodoStatusName(_ value: String) -> String {
+        let lowered = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !lowered.isEmpty else { return "" }
+        return lowered.replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isClosedStatusName(_ normalized: String) -> Bool {
+        [
+            "done",
+            "closed",
+            "resolved",
+            "fixed",
+            "completed",
+            "complete"
+        ].contains(normalized)
+    }
+
+    private func isOpenStatusName(_ normalized: String) -> Bool {
+        [
+            "open",
+            "to do",
+            "todo",
+            "backlog",
+            "new",
+            "submitted"
+        ].contains(normalized)
+    }
+
+    private func containsClosedStatusHint(_ normalized: String) -> Bool {
+        let hints = ["done", "close", "resolv", "fix", "complete"]
+        return hints.contains(where: { normalized.contains($0) })
+    }
+
+    private func containsOpenStatusHint(_ normalized: String) -> Bool {
+        let hints = ["open", "todo", "to do", "backlog", "new", "submit", "in progress"]
+        return hints.contains(where: { normalized.contains($0) })
+    }
+
 }
 
 extension AppContainer {
@@ -3049,6 +3339,10 @@ actor TodoListMarkdownStore {
         if fileManager.fileExists(atPath: fileURL.path) {
             try fileManager.removeItem(at: fileURL)
         }
+        let attachmentsDirectory = attachmentsDirectoryURL(for: id)
+        if fileManager.fileExists(atPath: attachmentsDirectory.path) {
+            try fileManager.removeItem(at: attachmentsDirectory)
+        }
     }
 
     func loadMarkdown(id: UUID) throws -> String {
@@ -3063,8 +3357,33 @@ actor TodoListMarkdownStore {
         try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
     }
 
+    func saveImageAttachment(id: UUID, data: Data, preferredFileExtension: String) throws -> String {
+        try ensureDirectoryExists()
+        let extensionValue = normalizedAttachmentFileExtension(preferredFileExtension)
+        let fileName = "\(UUID().uuidString).\(extensionValue)"
+        let attachmentsDirectory = attachmentsDirectoryURL(for: id)
+        if !fileManager.fileExists(atPath: attachmentsDirectory.path) {
+            try fileManager.createDirectory(at: attachmentsDirectory, withIntermediateDirectories: true)
+        }
+        let fileURL = attachmentsDirectory.appendingPathComponent(fileName, isDirectory: false)
+        try data.write(to: fileURL, options: .atomic)
+        return fileName
+    }
+
+    func loadImageAttachment(id: UUID, reference: String) throws -> Data? {
+        let normalizedReference = normalizedAttachmentReference(reference)
+        guard !normalizedReference.isEmpty else { return nil }
+        let fileURL = attachmentsDirectoryURL(for: id).appendingPathComponent(normalizedReference, isDirectory: false)
+        guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
+        return try Data(contentsOf: fileURL)
+    }
+
     private func documentURL(for id: UUID) -> URL {
         directoryURL.appendingPathComponent("\(id.uuidString).md", isDirectory: false)
+    }
+
+    private func attachmentsDirectoryURL(for id: UUID) -> URL {
+        directoryURL.appendingPathComponent("\(id.uuidString).assets", isDirectory: true)
     }
 
     private func ensureDirectoryExists() throws {
@@ -3118,5 +3437,29 @@ actor TodoListMarkdownStore {
             return "# \(normalizedName)\n\n"
         }
         return "# \(normalizedName)\n\n\(markdown)"
+    }
+
+    private func normalizedAttachmentReference(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let raw: String
+        if trimmed.hasPrefix("todo-attachment://") {
+            raw = String(trimmed.dropFirst("todo-attachment://".count))
+        } else if trimmed.hasPrefix("todo-attachment:") {
+            raw = String(trimmed.dropFirst("todo-attachment:".count))
+        } else {
+            raw = trimmed
+        }
+        let cleaned = raw.replacingOccurrences(of: "\\", with: "/")
+        return cleaned.split(separator: "/").last.map(String.init) ?? cleaned
+    }
+
+    private func normalizedAttachmentFileExtension(_ raw: String) -> String {
+        let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789")
+        let normalized = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .filter { allowed.contains($0) }
+        return normalized.isEmpty ? "png" : normalized
     }
 }

@@ -574,6 +574,7 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
     var projectID: String?
     var parentIssueReadableID: String?
     var parentIssueTitle: String?
+    var queueAsUncommitted: Bool
     var title: String
     var description: String
     var statusOption: IssueFieldOption?
@@ -589,6 +590,7 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
         projectID: String? = nil,
         parentIssueReadableID: String? = nil,
         parentIssueTitle: String? = nil,
+        queueAsUncommitted: Bool = false,
         title: String = "",
         description: String = "",
         statusOption: IssueFieldOption? = nil,
@@ -603,6 +605,7 @@ struct NewIssueDialogState: Identifiable, Hashable, Sendable {
         self.projectID = projectID
         self.parentIssueReadableID = parentIssueReadableID
         self.parentIssueTitle = parentIssueTitle
+        self.queueAsUncommitted = queueAsUncommitted
         self.title = title
         self.description = description
         self.statusOption = statusOption

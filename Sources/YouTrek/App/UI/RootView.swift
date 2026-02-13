@@ -132,7 +132,7 @@ private struct RootContentView: View {
                 await container.loadIssueDetail(for: issue)
             }
         }
-        .onChange(of: appState.selectedSidebarItem) { _, selection in
+        .onChange(of: appState.selectedSidebarItem) { previousSelection, selection in
             guard let selection else { return }
             container.recordSidebarSelection(selection)
             Task { @MainActor in
@@ -145,6 +145,14 @@ private struct RootContentView: View {
                     appState.selectedDraftID = nil
                     appState.selectedIssue = nil
                     appState.selectedIssueIDs.removeAll()
+
+                    if let todoListID = selection.todoListID {
+                        let previousTodoListID = previousSelection?.todoListID
+                        let enteredNewTodoList = previousTodoListID != todoListID
+                        if enteredNewTodoList, appState.isSidebarVisible {
+                            appState.updateColumnVisibility(.doubleColumn, source: "todoList-default")
+                        }
+                    }
                 }
                 if !selectionShowsDrafts(selection), appState.selectedIssue?.isDraft == true {
                     appState.selectedDraftID = nil

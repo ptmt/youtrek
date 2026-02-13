@@ -1,200 +1,5 @@
-import AppKit
 import Foundation
 import SwiftUI
-
-@MainActor
-protocol TodoListMarkdownStoring: AnyObject {
-    func loadTodoListMarkdown(id: UUID) async -> String
-    func saveTodoListMarkdown(id: UUID, markdown: String) async
-}
-
-@MainActor
-protocol TodoIssueLinkHandling: AnyObject {
-    func loadTodoIssueStyles(readableIDs: Set<String>) async -> [String: TodoIssueInlineStyle]
-    func openIssueFromTodoLink(_ readableID: String) async
-}
-
-@MainActor
-protocol TodoListManaging: AnyObject {
-    func renameTodoList(id: UUID, name: String) async
-}
-
-protocol TodoURLOpening {
-    func openURL(_ url: URL)
-}
-
-struct WorkspaceTodoURLOpener: TodoURLOpening {
-    func openURL(_ url: URL) {
-        NSWorkspace.shared.open(url)
-    }
-}
-
-protocol TodoIssueIDParsing {
-    func issueIDs(in markdown: String) -> Set<String>
-}
-
-struct RegexTodoIssueIDParser: TodoIssueIDParsing {
-    private static let issueIDPattern = #"\b([A-Z][A-Z0-9]+-\d+)\b"#
-    private let regex: NSRegularExpression?
-
-    init() {
-        regex = try? NSRegularExpression(pattern: Self.issueIDPattern)
-    }
-
-    func issueIDs(in markdown: String) -> Set<String> {
-        guard let regex else { return [] }
-        let nsText = markdown as NSString
-        let range = NSRange(location: 0, length: nsText.length)
-        let matches = regex.matches(in: markdown, range: range)
-        return Set(matches.compactMap { match in
-            guard match.numberOfRanges > 1 else { return nil }
-            let raw = nsText.substring(with: match.range(at: 1))
-            let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            return normalized.isEmpty ? nil : normalized
-        })
-    }
-}
-
-struct TodoChecklistLineMatch: Equatable, Sendable {
-    let lineIndex: Int
-    let issueID: String?
-    let isChecked: Bool
-}
-
-struct TodoChecklistMarkdownRenderer {
-    private static let markdownChecklistPattern = #"^(\s*)([-*+])\s+\[([ xX])\](.*)$"#
-    private static let renderedChecklistPattern = #"^(\s*)([-*+])\s+([☐☑])(.*)$"#
-
-    private let markdownChecklistRegex: NSRegularExpression?
-    private let renderedChecklistRegex: NSRegularExpression?
-
-    init() {
-        markdownChecklistRegex = try? NSRegularExpression(pattern: Self.markdownChecklistPattern)
-        renderedChecklistRegex = try? NSRegularExpression(pattern: Self.renderedChecklistPattern)
-    }
-
-    func displayText(fromMarkdown markdown: String) -> String {
-        let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        let converted = lines.map { displayLine(fromMarkdownLine: $0) }
-        return converted.joined(separator: "\n")
-    }
-
-    func markdownText(fromDisplayText displayText: String) -> String {
-        let lines = displayText.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        let converted = lines.map { markdownLine(fromDisplayLine: $0) }
-        return converted.joined(separator: "\n")
-    }
-
-    private func displayLine(fromMarkdownLine line: String) -> String {
-        guard
-            let markdownChecklistRegex,
-            let match = markdownChecklistRegex.firstMatch(
-                in: line,
-                range: NSRange(location: 0, length: (line as NSString).length)
-            ),
-            match.numberOfRanges > 4
-        else {
-            return line
-        }
-        let nsLine = line as NSString
-        let indentation = nsLine.substring(with: match.range(at: 1))
-        let bullet = nsLine.substring(with: match.range(at: 2))
-        let rawState = nsLine.substring(with: match.range(at: 3))
-        let remainder = nsLine.substring(with: match.range(at: 4))
-        let symbol = (rawState == "x" || rawState == "X") ? "☑" : "☐"
-        if remainder.isEmpty {
-            return "\(indentation)\(bullet) \(symbol)"
-        }
-        if remainder.first?.isWhitespace == true {
-            return "\(indentation)\(bullet) \(symbol)\(remainder)"
-        }
-        return "\(indentation)\(bullet) \(symbol) \(remainder)"
-    }
-
-    private func markdownLine(fromDisplayLine line: String) -> String {
-        guard
-            let renderedChecklistRegex,
-            let match = renderedChecklistRegex.firstMatch(
-                in: line,
-                range: NSRange(location: 0, length: (line as NSString).length)
-            ),
-            match.numberOfRanges > 4
-        else {
-            return line
-        }
-        let nsLine = line as NSString
-        let indentation = nsLine.substring(with: match.range(at: 1))
-        let bullet = nsLine.substring(with: match.range(at: 2))
-        let symbol = nsLine.substring(with: match.range(at: 3))
-        let remainder = nsLine.substring(with: match.range(at: 4))
-        let state = symbol == "☑" ? "x" : " "
-        if remainder.isEmpty {
-            return "\(indentation)\(bullet) [\(state)]"
-        }
-        if remainder.first?.isWhitespace == true {
-            return "\(indentation)\(bullet) [\(state)]\(remainder)"
-        }
-        return "\(indentation)\(bullet) [\(state)] \(remainder)"
-    }
-}
-
-struct RegexTodoChecklistDetector {
-    private static let issueIDPattern = #"\b([A-Z][A-Z0-9]+-\d+)\b"#
-    private static let listItemPattern = #"^\s*[-*+]\s+"#
-    private static let markdownChecklistPattern = #"^\s*[-*+]\s+\[([ xX])\](?:\s+|$)"#
-
-    private let issueIDRegex: NSRegularExpression?
-    private let listItemRegex: NSRegularExpression?
-    private let markdownChecklistRegex: NSRegularExpression?
-
-    init() {
-        issueIDRegex = try? NSRegularExpression(pattern: Self.issueIDPattern)
-        listItemRegex = try? NSRegularExpression(pattern: Self.listItemPattern)
-        markdownChecklistRegex = try? NSRegularExpression(pattern: Self.markdownChecklistPattern)
-    }
-
-    func checklistLines(in markdown: String) -> [TodoChecklistLineMatch] {
-        let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        return lines.enumerated().compactMap { index, line in
-            checklistMatch(in: line, lineIndex: index)
-        }
-    }
-
-    private func checklistMatch(in line: String, lineIndex: Int) -> TodoChecklistLineMatch? {
-        let nsLine = line as NSString
-        let lineRange = NSRange(location: 0, length: nsLine.length)
-
-        if
-            let markdownChecklistRegex,
-            let match = markdownChecklistRegex.firstMatch(in: line, range: lineRange),
-            match.numberOfRanges > 1,
-            match.range(at: 1).location != NSNotFound
-        {
-            let rawState = nsLine.substring(with: match.range(at: 1))
-            let isChecked = rawState == "x" || rawState == "X"
-            return TodoChecklistLineMatch(lineIndex: lineIndex, issueID: nil, isChecked: isChecked)
-        }
-
-        guard
-            let listItemRegex,
-            listItemRegex.firstMatch(in: line, range: lineRange) != nil,
-            let issueIDRegex
-        else {
-            return nil
-        }
-
-        var issueIDs: [String] = []
-        issueIDRegex.enumerateMatches(in: line, range: lineRange) { match, _, _ in
-            guard let match, match.numberOfRanges > 1 else { return }
-            let issueRange = match.range(at: 1)
-            guard issueRange.location != NSNotFound else { return }
-            issueIDs.append(nsLine.substring(with: issueRange).uppercased())
-        }
-
-        guard issueIDs.count == 1, let issueID = issueIDs.first else { return nil }
-        return TodoChecklistLineMatch(lineIndex: lineIndex, issueID: issueID, isChecked: false)
-    }
-}
 
 @MainActor
 final class TodoListEditorViewModel: ObservableObject {
@@ -254,6 +59,26 @@ final class TodoListEditorViewModel: ObservableObject {
 
     func openIssue(_ issueID: String) async {
         await issueLinkHandler.openIssueFromTodoLink(issueID)
+    }
+
+    func setIssueClosed(fromChecklist issueID: String, isClosed: Bool) async {
+        await issueLinkHandler.setIssueClosedFromTodoLink(issueID, isClosed: isClosed)
+    }
+
+    func saveImageAttachment(data: Data, preferredFileExtension: String) async -> String? {
+        await markdownStore.saveTodoListImageAttachment(
+            id: listID,
+            data: data,
+            preferredFileExtension: preferredFileExtension
+        )
+    }
+
+    func loadImageAttachment(reference: String) async -> Data? {
+        await markdownStore.loadTodoListImageAttachment(id: listID, reference: reference)
+    }
+
+    func refreshIssueStylesNow() {
+        scheduleStyleRefresh(for: markdown, debounce: false)
     }
 
     func rename(to newName: String) async {

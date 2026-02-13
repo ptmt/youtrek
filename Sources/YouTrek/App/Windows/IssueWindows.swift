@@ -49,8 +49,7 @@ struct NewIssueWindow: View {
                 Section("Basics") {
                     TextField("Title", text: draftTitleBinding)
                     projectRow
-                    TextField("Description", text: draftDescriptionBinding, axis: .vertical)
-                        .lineLimit(4...8)
+                    descriptionEditor
                 }
 
                 Section("Attachments") {
@@ -174,6 +173,20 @@ struct NewIssueWindow: View {
         )
     }
 
+    private var descriptionEditor: some View {
+        ZStack(alignment: .topLeading) {
+            if container.issueComposer.draftDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("Description")
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 10)
+                    .padding(.leading, 6)
+                    .allowsHitTesting(false)
+            }
+            ClipboardImageMarkdownTextEditor(text: draftDescriptionBinding)
+                .frame(minHeight: 110)
+        }
+    }
+
     private var draftIssueSummary: IssueSummary {
         IssueSummary(
             readableID: "DRAFT",
@@ -206,8 +219,7 @@ struct DraftIssueDetailView: View {
                         .font(.system(size: 24, weight: .bold))
                         .focused($isTitleFocused)
                     projectRow
-                    TextField("Description", text: draftDescriptionBinding, axis: .vertical)
-                        .lineLimit(4...8)
+                    descriptionEditor
                 }
 
                 Section("Attachments") {
@@ -345,6 +357,20 @@ struct DraftIssueDetailView: View {
             get: { container.issueComposer.draftDescription },
             set: { container.issueComposer.draftDescription = $0 }
         )
+    }
+
+    private var descriptionEditor: some View {
+        ZStack(alignment: .topLeading) {
+            if container.issueComposer.draftDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("Description")
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 10)
+                    .padding(.leading, 6)
+                    .allowsHitTesting(false)
+            }
+            ClipboardImageMarkdownTextEditor(text: draftDescriptionBinding)
+                .frame(minHeight: 110)
+        }
     }
 
     private var draftIssueSummary: IssueSummary {

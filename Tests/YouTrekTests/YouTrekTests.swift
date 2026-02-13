@@ -56,6 +56,27 @@ final class YouTrekTests: XCTestCase {
         XCTAssertEqual(updated.name, "Release Plan")
     }
 
+    func testTodoListMarkdownStorePersistsImageAttachmentPayload() async throws {
+        let tempRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("youtrek-tests-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let store = TodoListMarkdownStore(accountID: nil, baseDirectory: tempRoot)
+        let created = try await store.createDocument(named: "Images")
+        let payload = Data([0, 1, 2, 3, 4, 5])
+
+        let reference = try await store.saveImageAttachment(
+            id: created.id,
+            data: payload,
+            preferredFileExtension: "png"
+        )
+        let loaded = try await store.loadImageAttachment(id: created.id, reference: reference)
+
+        XCTAssertEqual(loaded, payload)
+    }
+
     @MainActor
     func testNewIssueDialogStateFromSelectedTextReturnsBlankForEmptyInput() {
         let state = AppContainer.newIssueDialogState(fromSelectedText: "   \n  ")
@@ -85,5 +106,58 @@ final class YouTrekTests: XCTestCase {
         let state = AppContainer.newIssueDialogState(fromSelectedText: longSelection)
         XCTAssertEqual(state.title, String(repeating: "A", count: 120) + "...")
         XCTAssertEqual(state.description, longSelection)
+    }
+
+    @MainActor
+    func testNewIssueDialogStateFromSelectedTextCanBeMarkedAsQueued() {
+        let state = AppContainer.newIssueDialogState(
+            fromSelectedText: "Queue this issue",
+            queueAsUncommitted: true
+        )
+        XCTAssertTrue(state.queueAsUncommitted)
+        XCTAssertEqual(state.title, "Queue this issue")
+    }
+
+    func testMarkdownImageParserSplitsTextAndImageFragments() {
+        let markdown = """
+        Before text
+
+        ![Preview](https://example.com/image.png)
+
+        After text
+        """
+
+        let fragments = MarkdownImageMarkdownParser.fragments(in: markdown)
+        XCTAssertEqual(fragments.count, 3)
+
+        guard case .text(let leading) = fragments[0] else {
+            return XCTFail("Expected leading text fragment")
+        }
+        XCTAssertTrue(leading.contains("Before text"))
+
+        guard case .image(let match) = fragments[1] else {
+            return XCTFail("Expected image fragment")
+        }
+        XCTAssertEqual(match.altText, "Preview")
+        XCTAssertEqual(match.source, "https://example.com/image.png")
+
+        guard case .text(let trailing) = fragments[2] else {
+            return XCTFail("Expected trailing text fragment")
+        }
+        XCTAssertTrue(trailing.contains("After text"))
+    }
+
+    func testMarkdownImageSourceResolverDecodesInlineDataURL() {
+        let resolved = MarkdownImageSourceResolver.resolve(source: "data:image/png;base64,AAEC")
+        guard case .inlineData(let data) = resolved else {
+            return XCTFail("Expected inline image data")
+        }
+        XCTAssertEqual(data, Data([0, 1, 2]))
+    }
+
+    func testMarkdownClipboardImageEncoderProducesMarkdownImageSnippet() {
+        let markdown = MarkdownClipboardImageEncoder.markdownSnippet(forPNGData: Data([0, 1, 2]))
+        XCTAssertTrue(markdown.hasPrefix("![Pasted image](data:image/png;base64,"))
+        XCTAssertTrue(markdown.hasSuffix(")"))
     }
 }
