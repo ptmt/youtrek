@@ -5,10 +5,11 @@ import SwiftUI
 private enum TodoEditorLayout {
     static let baseFontSize: CGFloat = 13
     static let fontScale: CGFloat = 1.5
-    static let fontSize: CGFloat = baseFontSize * fontScale
+    static let textScale: CGFloat = 0.75
+    static let fontSize: CGFloat = baseFontSize * fontScale * textScale
     static let lineHeightMultiple: CGFloat = 1.3
     static let textInset = NSSize(width: 36, height: 12)
-    static let checkboxSize = NSSize(width: 18, height: 18)
+    static let checkboxSize = NSSize(width: 20, height: 20)
     static let checkboxGutterTrailing: CGFloat = 6
     static let checkboxVerticalOffset: CGFloat = 0
     static let inlineImageSize = NSSize(width: 22, height: 22)
@@ -16,7 +17,7 @@ private enum TodoEditorLayout {
     static let checklistFadeDuration: CFTimeInterval = 0.2
     static let checklistFrameIntervalNanoseconds: UInt64 = 16_000_000
 
-    static let checkboxBaselineOffsetFromTop: CGFloat = 13
+    static let checkboxBaselineScaleFromLine: CGFloat = 0.68
 }
 
 struct TodoListContentView: View {
@@ -304,13 +305,11 @@ private struct TodoMarkdownTextView: NSViewRepresentable {
         textView.importsGraphics = false
         textView.usesFindBar = true
         textView.allowsUndo = true
-        textView.drawsBackground = true
+        textView.drawsBackground = false
         textView.isAutomaticLinkDetectionEnabled = false
         textView.textContainerInset = TodoEditorLayout.textInset
         textView.font = NSFont.monospacedSystemFont(ofSize: TodoEditorLayout.fontSize, weight: .regular)
         textView.checklistKeyDelegate = context.coordinator
-        textView.debugFullBackgroundColor = NSColor.systemYellow.withAlphaComponent(0.18)
-        textView.debugTextAreaBackgroundColor = NSColor.systemTeal.withAlphaComponent(0.2)
         textView.delegate = context.coordinator
         textView.string = text
         context.coordinator.applyInlineMarkup(textView: textView)
@@ -587,8 +586,7 @@ private struct TodoMarkdownTextView: NSViewRepresentable {
                     textStorage.addAttributes(
                         [
                             .font: codeFont,
-                            .foregroundColor: NSColor.systemIndigo,
-                            .backgroundColor: NSColor.controlBackgroundColor
+                            .foregroundColor: NSColor.systemIndigo
                         ],
                         range: inlineMatch.contentRange
                     )
@@ -743,7 +741,6 @@ private struct TodoMarkdownTextView: NSViewRepresentable {
                 guard location != NSNotFound else { continue }
                 let button = checklistButtonsByLocation[location] ?? {
                     let created = TodoChecklistButton(checkboxWithTitle: "", target: self, action: #selector(checklistButtonToggled(_:)))
-                    created.controlSize = .regular
                     textView.addSubview(created)
                     checklistButtonsByLocation[location] = created
                     return created
@@ -810,7 +807,7 @@ private struct TodoMarkdownTextView: NSViewRepresentable {
                     imageView.layer?.backgroundColor = NSColor.clear.cgColor
                 } else {
                     imageView.image = nil
-                    imageView.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.2).cgColor
+                    imageView.layer?.backgroundColor = NSColor.clear.cgColor
                     scheduleAttachmentImageLoad(reference: match.reference, in: textView)
                 }
             }
@@ -874,13 +871,22 @@ private struct TodoMarkdownTextView: NSViewRepresentable {
                 withoutAdditionalLayout: true
             )
             let baselineOffset = layoutManager.defaultBaselineOffset(
-                for: NSFont.monospacedSystemFont(ofSize: TodoEditorLayout.fontSize, weight: .regular)
+                for: textView.font ?? NSFont.monospacedSystemFont(ofSize: TodoEditorLayout.fontSize, weight: .regular)
             )
             let baselineY = containerOrigin.y + lineFragmentRect.minY + baselineOffset
-            let checkboxY = round(
-                baselineY - TodoEditorLayout.checkboxBaselineOffsetFromTop + TodoEditorLayout.checkboxVerticalOffset
+            let checkboxY = baselineY - (TodoEditorLayout.checkboxSize.height * TodoEditorLayout.checkboxBaselineScaleFromLine)
+            let clampedY = min(
+                max(checkboxY, 0),
+                max(0, textView.bounds.maxY - TodoEditorLayout.checkboxSize.height - 2)
             )
-            return NSRect(origin: NSPoint(x: checkboxX, y: checkboxY), size: checkboxSize)
+            let clampedX = min(
+                max(checkboxX, textView.bounds.minX + 2),
+                max(0, textView.bounds.maxX - TodoEditorLayout.checkboxSize.width - 2)
+            )
+            return NSRect(
+                origin: NSPoint(x: clampedX, y: clampedY + TodoEditorLayout.checkboxVerticalOffset),
+                size: checkboxSize
+            )
         }
 
         private func configureKeyViewChain(textView: NSTextView, orderedLocations: [Int]) {
@@ -1117,8 +1123,6 @@ private protocol TodoChecklistKeyHandling: AnyObject {
 
 private final class TodoChecklistTextView: NSTextView {
     weak var checklistKeyDelegate: TodoChecklistKeyHandling?
-    var debugFullBackgroundColor: NSColor?
-    var debugTextAreaBackgroundColor: NSColor?
 
     override func keyDown(with event: NSEvent) {
         if checklistKeyDelegate?.handleChecklistKeyDown(event, in: self) == true {
@@ -1133,36 +1137,54 @@ private final class TodoChecklistTextView: NSTextView {
         }
         super.paste(sender)
     }
+}
 
-    override func drawBackground(in rect: NSRect) {
-        guard let fullColor = debugFullBackgroundColor,
-              let textAreaColor = debugTextAreaBackgroundColor
-        else {
-            super.drawBackground(in: rect)
-            return
-        }
-
-        fullColor.setFill()
-        bounds.fill()
-
-        let containerOrigin = textContainerOrigin
-        let inferredContainerWidth = max(0, bounds.width - (textContainerInset.width * 2))
-        let textContainerWidth = textContainer?.size.width ?? inferredContainerWidth
-        let finiteContainerWidth = textContainerWidth.isFinite ? textContainerWidth : inferredContainerWidth
-        let resolvedContainerWidth = min(max(0, finiteContainerWidth), max(0, bounds.width - containerOrigin.x))
-        let textAreaRect = NSRect(
-            x: containerOrigin.x,
-            y: containerOrigin.y,
-            width: resolvedContainerWidth,
-            height: max(0, bounds.height - (containerOrigin.y * 2))
-        )
-
-        textAreaColor.setFill()
-        textAreaRect.fill()
+private final class CheckboxAttachmentCell: NSButtonCell {
+    override init(textCell: String) {
+        super.init(textCell: textCell)
+        configure()
     }
+
+    init(checked: Bool) {
+        super.init(textCell: "")
+        configure()
+        state = checked ? .on : .off
+    }
+
+    required init(coder: NSCoder) {
+        super.init(coder: coder)
+        configure()
+    }
+
+    private func configure() {
+        title = ""
+        setButtonType(.switch)
+        controlSize = .regular
+        imagePosition = .imageOnly
+        isBordered = false
+    }
+
 }
 
 private final class TodoChecklistButton: NSButton {
+    private func configureCell() {
+        controlSize = .regular
+        isBordered = false
+        setButtonType(.switch)
+        imagePosition = .imageOnly
+        cell = CheckboxAttachmentCell(textCell: title)
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configureCell()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configureCell()
+    }
+
     override func resetCursorRects() {
         discardCursorRects()
         addCursorRect(bounds, cursor: .pointingHand)

@@ -106,7 +106,9 @@ struct YouTrackAPIClient: Sendable {
         let requestStart = Date()
         let requestMethod = request.httpMethod ?? "GET"
         let requestURL = request.url
-        LoggingService.networking.info("HTTP \(requestMethod, privacy: .public) start \(requestURL?.absoluteString ?? "-", privacy: .public)")
+        if AppDebugSettings.verboseRequestLogging {
+            LoggingService.networking.debug("HTTP \(requestMethod, privacy: .public) start \(requestURL?.absoluteString ?? "-", privacy: .public)")
+        }
         let requestID = await monitor?.recordStart(method: requestMethod, url: requestURL)
         var didLog = false
 
@@ -116,9 +118,15 @@ struct YouTrackAPIClient: Sendable {
             let duration = Date().timeIntervalSince(requestStart)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             let errorDescription = error?.localizedDescription
-            LoggingService.networking.info(
-                "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription ?? "none", privacy: .public)"
-            )
+            if let errorDescription {
+                LoggingService.networking.error(
+                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                )
+            } else if AppDebugSettings.verboseRequestLogging {
+                LoggingService.networking.debug(
+                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=none"
+                )
+            }
             guard let monitor, let requestID else { return }
             await monitor.recordFinish(
                 id: requestID,
@@ -193,7 +201,9 @@ struct YouTrackAPIClient: Sendable {
         let requestStart = Date()
         let requestMethod = request.httpMethod ?? "POST"
         let requestURL = request.url
-        LoggingService.networking.info("HTTP \(requestMethod, privacy: .public) start \(requestURL?.absoluteString ?? "-", privacy: .public)")
+        if AppDebugSettings.verboseRequestLogging {
+            LoggingService.networking.debug("HTTP \(requestMethod, privacy: .public) start \(requestURL?.absoluteString ?? "-", privacy: .public)")
+        }
         let requestID = await monitor?.recordStart(method: requestMethod, url: requestURL)
         var didLog = false
 
@@ -203,9 +213,15 @@ struct YouTrackAPIClient: Sendable {
             let duration = Date().timeIntervalSince(requestStart)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             let errorDescription = error?.localizedDescription
-            LoggingService.networking.info(
-                "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription ?? "none", privacy: .public)"
-            )
+            if let errorDescription {
+                LoggingService.networking.error(
+                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                )
+            } else if AppDebugSettings.verboseRequestLogging {
+                LoggingService.networking.debug(
+                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=none"
+                )
+            }
             guard let monitor, let requestID else { return }
             await monitor.recordFinish(
                 id: requestID,
@@ -278,7 +294,9 @@ struct YouTrackAPIClient: Sendable {
         let requestStart = Date()
         let requestMethod = request.httpMethod ?? "GET"
         let requestURL = request.url
-        LoggingService.networking.info("HTTP \(requestMethod, privacy: .public) start \(requestURL?.absoluteString ?? "-", privacy: .public)")
+        if AppDebugSettings.verboseRequestLogging {
+            LoggingService.networking.debug("HTTP \(requestMethod, privacy: .public) start \(requestURL?.absoluteString ?? "-", privacy: .public)")
+        }
         let requestID = await monitor?.recordStart(method: requestMethod, url: requestURL)
         var didLog = false
 
@@ -288,9 +306,15 @@ struct YouTrackAPIClient: Sendable {
             let duration = Date().timeIntervalSince(requestStart)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             let errorDescription = error?.localizedDescription
-            LoggingService.networking.info(
-                "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription ?? "none", privacy: .public)"
-            )
+            if let errorDescription {
+                LoggingService.networking.error(
+                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                )
+            } else if AppDebugSettings.verboseRequestLogging {
+                LoggingService.networking.debug(
+                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=none"
+                )
+            }
             guard let monitor, let requestID else { return }
             await monitor.recordFinish(
                 id: requestID,
@@ -381,7 +405,9 @@ struct YouTrackAPIClient: Sendable {
         let requestStart = Date()
         let requestMethod = request.httpMethod ?? "POST"
         let requestURL = request.url
-        LoggingService.networking.info("HTTP \(requestMethod, privacy: .public) start \(requestURL?.absoluteString ?? "-", privacy: .public)")
+        if AppDebugSettings.verboseRequestLogging {
+            LoggingService.networking.debug("HTTP \(requestMethod, privacy: .public) start \(requestURL?.absoluteString ?? "-", privacy: .public)")
+        }
         let requestID = await monitor?.recordStart(method: requestMethod, url: requestURL)
         var didLog = false
 
@@ -391,9 +417,15 @@ struct YouTrackAPIClient: Sendable {
             let duration = Date().timeIntervalSince(requestStart)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             let errorDescription = error?.localizedDescription
-            LoggingService.networking.info(
-                "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription ?? "none", privacy: .public)"
-            )
+            if let errorDescription {
+                LoggingService.networking.error(
+                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                )
+            } else if AppDebugSettings.verboseRequestLogging {
+                LoggingService.networking.debug(
+                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=none"
+                )
+            }
             guard let monitor, let requestID else { return }
             await monitor.recordFinish(
                 id: requestID,

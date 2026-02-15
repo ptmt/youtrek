@@ -450,7 +450,7 @@ final class AppContainer: ObservableObject {
     func loadIssues(for selection: SidebarItem) async {
         guard !selection.isDraft, !selection.isTodoList else { return }
         if !appState.hasCompletedInitialSync {
-            LoggingService.sync.info("Initial sync: loading issues for \(selection.id, privacy: .public).")
+            LoggingService.syncVerbose("Initial sync: loading issues for \(selection.id).")
         }
         let resolvedBoard = await resolveBoardDetailsIfNeeded(for: selection)
         let boardID = boardIdentifier(for: selection, resolvedBoard: resolvedBoard)
@@ -522,8 +522,8 @@ final class AppContainer: ObservableObject {
         let cachedIssues = await syncCoordinator.loadCachedIssues(for: query)
         let cachedLoadDuration = durationText(since: cachedLoadStart)
         if !cachedIssues.isEmpty {
-            LoggingService.sync.info(
-                "Local DB: cached issues loaded (\(cachedIssues.count, privacy: .public)) in \(cachedLoadDuration, privacy: .public) for \(selection.id, privacy: .public)."
+            LoggingService.syncVerbose(
+                "Local DB: cached issues loaded (\(cachedIssues.count)) in \(cachedLoadDuration) for \(selection.id)."
             )
             recordDataEvent("Local DB cached issues loaded: \(cachedIssues.count) in \(cachedLoadDuration).")
             let filteredByBoard = applySprintFilterIfNeeded(
@@ -542,8 +542,8 @@ final class AppContainer: ObservableObject {
             appState.setIssuesLoading(false)
             await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: shouldSeedInitialRead)
         } else {
-            LoggingService.sync.info(
-                "Local DB: cached issues empty in \(cachedLoadDuration, privacy: .public) for \(selection.id, privacy: .public)."
+            LoggingService.syncVerbose(
+                "Local DB: cached issues empty in \(cachedLoadDuration) for \(selection.id)."
             )
             recordDataEvent("Local DB cached issues empty (\(cachedLoadDuration)).")
         }
@@ -564,16 +564,16 @@ final class AppContainer: ObservableObject {
             recordIssueSyncCompleted()
         }
         if syncResult.didSyncRemote {
-            LoggingService.sync.info(
-                "Remote sync: issues synced (\(syncResult.issues.count, privacy: .public)) in \(syncDuration, privacy: .public)."
+            LoggingService.syncVerbose(
+                "Remote sync: issues synced (\(syncResult.issues.count)) in \(syncDuration)."
             )
             recordDataEvent("Remote sync loaded: \(syncResult.issues.count) issues in \(syncDuration).")
         } else if !syncResult.issues.isEmpty {
             let reason = AppDebugSettings.disableSyncing
                 ? "Sync disabled; using cache"
                 : "Remote sync unavailable; using cache"
-            LoggingService.sync.info(
-                "Local DB: issues loaded from cache (\(syncResult.issues.count, privacy: .public)) in \(syncDuration, privacy: .public) (\(reason, privacy: .public))."
+            LoggingService.syncVerbose(
+                "Local DB: issues loaded from cache (\(syncResult.issues.count)) in \(syncDuration) (\(reason))."
             )
             recordDataEvent("Local DB \(reason): \(syncResult.issues.count) issues in \(syncDuration).")
         } else {
@@ -587,14 +587,14 @@ final class AppContainer: ObservableObject {
             let fallback = await syncCoordinator.loadIssues(readableIDs: Array(sprintIssueIDs))
             let fallbackDuration = durationText(since: fallbackStart)
             if !fallback.isEmpty {
-                LoggingService.sync.info(
-                    "Local DB: sprint fallback issues loaded (\(fallback.count, privacy: .public)) in \(fallbackDuration, privacy: .public) for \(selection.id, privacy: .public)."
+                LoggingService.syncVerbose(
+                    "Local DB: sprint fallback issues loaded (\(fallback.count)) in \(fallbackDuration) for \(selection.id)."
                 )
                 recordDataEvent("Local DB sprint fallback: \(fallback.count) in \(fallbackDuration).")
                 resolvedIssues = fallback
             } else {
-                LoggingService.sync.info(
-                    "Local DB: sprint fallback issues empty in \(fallbackDuration, privacy: .public) for \(selection.id, privacy: .public)."
+                LoggingService.syncVerbose(
+                    "Local DB: sprint fallback issues empty in \(fallbackDuration) for \(selection.id)."
                 )
                 recordDataEvent("Local DB sprint fallback empty (\(fallbackDuration)).")
             }
@@ -753,8 +753,8 @@ final class AppContainer: ObservableObject {
             recordIssueSyncCompleted()
         }
         if syncResult.didSyncRemote {
-            LoggingService.sync.info(
-                "Remote sync: refresh loaded (\(syncResult.issues.count, privacy: .public)) in \(syncDuration, privacy: .public)."
+            LoggingService.syncVerbose(
+                "Remote sync: refresh loaded (\(syncResult.issues.count)) in \(syncDuration)."
             )
             recordBoardDataEvent(
                 "Refresh remote sync loaded: \(syncResult.issues.count) issues in \(syncDuration).",
@@ -764,8 +764,8 @@ final class AppContainer: ObservableObject {
             let reason = AppDebugSettings.disableSyncing
                 ? "Refresh sync disabled; using cache"
                 : "Refresh remote sync unavailable; using cache"
-            LoggingService.sync.info(
-                "Local DB: refresh loaded (\(syncResult.issues.count, privacy: .public)) in \(syncDuration, privacy: .public) (\(reason, privacy: .public))."
+            LoggingService.syncVerbose(
+                "Local DB: refresh loaded (\(syncResult.issues.count)) in \(syncDuration) (\(reason))."
             )
             recordBoardDataEvent(
                 "Local DB \(reason): \(syncResult.issues.count) issues in \(syncDuration).",
@@ -783,8 +783,8 @@ final class AppContainer: ObservableObject {
                 let fallback = await syncCoordinator.loadIssues(readableIDs: Array(sprintIssueIDs))
                 let fallbackDuration = durationText(since: fallbackStart)
                 if !fallback.isEmpty {
-                    LoggingService.sync.info(
-                        "Local DB: refresh sprint fallback loaded (\(fallback.count, privacy: .public)) in \(fallbackDuration, privacy: .public) for \(item.id, privacy: .public)."
+                    LoggingService.syncVerbose(
+                        "Local DB: refresh sprint fallback loaded (\(fallback.count)) in \(fallbackDuration) for \(item.id)."
                     )
                     recordBoardDataEvent(
                         "Local DB refresh sprint fallback: \(fallback.count) in \(fallbackDuration).",
@@ -792,8 +792,8 @@ final class AppContainer: ObservableObject {
                     )
                     resolvedIssues = fallback
                 } else {
-                    LoggingService.sync.info(
-                        "Local DB: refresh sprint fallback empty in \(fallbackDuration, privacy: .public) for \(item.id, privacy: .public)."
+                    LoggingService.syncVerbose(
+                        "Local DB: refresh sprint fallback empty in \(fallbackDuration) for \(item.id)."
                     )
                     recordBoardDataEvent(
                         "Local DB refresh sprint fallback empty (\(fallbackDuration)).",
@@ -1609,10 +1609,14 @@ final class AppContainer: ObservableObject {
         let configuration = YouTrackAPIConfiguration(baseURL: apiBaseURL, tokenProvider: tokenProvider)
         let client = YouTrackAPIClient(configuration: configuration, session: .shared, monitor: networkMonitor)
         let queryItems = [URLQueryItem(name: "fields", value: "id,login,name,fullName")]
-        LoggingService.networking.info("Token validation: requesting users/me at \(apiBaseURL.absoluteString, privacy: .public).")
+        if AppDebugSettings.verboseRequestLogging {
+            LoggingService.networking.debug("Token validation: requesting users/me at \(apiBaseURL.absoluteString, privacy: .public).")
+        }
         let data = try await client.get(path: "users/me", queryItems: queryItems)
         let user = try JSONDecoder().decode(YouTrackTokenValidationUser.self, from: data)
-        LoggingService.networking.info("Token validation: success for user \(user.displayName ?? "unknown", privacy: .public).")
+        if AppDebugSettings.verboseRequestLogging {
+            LoggingService.networking.debug("Token validation: success for user \(user.displayName ?? "unknown", privacy: .public).")
+        }
         return user
     }
 
@@ -2119,13 +2123,13 @@ private extension AppContainer {
             recordBoardListSyncCompleted()
         }
         do {
-            LoggingService.sync.info("Board sync: fetching remote boards.")
+            LoggingService.syncVerbose("Board sync: fetching remote boards.")
             let remoteBoards = try await syncCoordinator.enqueue(label: "Sync agile boards") {
                 try await self.boardRepositorySwitcher.fetchBoards()
             }
             let mergedBoards = mergeBoardSummaries(remoteBoards: remoteBoards, cachedBoards: cachedBoards)
             await boardLocalStore.saveRemoteBoards(mergedBoards)
-            LoggingService.sync.info("Board sync: fetched \(remoteBoards.count, privacy: .public) boards.")
+            LoggingService.syncVerbose("Board sync: fetched \(remoteBoards.count) boards.")
             let syncDate = Date()
             for board in mergedBoards {
                 appState.recordBoardSync(boardID: board.id, at: syncDate)
@@ -2312,8 +2316,8 @@ private extension AppContainer {
         let loadStart = ProcessInfo.processInfo.systemUptime
         if let cached = await syncCoordinator.loadCachedSprintIssueIDs(agileID: board.id, sprintID: sprintID) {
             let durationLabel = durationText(since: loadStart)
-            LoggingService.sync.info(
-                "Local DB: sprint issue IDs loaded (\(cached.count, privacy: .public)) in \(durationLabel, privacy: .public) for \(board.id, privacy: .public)."
+            LoggingService.syncVerbose(
+                "Local DB: sprint issue IDs loaded (\(cached.count)) in \(durationLabel) for \(board.id)."
             )
             recordBoardDataEvent(
                 "Local DB sprint issue IDs loaded: \(cached.count) in \(durationLabel).",
@@ -2322,8 +2326,8 @@ private extension AppContainer {
             return Set(cached)
         }
         let durationLabel = durationText(since: loadStart)
-        LoggingService.sync.info(
-            "Local DB: sprint issue IDs cache miss in \(durationLabel, privacy: .public) for \(board.id, privacy: .public)."
+        LoggingService.syncVerbose(
+            "Local DB: sprint issue IDs cache miss in \(durationLabel) for \(board.id)."
         )
         recordBoardDataEvent("Local DB sprint issue IDs cache miss (\(durationLabel)).", boardID: boardID)
         return nil

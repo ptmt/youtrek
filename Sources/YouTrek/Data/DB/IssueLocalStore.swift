@@ -99,11 +99,7 @@ actor IssueLocalStore {
         var results: [IssueSummary] = []
         results.reserveCapacity(normalized.count)
         for chunk in chunked(normalized, size: 200) {
-            var predicate = Expression<Bool>(value: false)
-            for value in chunk {
-                predicate = predicate || (readableID == value)
-            }
-            let query = issues.filter(predicate)
+            let query = issues.filter(chunk.contains(readableID))
             do {
                 results.append(contentsOf: try db.prepare(query).compactMap { row in
                     issueFromRow(row)
@@ -140,11 +136,7 @@ actor IssueLocalStore {
         var results: [IssueSummary.ID: Date] = [:]
         results.reserveCapacity(normalized.count)
         for chunk in chunked(normalized, size: 200) {
-            var predicate = Expression<Bool>(value: false)
-            for value in chunk {
-                predicate = predicate || (issueDetailIssueID == value)
-            }
-            let query = issueDetails.filter(predicate)
+            let query = issueDetails.filter(chunk.contains(issueDetailIssueID))
             do {
                 for row in try db.prepare(query) {
                     let idString = row[issueDetailIssueID]

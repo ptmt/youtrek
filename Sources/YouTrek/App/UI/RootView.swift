@@ -135,30 +135,27 @@ private struct RootContentView: View {
         .onChange(of: appState.selectedSidebarItem) { previousSelection, selection in
             guard let selection else { return }
             container.recordSidebarSelection(selection)
-            Task { @MainActor in
-                await Task.yield()
-                if (selection.isBoard || selection.isTodoList), isInspectorVisible {
-                    isInspectorVisible = false
-                    appState.setInspectorVisible(false)
-                }
-                if selection.isTodoList {
-                    appState.selectedDraftID = nil
-                    appState.selectedIssue = nil
-                    appState.selectedIssueIDs.removeAll()
+            if (selection.isBoard || selection.isTodoList), isInspectorVisible {
+                isInspectorVisible = false
+                appState.setInspectorVisible(false)
+            }
+            if selection.isTodoList {
+                appState.selectedDraftID = nil
+                appState.selectedIssue = nil
+                appState.selectedIssueIDs.removeAll()
 
-                    if let todoListID = selection.todoListID {
-                        let previousTodoListID = previousSelection?.todoListID
-                        let enteredNewTodoList = previousTodoListID != todoListID
-                        if enteredNewTodoList, appState.isSidebarVisible {
-                            appState.updateColumnVisibility(.doubleColumn, source: "todoList-default")
-                        }
+                if let todoListID = selection.todoListID {
+                    let previousTodoListID = previousSelection?.todoListID
+                    let enteredNewTodoList = previousTodoListID != todoListID
+                    if enteredNewTodoList, appState.isSidebarVisible {
+                        appState.updateColumnVisibility(.doubleColumn, source: "todoList-default")
                     }
                 }
-                if !selectionShowsDrafts(selection), appState.selectedIssue?.isDraft == true {
-                    appState.selectedDraftID = nil
-                    appState.selectedIssue = nil
-                    appState.selectedIssueIDs.removeAll()
-                }
+            }
+            if !selectionShowsDrafts(selection), appState.selectedIssue?.isDraft == true {
+                appState.selectedDraftID = nil
+                appState.selectedIssue = nil
+                appState.selectedIssueIDs.removeAll()
             }
             Task {
                 await container.loadIssues(for: selection)

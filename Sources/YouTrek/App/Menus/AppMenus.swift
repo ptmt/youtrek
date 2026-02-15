@@ -7,6 +7,7 @@ struct AppMenus: Commands {
     #if DEBUG
     @AppStorage(AppDebugSettings.Keys.simulateSlowResponses) private var simulateSlowResponses: Bool = false
     @AppStorage(AppDebugSettings.Keys.showNetworkFooter) private var showNetworkFooter: Bool = false
+    @AppStorage(AppDebugSettings.Keys.verboseRequestLogging) private var verboseRequestLogging: Bool = false
     @AppStorage(AppDebugSettings.Keys.disableSyncing) private var disableSyncing: Bool = false
     @AppStorage(AppDebugSettings.Keys.showBoardDiagnostics) private var showBoardDiagnostics: Bool = false
     @AppStorage(AppDebugSettings.Keys.showIssueListDiagnostics) private var showIssueListDiagnostics: Bool = false
@@ -61,6 +62,7 @@ struct AppMenus: Commands {
         CommandMenu("Developer") {
             Toggle("Simulate slow responses", isOn: $simulateSlowResponses)
             Toggle("Show network footer", isOn: $showNetworkFooter)
+            Toggle("Verbose request logs", isOn: $verboseRequestLogging)
             Toggle("Disable syncing", isOn: $disableSyncing)
             Toggle("Show board diagnostics", isOn: $showBoardDiagnostics)
             Toggle("Show issue list diagnostics", isOn: $showIssueListDiagnostics)

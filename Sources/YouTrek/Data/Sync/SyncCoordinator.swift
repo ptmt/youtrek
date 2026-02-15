@@ -45,11 +45,11 @@ actor SyncCoordinator {
     ) async -> IssueSyncResult {
         if AppDebugSettings.disableSyncing {
             let cached = await localStore.loadIssues(for: query)
-            LoggingService.sync.info("Issue sync: syncing disabled, loaded \(cached.count, privacy: .public) cached issues.")
+            LoggingService.syncVerbose("Issue sync: syncing disabled, loaded \(cached.count) cached issues.")
             return IssueSyncResult(issues: cached, didSyncRemote: false)
         }
         do {
-            LoggingService.sync.info("Issue sync: fetching remote issues.")
+            LoggingService.syncVerbose("Issue sync: fetching remote issues.")
             let (issues, remoteIssues) = try await enqueue(label: "Sync issues") {
                 let remote = try await self.fetchIssues(query: query, paginate: paginate)
                 await self.localStore.saveRemoteIssues(
@@ -65,7 +65,7 @@ actor SyncCoordinator {
             if !remoteIssues.isEmpty {
                 await prefetchIssueDetails(for: remoteIssues)
             }
-            LoggingService.sync.info("Issue sync: remote issues fetched (\(issues.count, privacy: .public)).")
+            LoggingService.syncVerbose("Issue sync: remote issues fetched (\(issues.count)).")
             return IssueSyncResult(issues: issues, didSyncRemote: true)
         } catch {
             // On failure fall back to local cache.
@@ -100,8 +100,8 @@ actor SyncCoordinator {
             }
             offset += pageSize
             if pageIndex == maxPages - 1 {
-                LoggingService.sync.info(
-                    "Issue sync: pagination cap reached (\(aggregated.count, privacy: .public) issues)."
+                LoggingService.syncVerbose(
+                    "Issue sync: pagination cap reached (\(aggregated.count) issues)."
                 )
             }
         }
