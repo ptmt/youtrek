@@ -858,9 +858,20 @@ private struct TodoMarkdownTextView: NSViewRepresentable {
             markerRect.origin.x += containerOrigin.x
             markerRect.origin.y += containerOrigin.y
             let checkboxSize = TodoEditorLayout.checkboxSize
-            let checkboxX = max(
+            let leftCanvasX = max(
                 2,
-                markerRect.minX - checkboxSize.width - TodoEditorLayout.checkboxGutterTrailing
+                textView.textContainerOrigin.x + TodoEditorLayout.checkboxGutterTrailing
+            )
+            let rightCanvasX = max(
+                0,
+                textView.bounds.maxX - checkboxSize.width - 2
+            )
+            let checkboxX = min(
+                max(
+                    markerRect.minX + TodoEditorLayout.checkboxGutterTrailing,
+                    leftCanvasX
+                ),
+                rightCanvasX
             )
 
             let anchorCharacterLocation = marker.markerRange.location
