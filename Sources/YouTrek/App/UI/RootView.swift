@@ -78,16 +78,14 @@ private struct RootContentView: View {
     }
 
     private var rootSplitView: some View {
-        NavigationSplitView(columnVisibility: columnVisibilityBinding) {
-            sidebarContent
-        } detail: {
-            mainContent
-                .toolbar(id: "main-toolbar") { mainToolbar }
-        }
-        .inspector(isPresented: $isInspectorVisible) {
-            inspectorContent
-        }
-        .navigationSplitViewStyle(.prominentDetail)
+        AppKitRootSplitView(
+            sidebar: AnyView(sidebarContent),
+            main: AnyView(mainContent),
+            inspector: AnyView(inspectorContent),
+            columnVisibility: columnVisibilityBinding,
+            isInspectorVisible: $isInspectorVisible
+        )
+        .toolbar(id: "main-toolbar") { mainToolbar }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         #if DEBUG
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -214,11 +212,9 @@ private struct RootContentView: View {
     }
 
     private var sidebarContent: some View {
-        SidebarView(
+        AppKitSidebarPane(
             sections: appState.sidebarSections,
             selection: $appState.selectedSidebarItem,
-            isSyncing: appState.isSyncing,
-            syncStatusMessage: appState.syncStatusMessage,
             onDeleteSavedSearch: { savedQueryID in
                 Task {
                     await container.deleteSavedSearch(id: savedQueryID)
@@ -263,10 +259,21 @@ private struct RootContentView: View {
                 Task {
                     await container.deleteTodoList(id: listID)
                 }
-            },
-            onToggleSidebar: toggleSidebar
+            }
         )
-        .toolbar(removing: .sidebarToggle)
+        .frame(minWidth: 220, maxHeight: .infinity)
+        .padding(.bottom, 28)
+        .overlay(alignment: .bottomLeading) {
+            if appState.isSyncing {
+                SyncStatusIndicator(label: appState.syncStatusMessage)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.leading, 8)
+                    .padding(.bottom, 6)
+                    .accessibilityLabel("Sync status")
+            }
+        }
     }
 
     @ViewBuilder
@@ -402,6 +409,602 @@ private struct RootContentView: View {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
+}
+
+@MainActor
+private struct AppKitSidebarPane: NSViewRepresentable {
+    let sections: [SidebarSection]
+    @Binding var selection: SidebarItem?
+    let onDeleteSavedSearch: ((String) -> Void)?
+    let onRefreshBoard: ((SidebarItem) -> Void)?
+    let onOpenBoardInWeb: ((SidebarItem) -> Void)?
+    let boardSyncStatus: ((SidebarItem) -> String?)?
+    let onCreateTodoList: (() -> Void)?
+    let onRenameTodoList: ((SidebarItem) -> Void)?
+    let onDeleteTodoList: ((SidebarItem) -> Void)?
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    @MainActor
+    func makeNSView(context: Context) -> SidebarOutlineContainerView {
+        let view = SidebarOutlineContainerView()
+        context.coordinator.configure(outlineView: view.outlineView)
+        context.coordinator.apply(parent: self, outlineView: view.outlineView)
+        return view
+    }
+
+    @MainActor
+    func updateNSView(_ nsView: SidebarOutlineContainerView, context: Context) {
+        context.coordinator.apply(parent: self, outlineView: nsView.outlineView)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate {
+        private var parent: AppKitSidebarPane
+        private weak var outlineView: NSOutlineView?
+        private var sectionNodes: [SidebarSectionNode] = []
+        private var childNodesBySectionID: [String: [AnyObject]] = [:]
+        private var isApplyingSelection = false
+        private let contextMenu = NSMenu(title: "Sidebar")
+
+        init(parent: AppKitSidebarPane) {
+            self.parent = parent
+            super.init()
+        }
+
+        func configure(outlineView: NSOutlineView) {
+            self.outlineView = outlineView
+            outlineView.delegate = self
+            outlineView.dataSource = self
+            outlineView.menu = contextMenu
+            contextMenu.delegate = self
+        }
+
+        func apply(parent: AppKitSidebarPane, outlineView: NSOutlineView) {
+            self.parent = parent
+            rebuildNodes()
+            outlineView.reloadData()
+            for sectionNode in sectionNodes {
+                outlineView.expandItem(sectionNode)
+            }
+            syncSelection(with: outlineView)
+        }
+
+        private func rebuildNodes() {
+            sectionNodes = parent.sections.map(SidebarSectionNode.init)
+            childNodesBySectionID = [:]
+            for section in parent.sections {
+                var children: [AnyObject] = section.items.map { SidebarItemNode(item: $0) }
+                if children.isEmpty, let emptyMessage = section.emptyMessage {
+                    children = [
+                        SidebarEmptyNode(
+                            sectionID: section.id,
+                            message: emptyMessage,
+                            isCreateAction: section.id == "todo"
+                        )
+                    ]
+                }
+                childNodesBySectionID[section.id] = children
+            }
+        }
+
+        private func syncSelection(with outlineView: NSOutlineView) {
+            guard let selected = parent.selection else {
+                if outlineView.selectedRow != -1 {
+                    isApplyingSelection = true
+                    outlineView.deselectAll(nil)
+                    isApplyingSelection = false
+                }
+                return
+            }
+            guard let targetNode = itemNode(for: selected.id) else { return }
+            let row = outlineView.row(forItem: targetNode)
+            guard row >= 0, outlineView.selectedRow != row else { return }
+            isApplyingSelection = true
+            outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            isApplyingSelection = false
+        }
+
+        private func itemNode(for id: SidebarItem.ID) -> SidebarItemNode? {
+            for children in childNodesBySectionID.values {
+                for child in children {
+                    if let itemNode = child as? SidebarItemNode, itemNode.item.id == id {
+                        return itemNode
+                    }
+                }
+            }
+            return nil
+        }
+
+        private func item(for id: SidebarItem.ID) -> SidebarItem? {
+            for section in parent.sections {
+                if let item = section.items.first(where: { $0.id == id }) {
+                    return item
+                }
+            }
+            return nil
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
+            if item == nil {
+                return sectionNodes.count
+            }
+            if let sectionNode = item as? SidebarSectionNode {
+                return childNodesBySectionID[sectionNode.section.id]?.count ?? 0
+            }
+            return 0
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
+            item is SidebarSectionNode
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
+            if item == nil {
+                return sectionNodes[index]
+            }
+            if let sectionNode = item as? SidebarSectionNode,
+               let children = childNodesBySectionID[sectionNode.section.id] {
+                return children[index]
+            }
+            return NSObject()
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
+            if item is SidebarSectionNode {
+                return false
+            }
+            if let emptyNode = item as? SidebarEmptyNode {
+                if emptyNode.isCreateAction {
+                    parent.onCreateTodoList?()
+                }
+                return false
+            }
+            return item is SidebarItemNode
+        }
+
+        func outlineViewSelectionDidChange(_ notification: Notification) {
+            guard !isApplyingSelection, let outlineView else { return }
+            let selectedRow = outlineView.selectedRow
+            guard selectedRow >= 0,
+                  let itemNode = outlineView.item(atRow: selectedRow) as? SidebarItemNode else {
+                if parent.selection != nil {
+                    parent.selection = nil
+                }
+                return
+            }
+            if parent.selection?.id != itemNode.item.id {
+                parent.selection = itemNode.item
+            }
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
+            if item is SidebarSectionNode { return 30 }
+            if item is SidebarEmptyNode { return 24 }
+            return 26
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
+            if let sectionNode = item as? SidebarSectionNode {
+                let view = outlineView.makeView(withIdentifier: SidebarSectionCell.identifier, owner: nil) as? SidebarSectionCell
+                    ?? SidebarSectionCell()
+                view.configure(title: sectionNode.section.title)
+                return view
+            }
+            if let itemNode = item as? SidebarItemNode {
+                let view = outlineView.makeView(withIdentifier: SidebarItemCell.identifier, owner: nil) as? SidebarItemCell
+                    ?? SidebarItemCell()
+                view.configure(item: itemNode.item)
+                return view
+            }
+            if let emptyNode = item as? SidebarEmptyNode {
+                let view = outlineView.makeView(withIdentifier: SidebarEmptyCell.identifier, owner: nil) as? SidebarEmptyCell
+                    ?? SidebarEmptyCell()
+                view.configure(message: emptyNode.message, isAction: emptyNode.isCreateAction)
+                return view
+            }
+            return nil
+        }
+
+        func menuNeedsUpdate(_ menu: NSMenu) {
+            menu.removeAllItems()
+            guard let outlineView else { return }
+            let clickedRow = outlineView.clickedRow
+            guard clickedRow >= 0 else { return }
+            guard let clickedItem = outlineView.item(atRow: clickedRow) else { return }
+
+            if let sectionNode = clickedItem as? SidebarSectionNode {
+                if sectionNode.section.id == "todo" {
+                    let item = NSMenuItem(title: "Create Todo List", action: #selector(createTodoList), keyEquivalent: "")
+                    item.target = self
+                    menu.addItem(item)
+                }
+                return
+            }
+
+            if let emptyNode = clickedItem as? SidebarEmptyNode {
+                if emptyNode.isCreateAction {
+                    let item = NSMenuItem(title: "Create Todo List", action: #selector(createTodoList), keyEquivalent: "")
+                    item.target = self
+                    menu.addItem(item)
+                }
+                return
+            }
+
+            guard let itemNode = clickedItem as? SidebarItemNode else { return }
+            let sidebarItem = itemNode.item
+
+            if let savedQueryID = sidebarItem.savedQueryID {
+                let delete = NSMenuItem(title: "Delete Saved Search", action: #selector(deleteSavedSearch(_:)), keyEquivalent: "")
+                delete.target = self
+                delete.representedObject = savedQueryID
+                menu.addItem(delete)
+                return
+            }
+
+            if sidebarItem.isBoard {
+                let refresh = NSMenuItem(title: "Refresh", action: #selector(refreshBoard(_:)), keyEquivalent: "")
+                refresh.target = self
+                refresh.representedObject = sidebarItem.id
+                menu.addItem(refresh)
+
+                let openInWeb = NSMenuItem(title: "Open in Web", action: #selector(openBoardInWeb(_:)), keyEquivalent: "")
+                openInWeb.target = self
+                openInWeb.representedObject = sidebarItem.id
+                menu.addItem(openInWeb)
+
+                if let status = parent.boardSyncStatus?(sidebarItem) {
+                    menu.addItem(NSMenuItem.separator())
+                    let statusItem = NSMenuItem(title: "Last synced: \(status)", action: nil, keyEquivalent: "")
+                    statusItem.isEnabled = false
+                    menu.addItem(statusItem)
+                }
+                return
+            }
+
+            if sidebarItem.isTodoList {
+                let rename = NSMenuItem(title: "Rename", action: #selector(renameTodoList(_:)), keyEquivalent: "")
+                rename.target = self
+                rename.representedObject = sidebarItem.id
+                menu.addItem(rename)
+
+                let delete = NSMenuItem(title: "Delete", action: #selector(deleteTodoList(_:)), keyEquivalent: "")
+                delete.target = self
+                delete.representedObject = sidebarItem.id
+                menu.addItem(delete)
+            }
+        }
+
+        @objc private func createTodoList() {
+            parent.onCreateTodoList?()
+        }
+
+        @objc private func deleteSavedSearch(_ sender: NSMenuItem) {
+            guard let id = sender.representedObject as? String else { return }
+            parent.onDeleteSavedSearch?(id)
+        }
+
+        @objc private func refreshBoard(_ sender: NSMenuItem) {
+            guard let id = sender.representedObject as? SidebarItem.ID,
+                  let item = item(for: id) else { return }
+            parent.onRefreshBoard?(item)
+        }
+
+        @objc private func openBoardInWeb(_ sender: NSMenuItem) {
+            guard let id = sender.representedObject as? SidebarItem.ID,
+                  let item = item(for: id) else { return }
+            parent.onOpenBoardInWeb?(item)
+        }
+
+        @objc private func renameTodoList(_ sender: NSMenuItem) {
+            guard let id = sender.representedObject as? SidebarItem.ID,
+                  let item = item(for: id) else { return }
+            parent.onRenameTodoList?(item)
+        }
+
+        @objc private func deleteTodoList(_ sender: NSMenuItem) {
+            guard let id = sender.representedObject as? SidebarItem.ID,
+                  let item = item(for: id) else { return }
+            parent.onDeleteTodoList?(item)
+        }
+    }
+}
+
+@MainActor
+private final class SidebarOutlineContainerView: NSView {
+    let outlineView = NSOutlineView(frame: .zero)
+    private let scrollView = NSScrollView(frame: .zero)
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("sidebar-column"))
+        outlineView.addTableColumn(column)
+        outlineView.outlineTableColumn = column
+        outlineView.headerView = nil
+        outlineView.rowSizeStyle = .default
+        if #available(macOS 12.0, *) {
+            outlineView.style = .sourceList
+        } else {
+            outlineView.selectionHighlightStyle = .sourceList
+        }
+        outlineView.floatsGroupRows = false
+        outlineView.focusRingType = .none
+        outlineView.backgroundColor = .clear
+        outlineView.usesAlternatingRowBackgroundColors = false
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = outlineView
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = false
+
+        addSubview(scrollView)
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+}
+
+private final class SidebarSectionNode: NSObject {
+    let section: SidebarSection
+
+    init(_ section: SidebarSection) {
+        self.section = section
+    }
+}
+
+private final class SidebarItemNode: NSObject {
+    let item: SidebarItem
+
+    init(item: SidebarItem) {
+        self.item = item
+    }
+}
+
+private final class SidebarEmptyNode: NSObject {
+    let sectionID: String
+    let message: String
+    let isCreateAction: Bool
+
+    init(sectionID: String, message: String, isCreateAction: Bool) {
+        self.sectionID = sectionID
+        self.message = message
+        self.isCreateAction = isCreateAction
+    }
+}
+
+private final class SidebarSectionCell: NSTableCellView {
+    static let identifier = NSUserInterfaceItemIdentifier("sidebar-section-cell")
+    private let label = NSTextField(labelWithString: "")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        identifier = Self.identifier
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingTail
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func configure(title: String) {
+        label.stringValue = title.uppercased()
+    }
+}
+
+private final class SidebarItemCell: NSTableCellView {
+    static let identifier = NSUserInterfaceItemIdentifier("sidebar-item-cell")
+    private let iconView = NSImageView(frame: .zero)
+    private let label = NSTextField(labelWithString: "")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        identifier = Self.identifier
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.contentTintColor = .labelColor
+        iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = .systemFont(ofSize: 13, weight: .regular)
+        label.lineBreakMode = .byTruncatingTail
+
+        addSubview(iconView)
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 16),
+            iconView.heightAnchor.constraint(equalToConstant: 16),
+            label.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func configure(item: SidebarItem) {
+        label.stringValue = item.title
+        iconView.image = NSImage(systemSymbolName: item.iconName, accessibilityDescription: item.title)
+    }
+}
+
+private final class SidebarEmptyCell: NSTableCellView {
+    static let identifier = NSUserInterfaceItemIdentifier("sidebar-empty-cell")
+    private let label = NSTextField(labelWithString: "")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        identifier = Self.identifier
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = .systemFont(ofSize: 12, weight: .regular)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingTail
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func configure(message: String, isAction: Bool) {
+        label.stringValue = isAction ? "+ \(message)" : message
+    }
+}
+
+private struct AppKitRootSplitView: NSViewControllerRepresentable {
+    let sidebar: AnyView
+    let main: AnyView
+    let inspector: AnyView
+    @Binding var columnVisibility: NavigationSplitViewVisibility
+    @Binding var isInspectorVisible: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeNSViewController(context: Context) -> RootSplitViewController {
+        let controller = RootSplitViewController()
+        controller.configure(sidebar: sidebar, main: main, inspector: inspector)
+        controller.onSidebarVisibilityChanged = { isSidebarVisible in
+            Task { @MainActor in
+                context.coordinator.updateColumnVisibility(sidebarVisible: isSidebarVisible)
+            }
+        }
+        controller.apply(columnVisibility: columnVisibility, isInspectorVisible: isInspectorVisible)
+        return controller
+    }
+
+    func updateNSViewController(_ controller: RootSplitViewController, context: Context) {
+        context.coordinator.parent = self
+        controller.configure(sidebar: sidebar, main: main, inspector: inspector)
+        controller.onSidebarVisibilityChanged = { isSidebarVisible in
+            Task { @MainActor in
+                context.coordinator.updateColumnVisibility(sidebarVisible: isSidebarVisible)
+            }
+        }
+        controller.apply(columnVisibility: columnVisibility, isInspectorVisible: isInspectorVisible)
+    }
+
+    final class Coordinator {
+        var parent: AppKitRootSplitView
+
+        init(parent: AppKitRootSplitView) {
+            self.parent = parent
+        }
+
+        @MainActor func updateColumnVisibility(sidebarVisible: Bool) {
+            let nextVisibility: NavigationSplitViewVisibility
+            if sidebarVisible {
+                nextVisibility = parent.columnVisibility == .all ? .all : .doubleColumn
+            } else {
+                nextVisibility = .detailOnly
+            }
+            guard parent.columnVisibility != nextVisibility else { return }
+            parent.columnVisibility = nextVisibility
+        }
+    }
+}
+
+@MainActor
+private final class RootSplitViewController: NSSplitViewController {
+    var onSidebarVisibilityChanged: ((Bool) -> Void)?
+
+    private let sidebarController = NSHostingController(rootView: AnyView(EmptyView()))
+    private let mainController = NSHostingController(rootView: AnyView(EmptyView()))
+    private let inspectorController = NSHostingController(rootView: AnyView(EmptyView()))
+
+    private lazy var sidebarItem: NSSplitViewItem = {
+        let item = NSSplitViewItem(sidebarWithViewController: sidebarController)
+        item.canCollapse = true
+        item.minimumThickness = 220
+        item.maximumThickness = 340
+        return item
+    }()
+
+    private lazy var mainItem: NSSplitViewItem = {
+        let item = NSSplitViewItem(viewController: mainController)
+        item.minimumThickness = 420
+        return item
+    }()
+
+    private lazy var inspectorItem: NSSplitViewItem = {
+        let item = NSSplitViewItem(viewController: inspectorController)
+        item.canCollapse = true
+        item.minimumThickness = 320
+        item.maximumThickness = 500
+        return item
+    }()
+
+    init() {
+        super.init(nibName: nil, bundle: nil)
+        addSplitViewItem(sidebarItem)
+        addSplitViewItem(mainItem)
+        addSplitViewItem(inspectorItem)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func configure(sidebar: AnyView, main: AnyView, inspector: AnyView) {
+        sidebarController.rootView = sidebar
+        mainController.rootView = main
+        inspectorController.rootView = inspector
+    }
+
+    func apply(columnVisibility: NavigationSplitViewVisibility, isInspectorVisible: Bool) {
+        let sidebarVisible = isSidebarVisible(for: columnVisibility)
+        let shouldHideSidebar = !sidebarVisible
+        if sidebarItem.isCollapsed != shouldHideSidebar {
+            sidebarItem.isCollapsed = shouldHideSidebar
+        }
+
+        let shouldHideInspector = !isInspectorVisible
+        if inspectorItem.isCollapsed != shouldHideInspector {
+            inspectorItem.isCollapsed = shouldHideInspector
+        }
+    }
+
+    override func toggleSidebar(_ sender: Any?) {
+        super.toggleSidebar(sender)
+        onSidebarVisibilityChanged?(!sidebarItem.isCollapsed)
+    }
+
+    private func isSidebarVisible(for visibility: NavigationSplitViewVisibility) -> Bool {
+        visibility != .detailOnly
+    }
 }
 
 #if DEBUG

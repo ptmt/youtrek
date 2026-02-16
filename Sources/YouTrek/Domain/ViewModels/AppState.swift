@@ -185,7 +185,11 @@ final class AppState: ObservableObject {
         return issue.updatedAt > seenAt
     }
 
-    func updateSidebar(sections: [SidebarSection], preferredSelectionID: SidebarItem.ID?) {
+    func updateSidebar(
+        sections: [SidebarSection],
+        preferredSelectionID: SidebarItem.ID?,
+        fallbackToFirstItem: Bool = true
+    ) {
         sidebarSections = sections
         let items = sections.flatMap(\.items)
 
@@ -198,8 +202,10 @@ final class AppState: ObservableObject {
         if let preferredSelectionID,
            let preferred = items.first(where: { $0.id == preferredSelectionID }) {
             selectedSidebarItem = preferred
-        } else {
+        } else if fallbackToFirstItem {
             selectedSidebarItem = items.first
+        } else {
+            selectedSidebarItem = nil
         }
     }
 

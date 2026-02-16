@@ -294,9 +294,15 @@ final class AppContainer: ObservableObject {
         LoggingService.sync.info("Bootstrap: cached saved searches loaded (\(cachedSavedQueries.count, privacy: .public)).")
         LoggingService.sync.info("Bootstrap: cached todo lists loaded (\(cachedTodoLists.count, privacy: .public)).")
         let initialSections = buildSidebarSections(savedQueries: cachedSavedQueries, boards: cachedBoards, todoLists: cachedTodoLists)
-        let initialPreferredSelectionID = storedSidebarSelectionID() ?? preferredSelectionID(from: cachedSavedQueries)
+        let storedSelectionID = storedSidebarSelectionID()
+        let initialPreferredSelectionID = storedSelectionID ?? preferredSelectionID(from: cachedSavedQueries)
+        let shouldFallbackToFirstItem = storedSelectionID == nil
 
-        appState.updateSidebar(sections: initialSections, preferredSelectionID: initialPreferredSelectionID)
+        appState.updateSidebar(
+            sections: initialSections,
+            preferredSelectionID: initialPreferredSelectionID,
+            fallbackToFirstItem: shouldFallbackToFirstItem
+        )
         if requiresSetup {
             LoggingService.sync.info("Bootstrap: setup required, skipping initial sync.")
             return
