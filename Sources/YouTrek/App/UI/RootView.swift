@@ -427,7 +427,6 @@ private struct AppKitSidebarPane: NSViewRepresentable {
         Coordinator(parent: self)
     }
 
-    @MainActor
     func makeNSView(context: Context) -> SidebarOutlineContainerView {
         let view = SidebarOutlineContainerView()
         context.coordinator.configure(outlineView: view.outlineView)
@@ -435,13 +434,12 @@ private struct AppKitSidebarPane: NSViewRepresentable {
         return view
     }
 
-    @MainActor
     func updateNSView(_ nsView: SidebarOutlineContainerView, context: Context) {
         context.coordinator.apply(parent: self, outlineView: nsView.outlineView)
     }
 
     @MainActor
-    final class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate {
+    final class Coordinator: NSObject, @preconcurrency NSOutlineViewDataSource, @preconcurrency NSOutlineViewDelegate, @preconcurrency NSMenuDelegate {
         private var parent: AppKitSidebarPane
         private weak var outlineView: NSOutlineView?
         private var sectionNodes: [SidebarSectionNode] = []
@@ -728,8 +726,6 @@ private final class SidebarOutlineContainerView: NSView {
         outlineView.rowSizeStyle = .default
         if #available(macOS 12.0, *) {
             outlineView.style = .sourceList
-        } else {
-            outlineView.selectionHighlightStyle = .sourceList
         }
         outlineView.floatsGroupRows = false
         outlineView.focusRingType = .none

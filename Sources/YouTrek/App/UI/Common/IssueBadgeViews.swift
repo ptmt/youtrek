@@ -13,6 +13,8 @@ struct IssueStatusBadge: View {
                 .frame(width: 6, height: 6)
             Text(text)
                 .foregroundStyle(Color.primary.opacity(textOpacity))
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 }
@@ -44,6 +46,8 @@ struct IssuePriorityBadge: View {
                 .frame(width: 6, height: 6)
             Text(text)
                 .foregroundStyle(Color.primary.opacity(textOpacity))
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 }

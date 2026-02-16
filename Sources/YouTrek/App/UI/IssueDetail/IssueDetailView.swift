@@ -490,7 +490,13 @@ struct IssueDetailView: View {
             Text("Description")
                 .font(.headline)
             if let description = descriptionText {
-                MarkdownTextView(text: description)
+                MarkdownTextView(
+                    text: description,
+                    baseURL: markdownImageBaseURL,
+                    remoteImageDataLoader: { url in
+                        try await loadMarkdownImageData(from: url)
+                    }
+                )
             } else {
                 Text(isLoadingDetail ? "Loading description…" : "No description yet.")
                     .font(.callout)
@@ -631,7 +637,12 @@ struct IssueDetailView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(timelineEntries) { entry in
-                    TimelineRow(entry: entry)
+                    TimelineRow(
+                        entry: entry,
+                        remoteImageDataLoader: { url in
+                            try await loadMarkdownImageData(from: url)
+                        }
+                    )
                 }
             }
         }
@@ -761,7 +772,9 @@ struct IssueDetailView: View {
                 title: "Created",
                 date: createdAt,
                 person: detail.reporter,
-                body: nil
+                body: nil,
+                markdownBaseURL: markdownImageBaseURL,
+                webURL: timelineOpenURL()
             ))
         }
         if detail.createdAt == nil || detail.updatedAt > (detail.createdAt ?? .distantPast) {
@@ -770,7 +783,9 @@ struct IssueDetailView: View {
                 title: "Updated",
                 date: detail.updatedAt,
                 person: nil,
-                body: nil
+                body: nil,
+                markdownBaseURL: markdownImageBaseURL,
+                webURL: timelineOpenURL()
             ))
         }
         for comment in detail.comments {
@@ -780,10 +795,38 @@ struct IssueDetailView: View {
                 title: "Comment",
                 date: comment.createdAt,
                 person: comment.author,
-                body: trimmed.isEmpty ? nil : comment.text
+                body: trimmed.isEmpty ? nil : comment.text,
+                markdownBaseURL: markdownImageBaseURL,
+                webURL: timelineOpenURL(for: comment.id)
             ))
         }
         return entries.sorted { $0.date < $1.date }
+    }
+
+    private var markdownImageBaseURL: URL? {
+        guard let issueURL = container.issueWebURL(for: issue) else { return nil }
+        return issueURL.deletingLastPathComponent().deletingLastPathComponent()
+    }
+
+    private func timelineOpenURL(for commentID: String? = nil) -> URL? {
+        guard let issueURL = container.issueWebURL(for: issue) else { return nil }
+        guard let commentID else { return issueURL }
+        guard var components = URLComponents(url: issueURL, resolvingAgainstBaseURL: false) else { return issueURL }
+        components.fragment = "comment-\(commentID)"
+        return components.url ?? issueURL
+    }
+
+    private func loadMarkdownImageData(from url: URL) async throws -> Data {
+        let attachment = IssueAttachment(
+            id: UUID().uuidString,
+            name: "Comment image",
+            size: nil,
+            mimeType: nil,
+            url: url,
+            createdAt: nil,
+            author: nil
+        )
+        return try await container.fetchAttachmentData(for: attachment)
     }
 
     private var statusMenu: some View {
@@ -936,7 +979,13 @@ struct IssueDetailView: View {
                 }
             }
             if showsCommentPreview {
-                MarkdownTextView(text: commentText)
+                MarkdownTextView(
+                    text: commentText,
+                    baseURL: markdownImageBaseURL,
+                    remoteImageDataLoader: { url in
+                        try await loadMarkdownImageData(from: url)
+                    }
+                )
                     .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
                     .padding(8)
                     .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -1770,10 +1819,13 @@ private struct TimelineEntry: Identifiable {
     let date: Date
     let person: Person?
     let body: String?
+    let markdownBaseURL: URL?
+    let webURL: URL?
 }
 
 private struct TimelineRow: View {
     let entry: TimelineEntry
+    let remoteImageDataLoader: ((URL) async throws -> Data)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -1781,11 +1833,23 @@ private struct TimelineRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(entry.title)
                     .font(.subheadline.weight(.semibold))
-                Text(entry.date.formatted(.dateTime.year().month().day().hour().minute()))
+                Group {
+                    if let webURL = entry.webURL {
+                        Link(destination: webURL) {
+                            Text(entry.date.formatted(.dateTime.year().month().day().hour().minute()))
+                        }
+                    } else {
+                        Text(entry.date.formatted(.dateTime.year().month().day().hour().minute()))
+                    }
+                }
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let body = entry.body {
-                    MarkdownTextView(text: body)
+                    MarkdownTextView(
+                        text: body,
+                        baseURL: entry.markdownBaseURL,
+                        remoteImageDataLoader: remoteImageDataLoader
+                    )
                 }
             }
             Spacer()

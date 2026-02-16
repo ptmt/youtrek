@@ -5,6 +5,8 @@ struct MarkdownTextView: View {
     let text: String
     var font: Font = .callout
     var codeFont: Font = .system(.callout, design: .monospaced)
+    var baseURL: URL?
+    var remoteImageDataLoader: ((URL) async throws -> Data)?
 
     var body: some View {
         let segments = Self.segments(from: text)
@@ -40,7 +42,11 @@ struct MarkdownTextView: View {
                             markdownText(text)
                         }
                     case .image(let match):
-                        MarkdownImageView(match: match)
+                        MarkdownImageView(
+                            match: match,
+                            baseURL: baseURL,
+                            remoteImageDataLoader: remoteImageDataLoader
+                        )
                     }
                 }
             }
@@ -249,7 +255,7 @@ enum MarkdownImageSource: Equatable {
 }
 
 enum MarkdownImageSourceResolver {
-    static func resolve(source raw: String) -> MarkdownImageSource {
+    static func resolve(source raw: String, baseURL: URL?) -> MarkdownImageSource {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .unsupported }
 
@@ -257,14 +263,15 @@ enum MarkdownImageSourceResolver {
             return .inlineData(data)
         }
 
-        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased() else {
+        guard let resolvedURL = URL(string: trimmed, relativeTo: baseURL)?.absoluteURL,
+              let scheme = resolvedURL.scheme?.lowercased() else {
             return .unsupported
         }
         if scheme == "http" || scheme == "https" {
-            return .remote(url)
+            return .remote(resolvedURL)
         }
         if scheme == "file" {
-            return .file(url)
+            return .file(resolvedURL)
         }
         return .unsupported
     }
@@ -282,10 +289,12 @@ enum MarkdownImageSourceResolver {
 
 private struct MarkdownImageView: View {
     let match: MarkdownImageMatch
+    let baseURL: URL?
+    let remoteImageDataLoader: ((URL) async throws -> Data)?
 
     @ViewBuilder
     var body: some View {
-        switch MarkdownImageSourceResolver.resolve(source: match.source) {
+        switch MarkdownImageSourceResolver.resolve(source: match.source, baseURL: baseURL) {
         case .inlineData(let data):
             if let image = NSImage(data: data) {
                 rendered(nsImage: image)
@@ -293,27 +302,31 @@ private struct MarkdownImageView: View {
                 placeholder
             }
         case .remote(let url):
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Loading image…")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+            if let remoteImageDataLoader {
+                MarkdownRemoteImageLoaderView(url: url, remoteImageDataLoader: remoteImageDataLoader)
+            } else {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Loading image…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxHeight: 320)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    case .failure:
+                        placeholder
+                    @unknown default:
+                        placeholder
                     }
-                    .padding(.vertical, 4)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxHeight: 320)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                case .failure:
-                    placeholder
-                @unknown default:
-                    placeholder
                 }
             }
         case .file(let url):
@@ -347,6 +360,66 @@ private struct MarkdownImageView: View {
         }
         .padding(.vertical, 4)
     }
+}
+
+private struct MarkdownRemoteImageLoaderView: View {
+    let url: URL
+    let remoteImageDataLoader: (URL) async throws -> Data
+
+    @State private var state: MarkdownRemoteImageLoadState = .loading
+
+    var body: some View {
+        switch state {
+        case .loading:
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Loading image…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+            .task(id: url) {
+                await loadImage()
+            }
+        case .loaded(let image):
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxHeight: 320)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .failed:
+            HStack(spacing: 8) {
+                Image(systemName: "photo")
+                    .foregroundStyle(.secondary)
+                Text("Image unavailable")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func loadImage() async {
+        state = .loading
+        do {
+            let data = try await remoteImageDataLoader(url)
+            guard let image = NSImage(data: data) else {
+                state = .failed
+                return
+            }
+            state = .loaded(image)
+        } catch {
+            state = .failed
+        }
+    }
+}
+
+private enum MarkdownRemoteImageLoadState {
+    case loading
+    case loaded(NSImage)
+    case failed
 }
 
 private enum MarkdownSegment {
