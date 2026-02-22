@@ -17,6 +17,10 @@ struct IssueListView: View {
     let isIssueUnread: (IssueSummary) -> Bool
     let onIssuesRendered: ((Int) -> Void)?
     let onDeleteDraft: ((UUID) -> Void)?
+    @State private var showsLoadingView = false
+    @State private var loadingVisibilityTask: Task<Void, Never>?
+
+    private let loadingIndicatorDelayNanoseconds: UInt64 = 250_000_000
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -27,18 +31,31 @@ struct IssueListView: View {
                 diagnosticsOverlay
             }
         }
-        .onAppear(perform: syncSelectionState)
+        .onAppear {
+            syncSelectionState()
+            updateLoadingVisibility()
+        }
         .onChange(of: selection?.id) { _, _ in
             syncSelectionState()
         }
         .onChange(of: selectedIDs) { _, newIDs in
             updateSelection(from: newIDs)
         }
+        .onChange(of: isLoading) { _, _ in
+            updateLoadingVisibility()
+        }
+        .onChange(of: issues.isEmpty) { _, _ in
+            updateLoadingVisibility()
+        }
+        .onDisappear {
+            loadingVisibilityTask?.cancel()
+            loadingVisibilityTask = nil
+        }
     }
 
     @ViewBuilder
     private var content: some View {
-        if isLoading && issues.isEmpty {
+        if showsLoadingView && issues.isEmpty {
             loadingView
         } else if issues.isEmpty && hasCompletedSync {
             emptyView
@@ -102,6 +119,20 @@ struct IssueListView: View {
         guard nextSelection?.id != selection?.id else { return }
         Task { @MainActor in
             selection = nextSelection
+        }
+    }
+
+    private func updateLoadingVisibility() {
+        loadingVisibilityTask?.cancel()
+        guard isLoading, issues.isEmpty else {
+            showsLoadingView = false
+            loadingVisibilityTask = nil
+            return
+        }
+        loadingVisibilityTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: loadingIndicatorDelayNanoseconds)
+            guard !Task.isCancelled else { return }
+            showsLoadingView = true
         }
     }
 

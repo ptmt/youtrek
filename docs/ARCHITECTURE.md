@@ -11,8 +11,13 @@
 
 ```swift
 @main struct IssuesApp: App {
+  @StateObject private var container = AppContainer.live
+
   var body: some Scene {
-    WindowGroup { RootView().environment(AppContainer.live) }
+    WindowGroup {
+      RootContentView(appState: container.appState)
+        .environmentObject(container)
+    }
       .commands { AppMenus() }
   }
 }

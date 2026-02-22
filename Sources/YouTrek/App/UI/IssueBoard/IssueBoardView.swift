@@ -12,16 +12,19 @@ struct IssueBoardView: View {
     let onSelectSprint: (BoardSprintFilter) -> Void
 
     @State private var collapsedGroups: Set<String> = []
+    @State private var showsLoadingView = false
+    @State private var loadingVisibilityTask: Task<Void, Never>?
 
     private let columnWidth: CGFloat = 260
     private let columnSpacing: CGFloat = 12
+    private let loadingIndicatorDelayNanoseconds: UInt64 = 250_000_000
 
     var body: some View {
         VStack(spacing: 0) {
             boardHeader
             Divider()
             Group {
-                if isLoading && issues.isEmpty {
+                if showsLoadingView && issues.isEmpty {
                     VStack(spacing: 12) {
                         ProgressView()
                         Text("Loading board…")
@@ -44,6 +47,33 @@ struct IssueBoardView: View {
             if showDiagnostics {
                 diagnosticsOverlay
             }
+        }
+        .onAppear {
+            updateLoadingVisibility()
+        }
+        .onChange(of: isLoading) { _, _ in
+            updateLoadingVisibility()
+        }
+        .onChange(of: issues.isEmpty) { _, _ in
+            updateLoadingVisibility()
+        }
+        .onDisappear {
+            loadingVisibilityTask?.cancel()
+            loadingVisibilityTask = nil
+        }
+    }
+
+    private func updateLoadingVisibility() {
+        loadingVisibilityTask?.cancel()
+        guard isLoading, issues.isEmpty else {
+            showsLoadingView = false
+            loadingVisibilityTask = nil
+            return
+        }
+        loadingVisibilityTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: loadingIndicatorDelayNanoseconds)
+            guard !Task.isCancelled else { return }
+            showsLoadingView = true
         }
     }
 

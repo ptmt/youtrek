@@ -256,24 +256,97 @@ enum MarkdownImageSource: Equatable {
 
 enum MarkdownImageSourceResolver {
     static func resolve(source raw: String, baseURL: URL?) -> MarkdownImageSource {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = normalizeSource(raw)
         guard !trimmed.isEmpty else { return .unsupported }
 
         if trimmed.lowercased().hasPrefix("data:image/"), let data = decodeDataURL(trimmed) {
             return .inlineData(data)
         }
 
-        guard let resolvedURL = URL(string: trimmed, relativeTo: baseURL)?.absoluteURL,
-              let scheme = resolvedURL.scheme?.lowercased() else {
-            return .unsupported
-        }
-        if scheme == "http" || scheme == "https" {
-            return .remote(resolvedURL)
-        }
-        if scheme == "file" {
-            return .file(resolvedURL)
+        let candidateBases = candidateURLs(from: baseURL)
+        for candidateBase in candidateBases {
+            if let resolvedURL = resolveURL(trimmed, relativeTo: candidateBase) {
+                return imageSource(for: resolvedURL)
+            }
         }
         return .unsupported
+    }
+
+    private static func normalizeSource(_ value: String) -> String {
+        var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return trimmed
+        }
+
+        if trimmed.hasPrefix("<"), trimmed.hasSuffix(">"), trimmed.count >= 2 {
+            trimmed.removeFirst()
+            trimmed.removeLast()
+            return trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if trimmed.hasPrefix("\"") && trimmed.hasSuffix("\""), trimmed.count >= 2 {
+            trimmed.removeFirst()
+            trimmed.removeLast()
+            return trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if trimmed.hasPrefix("'") && trimmed.hasSuffix("'"), trimmed.count >= 2 {
+            trimmed.removeFirst()
+            trimmed.removeLast()
+            return trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let hasWhitespace = trimmed.contains { $0.isWhitespace }
+        if hasWhitespace, let firstSpace = trimmed.firstIndex(where: { $0.isWhitespace }) {
+            trimmed = String(trimmed[..<firstSpace]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        return trimmed
+    }
+
+    private static func resolveURL(_ value: String, relativeTo baseURL: URL?) -> URL? {
+        if let resolved = URL(string: value, relativeTo: baseURL)?.absoluteURL, isHTTPOrFile(resolved) {
+            return resolved
+        }
+
+        let urlAllowed = CharacterSet.urlQueryAllowed.union(.urlPathAllowed)
+        if let encoded = value.addingPercentEncoding(withAllowedCharacters: urlAllowed),
+           let resolved = URL(string: encoded, relativeTo: baseURL)?.absoluteURL,
+           isHTTPOrFile(resolved) {
+            return resolved
+        }
+
+        return nil
+    }
+
+    private static func isHTTPOrFile(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https" || scheme == "file"
+    }
+
+    private static func imageSource(for url: URL) -> MarkdownImageSource {
+        switch url.scheme?.lowercased() {
+        case "http", "https":
+            return .remote(url)
+        case "file":
+            return .file(url)
+        default:
+            return .unsupported
+        }
+    }
+
+    private static func candidateURLs(from baseURL: URL?) -> [URL?] {
+        guard let baseURL else { return [nil] }
+        var candidates: [URL] = [baseURL]
+        let parent = baseURL.deletingLastPathComponent()
+        if parent != baseURL {
+            candidates.append(parent)
+        }
+        let grandparent = parent.deletingLastPathComponent()
+        if grandparent != parent {
+            candidates.append(grandparent)
+        }
+        return candidates.map { $0 as URL? }
     }
 
     private static func decodeDataURL(_ value: String) -> Data? {

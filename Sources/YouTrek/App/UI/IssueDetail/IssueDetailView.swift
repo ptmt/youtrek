@@ -27,6 +27,10 @@ struct IssueDetailView: View {
     @State private var lastIssueCopiedID: String?
     @State private var showsAllCustomFields: Bool = false
     @State private var showsCommentPreview: Bool = false
+    @State private var showsInitialLoadingMessage: Bool = false
+    @State private var initialLoadingTask: Task<Void, Never>?
+
+    private let loadingIndicatorDelayNanoseconds: UInt64 = 250_000_000
 
     var body: some View {
         ScrollView {
@@ -35,7 +39,7 @@ struct IssueDetailView: View {
                 Divider()
                 metadata
                 Divider()
-                if isLoadingDetail && detail == nil {
+                if showsInitialLoadingMessage && detail == nil {
                     HStack(spacing: 8) {
                         ProgressView()
                         Text("Loading issue details…")
@@ -59,6 +63,19 @@ struct IssueDetailView: View {
             .textSelection(.enabled)
         }
         .background(.ultraThinMaterial)
+        .onAppear {
+            updateInitialLoadingVisibility()
+        }
+        .onChange(of: isLoadingDetail) { _, _ in
+            updateInitialLoadingVisibility()
+        }
+        .onChange(of: detail == nil) { _, _ in
+            updateInitialLoadingVisibility()
+        }
+        .onDisappear {
+            initialLoadingTask?.cancel()
+            initialLoadingTask = nil
+        }
         .task(id: issue.readableID) {
             statusOptions = []
             priorityOptions = []
@@ -107,6 +124,20 @@ struct IssueDetailView: View {
             guard !trimmedRefresh.isEmpty,
                   trimmedRefresh.caseInsensitiveCompare(trimmedIssue) == .orderedSame else { return }
             Task { await container.loadIssueDetail(for: issue) }
+        }
+    }
+
+    private func updateInitialLoadingVisibility() {
+        initialLoadingTask?.cancel()
+        guard isLoadingDetail, detail == nil else {
+            showsInitialLoadingMessage = false
+            initialLoadingTask = nil
+            return
+        }
+        initialLoadingTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: loadingIndicatorDelayNanoseconds)
+            guard !Task.isCancelled else { return }
+            showsInitialLoadingMessage = true
         }
     }
 
@@ -164,6 +195,8 @@ struct IssueDetailView: View {
             if !issue.tags.isEmpty {
                 metadataRow(systemImage: "tag") {
                     Text("Tags: \(issue.tags.joined(separator: ", "))")
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
             if hasCustomFields {

@@ -561,7 +561,8 @@ private struct MainWindowContent: View {
             if needsSetupPresentation {
                 SetupWindow()
             } else {
-                RootView()
+                RootContentView(appState: container.appState)
+                    .environmentObject(container)
             }
         }
         .background(WindowAccessor(isSetup: needsSetupPresentation))
