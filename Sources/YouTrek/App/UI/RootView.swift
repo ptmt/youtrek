@@ -1090,6 +1090,7 @@ private struct SearchToolbarField: View {
 struct MainToolbar: CustomizableToolbarContent {
     @ObservedObject var container: AppContainer
     @Binding var searchQuery: String
+    @Binding var isProgressReportingMode: Bool
     let hasUnreadIssues: Bool
     let onToggleSidebar: () -> Void
     let onToggleInspector: () -> Void
@@ -1111,6 +1112,20 @@ struct MainToolbar: CustomizableToolbarContent {
             .buttonStyle(.accessoryBar)
             .keyboardShortcut("k", modifiers: [.command])
             .help("Command palette")
+        }
+
+        ToolbarItem(id: "progress-mode") {
+            Button {
+                isProgressReportingMode.toggle()
+            } label: {
+                Label(
+                    "Report Progress",
+                    systemImage: isProgressReportingMode ? "text.bubble.fill" : "text.bubble"
+                )
+            }
+            .buttonStyle(.accessoryBar)
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+            .help(isProgressReportingMode ? "Exit progress reporting mode" : "Report progress on issues inline")
         }
 
         ToolbarItem(id: "mark-all-read") {
@@ -1406,6 +1421,19 @@ struct SyncStatusIndicator: View {
             Text(label ?? "Syncing…")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+    }
+}
+
+struct SyncCompleteIndicator: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            Text("Syncing complete")
+                .font(.caption)
+                .foregroundStyle(.green)
         }
         .padding(.horizontal, 8)
     }

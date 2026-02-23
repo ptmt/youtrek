@@ -62,6 +62,16 @@ extension RootContentView {
                     .padding(.leading, 8)
                     .padding(.bottom, 6)
                     .accessibilityLabel("Sync status")
+            } else if appState.showSyncComplete {
+                SyncCompleteIndicator()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.leading, 8)
+                    .padding(.bottom, 6)
+                    .accessibilityLabel("Syncing complete")
+                    .transition(.opacity)
+                    .animation(.easeInOut, value: appState.showSyncComplete)
             }
         }
     }

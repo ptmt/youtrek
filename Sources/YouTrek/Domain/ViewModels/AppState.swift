@@ -22,6 +22,7 @@ final class AppState: ObservableObject {
     @Published private(set) var isSidebarVisible: Bool = true
     @Published private(set) var isSyncing: Bool = false
     @Published private(set) var syncStatusMessage: String? = nil
+    @Published private(set) var showSyncComplete: Bool = false
     @Published var activeToast: ToastNotice?
     @Published private(set) var isLoadingIssues: Bool = false
     @Published private(set) var hasCompletedIssueSync: Bool = false
@@ -307,9 +308,25 @@ final class AppState: ObservableObject {
         isInspectorVisible = isVisible
     }
 
+    private var syncCompleteTimer: Task<Void, Never>?
+
     func updateSyncActivity(isSyncing: Bool, label: String?) {
+        let wasSyncing = self.isSyncing
         self.isSyncing = isSyncing
         self.syncStatusMessage = label
+
+        if wasSyncing && !isSyncing {
+            syncCompleteTimer?.cancel()
+            showSyncComplete = true
+            syncCompleteTimer = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                self?.showSyncComplete = false
+            }
+        } else if isSyncing {
+            syncCompleteTimer?.cancel()
+            showSyncComplete = false
+        }
     }
 
     func recordIssueSyncCompleted() {

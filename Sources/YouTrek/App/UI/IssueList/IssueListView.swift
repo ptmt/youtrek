@@ -418,7 +418,8 @@ private struct AppKitIssueTableView: NSViewRepresentable {
                 title: issue.title,
                 metadata: metadataText(for: issue),
                 isUnread: unread,
-                isClosed: isClosed
+                isClosed: isClosed,
+                assignee: issue.assignee
             )
             return cell
         }
@@ -484,12 +485,16 @@ private final class IssueListTableContainerView: NSView {
 
 private final class IssueTitleCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("issue-title-cell")
+    private static let avatarSize: CGFloat = 24
+    private let avatarHostingView = NSHostingView(rootView: UserAvatarView(person: nil, size: IssueTitleCell.avatarSize))
     private let titleLabel = NSTextField(labelWithString: "")
     private let metadataLabel = NSTextField(labelWithString: "")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         identifier = Self.identifier
+
+        avatarHostingView.translatesAutoresizingMaskIntoConstraints = false
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = .systemFont(ofSize: 13, weight: .regular)
@@ -502,14 +507,21 @@ private final class IssueTitleCell: NSTableCellView {
         metadataLabel.lineBreakMode = .byTruncatingTail
         metadataLabel.maximumNumberOfLines = 1
 
+        addSubview(avatarHostingView)
         addSubview(titleLabel)
         addSubview(metadataLabel)
 
+        let textLeading = avatarHostingView.trailingAnchor
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            avatarHostingView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            avatarHostingView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            avatarHostingView.widthAnchor.constraint(equalToConstant: Self.avatarSize),
+            avatarHostingView.heightAnchor.constraint(equalToConstant: Self.avatarSize),
+
+            titleLabel.leadingAnchor.constraint(equalTo: textLeading, constant: 8),
             titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 3),
-            metadataLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            metadataLabel.leadingAnchor.constraint(equalTo: textLeading, constant: 8),
             metadataLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             metadataLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
             metadataLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4)
@@ -521,13 +533,15 @@ private final class IssueTitleCell: NSTableCellView {
         fatalError("init(coder:) is not supported")
     }
 
-    func configure(title: String, metadata: String, isUnread: Bool, isClosed: Bool) {
+    func configure(title: String, metadata: String, isUnread: Bool, isClosed: Bool, assignee: Person?) {
         titleLabel.stringValue = title
         titleLabel.font = .systemFont(ofSize: 13, weight: (isUnread && !isClosed) ? .semibold : .regular)
         titleLabel.textColor = isClosed ? .secondaryLabelColor : .labelColor
 
         metadataLabel.stringValue = metadata
         metadataLabel.textColor = isClosed ? .tertiaryLabelColor : .secondaryLabelColor
+
+        avatarHostingView.rootView = UserAvatarView(person: assignee, size: Self.avatarSize)
     }
 }
 

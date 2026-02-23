@@ -6,6 +6,7 @@ struct RootContentView: View {
     @State var searchQuery: String = ""
     @State var isInspectorVisible: Bool = true
     @AppStorage("issueList.showAssigneeColumn") var showAssigneeColumn: Bool = false
+    @State var isProgressReportingMode: Bool = false
     #if DEBUG
     @AppStorage(AppDebugSettings.Keys.simulateSlowResponses) var simulateSlowResponses: Bool = false
     @AppStorage(AppDebugSettings.Keys.showNetworkFooter) var showNetworkFooter: Bool = false

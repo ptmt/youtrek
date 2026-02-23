@@ -6,6 +6,7 @@ struct SidebarView: View {
     @Binding var selection: SidebarItem?
     let isSyncing: Bool
     let syncStatusMessage: String?
+    let showSyncComplete: Bool
     let onDeleteSavedSearch: ((String) -> Void)?
     let onRefreshBoard: ((SidebarItem) -> Void)?
     let onOpenBoardInWeb: ((SidebarItem) -> Void)?
@@ -112,6 +113,16 @@ struct SidebarView: View {
                     .padding(.leading, 8)
                     .padding(.bottom, 6)
                     .accessibilityLabel("Sync status")
+            } else if showSyncComplete {
+                SyncCompleteIndicator()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.leading, 8)
+                    .padding(.bottom, 6)
+                    .accessibilityLabel("Syncing complete")
+                    .transition(.opacity)
+                    .animation(.easeInOut, value: showSyncComplete)
             }
         }
         .toolbar {

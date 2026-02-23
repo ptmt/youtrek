@@ -20,6 +20,15 @@ extension RootContentView {
                     todoListManager: container
                 )
                 .id(todoListID)
+            } else if isProgressReportingMode {
+                IssueProgressListView(
+                    issues: visibleIssues,
+                    selection: $appState.selectedIssue,
+                    selectedIDs: $appState.selectedIssueIDs,
+                    isIssueUnread: { issue in
+                        appState.isIssueUnread(issue)
+                    }
+                )
             } else {
                 let listID = selection.id
                 let diagnosticEvents = appState.issueListDataSourceEvents(for: listID)
@@ -64,6 +73,7 @@ extension RootContentView {
         MainToolbar(
             container: container,
             searchQuery: $searchQuery,
+            isProgressReportingMode: $isProgressReportingMode,
             hasUnreadIssues: hasUnreadIssues,
             onToggleSidebar: toggleSidebar,
             onToggleInspector: {

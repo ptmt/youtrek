@@ -157,6 +157,7 @@ final class YouTrekApp: NSObject, NSApplicationDelegate {
     private func installMenus() {
         let mainMenu = NSMenu()
         mainMenu.addItem(makeAppMenuItem())
+        mainMenu.addItem(makeEditMenuItem())
         mainMenu.addItem(makeFileMenuItem())
         mainMenu.addItem(makeIssuesMenuItem())
         mainMenu.addItem(makeViewMenuItem())
@@ -229,6 +230,73 @@ final class YouTrekApp: NSObject, NSApplicationDelegate {
         appMenu.addItem(quitItem)
 
         return appMenuItem
+    }
+
+    private func makeEditMenuItem() -> NSMenuItem {
+        let menu = NSMenu(title: "Edit")
+        let parent = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        parent.submenu = menu
+
+        let undoItem = NSMenuItem(
+            title: "Undo",
+            action: NSSelectorFromString("undo:"),
+            keyEquivalent: "z"
+        )
+        undoItem.keyEquivalentModifierMask = .command
+        menu.addItem(undoItem)
+
+        let redoItem = NSMenuItem(
+            title: "Redo",
+            action: NSSelectorFromString("redo:"),
+            keyEquivalent: "z"
+        )
+        redoItem.keyEquivalentModifierMask = NSEvent.ModifierFlags([.command, .shift])
+        menu.addItem(redoItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let cutItem = NSMenuItem(
+            title: "Cut",
+            action: NSSelectorFromString("cut:"),
+            keyEquivalent: "x"
+        )
+        cutItem.keyEquivalentModifierMask = .command
+        menu.addItem(cutItem)
+
+        let copyItem = NSMenuItem(
+            title: "Copy",
+            action: NSSelectorFromString("copy:"),
+            keyEquivalent: "c"
+        )
+        copyItem.keyEquivalentModifierMask = .command
+        menu.addItem(copyItem)
+
+        let pasteItem = NSMenuItem(
+            title: "Paste",
+            action: NSSelectorFromString("paste:"),
+            keyEquivalent: "v"
+        )
+        pasteItem.keyEquivalentModifierMask = .command
+        menu.addItem(pasteItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let deleteItem = NSMenuItem(
+            title: "Delete",
+            action: NSSelectorFromString("delete:"),
+            keyEquivalent: ""
+        )
+        menu.addItem(deleteItem)
+
+        let selectAllItem = NSMenuItem(
+            title: "Select All",
+            action: NSSelectorFromString("selectAll:"),
+            keyEquivalent: "a"
+        )
+        selectAllItem.keyEquivalentModifierMask = .command
+        menu.addItem(selectAllItem)
+
+        return parent
     }
 
     private func makeFileMenuItem() -> NSMenuItem {
