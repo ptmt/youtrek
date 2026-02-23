@@ -32,7 +32,7 @@ struct AppKitSidebarPane: NSViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, @preconcurrency NSOutlineViewDataSource, @preconcurrency NSOutlineViewDelegate, @preconcurrency NSMenuDelegate {
+    final class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate {
         private var parent: AppKitSidebarPane
         private weak var outlineView: NSOutlineView?
         private var sectionNodes: [SidebarSectionNode] = []
@@ -126,6 +126,22 @@ struct AppKitSidebarPane: NSViewRepresentable {
                 return childNodesBySectionID[sectionNode.section.id]?.count ?? 0
             }
             return 0
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, shouldExpandItem item: Any) -> Bool {
+            item is SidebarSectionNode
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, shouldCollapseItem item: Any) -> Bool {
+            false
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool {
+            false
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool {
+            item is SidebarSectionNode
         }
 
         func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
@@ -316,6 +332,7 @@ final class SidebarOutlineContainerView: NSView {
         outlineView.addTableColumn(column)
         outlineView.outlineTableColumn = column
         outlineView.headerView = nil
+        outlineView.indentationPerLevel = 4
         outlineView.rowSizeStyle = .default
         if #available(macOS 12.0, *) {
             outlineView.style = .sourceList

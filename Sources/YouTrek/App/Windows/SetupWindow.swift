@@ -25,6 +25,10 @@ struct SetupWindow: View {
     @State private var isValidatingToken = false
     @State private var hasStartedSignIn = false
     @FocusState private var focusedField: FocusField?
+    private let internalYouTrackBaseURL = "https://youtrack.jetbrains.com"
+    private let jetBrainsNetworkProbeURL = URL(string: "https://codesign.labs.jb.gg")
+    private let jetBrainsNetworkProbeTimeout: TimeInterval = 2
+
     private var isPreparingWorkspace: Bool {
         !container.requiresSetup && !container.appState.hasCompletedInitialSync
     }
@@ -278,9 +282,32 @@ struct SetupWindow: View {
                 displayURL.deleteLastPathComponent()
             }
             baseURLString = displayURL.absoluteString
+        } else {
+            Task { @MainActor in
+                if await isJetBrainsInternalNetworkReachable(),
+                   baseURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    baseURLString = internalYouTrackBaseURL
+                }
+            }
         }
         if let storedToken = draft.token {
             token = storedToken
+        }
+    }
+
+    private func isJetBrainsInternalNetworkReachable() async -> Bool {
+        guard let probeURL = jetBrainsNetworkProbeURL else { return false }
+        var request = URLRequest(url: probeURL)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = jetBrainsNetworkProbeTimeout
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { return false }
+            return (100...599).contains(httpResponse.statusCode)
+        } catch {
+            return false
         }
     }
 
