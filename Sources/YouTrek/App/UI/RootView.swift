@@ -349,8 +349,8 @@ final class SidebarOutlineContainerView: NSView {
         scrollView.drawsBackground = false
 
         backgroundView.translatesAutoresizingMaskIntoConstraints = false
-        backgroundView.material = .sidebar
-        backgroundView.blendingMode = .behindWindow
+        backgroundView.material = .contentBackground
+        backgroundView.blendingMode = .withinWindow
         backgroundView.state = .active
 
         addSubview(backgroundView)
@@ -1264,7 +1264,7 @@ struct BoardContentView: View {
 struct MultiIssueSelectionView: View {
     @EnvironmentObject private var container: AppContainer
     let issues: [IssueSummary]
-    @State private var statusOptions: [IssueFieldOption] = []
+    @State private var statusOptionsByProject: [String: [IssueFieldOption]] = [:]
     @State private var priorityOptions: [IssueFieldOption] = []
 
     var body: some View {
@@ -1282,10 +1282,16 @@ struct MultiIssueSelectionView: View {
             .textSelection(.enabled)
         }
         .background(.ultraThinMaterial)
-        .task(id: issues.map(\.id)) {
-            statusOptions = []
+        .task(id: issues.map { "\($0.id.uuidString):\($0.projectName)" }.sorted().joined()) {
+            statusOptionsByProject = [:]
             priorityOptions = []
-            statusOptions = await container.loadStatusOptions(for: issues)
+            let groupedIssues = Dictionary(grouping: issues, by: projectStatusKey(for:))
+            var loaded: [String: [IssueFieldOption]] = [:]
+            for (_, grouped) in groupedIssues where !grouped.isEmpty {
+                guard let issue = grouped.first else { continue }
+                loaded[projectStatusKey(for: issue)] = await container.loadStatusOptions(for: issue)
+            }
+            statusOptionsByProject = loaded
             priorityOptions = await container.loadPriorityOptions(for: issues)
         }
     }
@@ -1373,12 +1379,15 @@ struct MultiIssueSelectionView: View {
     }
 
     private var statusMenuOptions: [IssueFieldOption] {
-        if statusOptions.isEmpty {
+        if let options = singleProjectStatusOptions, !options.isEmpty {
+            return options
+        }
+        if statusOptionsByProject.values.allSatisfy({ $0.isEmpty }) {
             return IssueStatus.fallbackCases.map { status in
                 IssueFieldOption(id: "", name: status.displayName, displayName: status.displayName)
             }
         }
-        return statusOptions
+        return statusOptionsByProject.values.flatMap { $0 }
     }
 
     private var priorityMenuOptions: [IssueFieldOption] {
@@ -1388,6 +1397,18 @@ struct MultiIssueSelectionView: View {
             }
         }
         return priorityOptions
+    }
+
+    private var singleProjectStatusOptions: [IssueFieldOption]? {
+        let projectKeys = Set(issues.map(projectStatusKey(for:)))
+        guard projectKeys.count == 1, let key = projectKeys.first else {
+            return nil
+        }
+        return statusOptionsByProject[key]
+    }
+
+    private func projectStatusKey(for issue: IssueSummary) -> String {
+        issue.projectName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private func statusMenuRow(title: String, colors: IssueBadgeColors) -> some View {

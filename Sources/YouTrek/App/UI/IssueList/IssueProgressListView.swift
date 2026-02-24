@@ -7,7 +7,7 @@ struct IssueProgressListView: View {
     @Binding var selectedIDs: Set<IssueSummary.ID>
     let isIssueUnread: (IssueSummary) -> Bool
 
-    @State private var statusOptions: [IssueFieldOption] = []
+    @State private var statusOptionsByProject: [String: [IssueFieldOption]] = [:]
 
     var body: some View {
         ScrollView {
@@ -15,7 +15,7 @@ struct IssueProgressListView: View {
                 ForEach(issues) { issue in
                     IssueProgressRow(
                         issue: issue,
-                        statusOptions: statusOptions,
+                        statusOptions: statusOptions(for: issue),
                         isSelected: selection?.id == issue.id,
                         isUnread: isIssueUnread(issue)
                     )
@@ -33,11 +33,26 @@ struct IssueProgressListView: View {
             .padding(.vertical, 4)
         }
         .task(id: issues.map(\.projectName).sorted().joined()) {
-            statusOptions = await container.loadStatusOptions(for: issues)
+            statusOptionsByProject = [:]
+            let groupedIssues = Dictionary(grouping: issues, by: projectStatusKey(for:))
+            var loaded: [String: [IssueFieldOption]] = [:]
+            for (_, grouped) in groupedIssues where !grouped.isEmpty {
+                guard let issue = grouped.first else { continue }
+                loaded[projectStatusKey(for: issue)] = await container.loadStatusOptions(for: issue)
+            }
+            statusOptionsByProject = loaded
         }
         .task(id: issues.map(\.id)) {
             await loadMissingDetails()
         }
+    }
+
+    private func projectStatusKey(for issue: IssueSummary) -> String {
+        issue.projectName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func statusOptions(for issue: IssueSummary) -> [IssueFieldOption] {
+        statusOptionsByProject[projectStatusKey(for: issue)] ?? []
     }
 
     private func loadMissingDetails() async {

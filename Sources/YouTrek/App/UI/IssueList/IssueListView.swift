@@ -748,8 +748,6 @@ private final class IssueAvatarView: NSView {
         layer?.cornerRadius = size / 2
         layer?.masksToBounds = true
         layer?.backgroundColor = NSColor.secondaryLabelColor.withAlphaComponent(0.12).cgColor
-        layer?.borderWidth = 1
-        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.4).cgColor
 
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.imageScaling = .scaleProportionallyUpOrDown
