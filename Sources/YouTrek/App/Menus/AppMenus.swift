@@ -47,7 +47,7 @@ struct AppMenus: Commands {
 
         CommandGroup(after: .appVisibility) {
             Button("Toggle Sidebar") {
-                container.appState.toggleSidebarVisibility(source: "menu")
+                toggleSidebar()
             }
             .keyboardShortcut("s", modifiers: [.command, .option])
         }
@@ -109,6 +109,13 @@ struct AppMenus: Commands {
 
     private func openNewIssue() {
         container.presentNewIssueDialog()
+    }
+
+    private func toggleSidebar() {
+        if NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil) {
+            return
+        }
+        container.appState.toggleSidebarVisibility(source: "menu-fallback")
     }
 
     private func openNewIssueFromSelection() {

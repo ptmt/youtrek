@@ -481,7 +481,10 @@ final class YouTrekApp: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleSidebar() {
-        container.appState.toggleSidebarVisibility(source: "menu")
+        if NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil) {
+            return
+        }
+        container.appState.toggleSidebarVisibility(source: "menu-fallback")
     }
 
     @objc private func toggleAssigneeColumn(_ sender: NSMenuItem) {
@@ -723,13 +726,14 @@ private final class WindowAccessorView: NSView {
             }
         } else if needsReconfigure {
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-            window.titlebarAppearsTransparent = false
-            window.titleVisibility = .visible
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
             window.standardWindowButton(.closeButton)?.isHidden = false
             window.standardWindowButton(.miniaturizeButton)?.isHidden = false
             window.standardWindowButton(.zoomButton)?.isHidden = false
             if #available(macOS 11.0, *) {
-                window.titlebarSeparatorStyle = .automatic
+                window.toolbarStyle = .unified
+                window.titlebarSeparatorStyle = .none
             }
             window.isMovableByWindowBackground = false
             window.isOpaque = true

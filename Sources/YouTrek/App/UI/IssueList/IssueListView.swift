@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-struct IssueListView: View {
+@MainActor
+struct IssueListView: NSViewRepresentable {
     let issues: [IssueSummary]
     @Binding var selection: IssueSummary?
     @Binding var selectedIDs: Set<IssueSummary.ID>
@@ -17,282 +18,94 @@ struct IssueListView: View {
     let isIssueUnread: (IssueSummary) -> Bool
     let onIssuesRendered: ((Int) -> Void)?
     let onDeleteDraft: ((UUID) -> Void)?
-    @State private var showsLoadingView = false
-    @State private var loadingVisibilityTask: Task<Void, Never>?
 
-    private let loadingIndicatorDelayNanoseconds: UInt64 = 250_000_000
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            content
-        }
-        .overlay(alignment: .topTrailing) {
-            if showDiagnostics {
-                diagnosticsOverlay
-            }
-        }
-        .onAppear {
-            syncSelectionState()
-            updateLoadingVisibility()
-        }
-        .onChange(of: selection?.id) { _, _ in
-            syncSelectionState()
-        }
-        .onChange(of: selectedIDs) { _, newIDs in
-            updateSelection(from: newIDs)
-        }
-        .onChange(of: isLoading) { _, _ in
-            updateLoadingVisibility()
-        }
-        .onChange(of: issues.isEmpty) { _, _ in
-            updateLoadingVisibility()
-        }
-        .onDisappear {
-            loadingVisibilityTask?.cancel()
-            loadingVisibilityTask = nil
-        }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if showsLoadingView && issues.isEmpty {
-            loadingView
-        } else if issues.isEmpty && hasCompletedSync {
-            emptyView
-        } else if issues.isEmpty {
-            Color.clear
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            issueTable
-        }
-    }
-
-    private var loadingView: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text("Loading issues…")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var emptyView: some View {
-        EmptyStateView(
-            title: "No issues",
-            systemImage: "tray",
-            description: "Refine your filters or sync to pull the latest issues."
-        )
-    }
-
-    private var issueTable: some View {
-        AppKitIssueTableView(
-            issues: issues,
-            selection: $selection,
-            selectedIDs: $selectedIDs,
-            showAssigneeColumn: showAssigneeColumn,
-            isIssueUnread: isIssueUnread,
-            onIssuesRendered: onIssuesRendered,
-            onDeleteDraft: onDeleteDraft
-        )
-    }
-
-    private func syncSelectionState() {
-        Task { @MainActor in
-            if let selectedIssue = selection {
-                let nextIDs: Set<IssueSummary.ID> = [selectedIssue.id]
-                guard selectedIDs != nextIDs else { return }
-                selectedIDs = nextIDs
-            } else if selectedIDs.count <= 1, !selectedIDs.isEmpty {
-                selectedIDs.removeAll()
-            }
-        }
-    }
-
-    private func updateSelection(from newIDs: Set<IssueSummary.ID>) {
-        let nextSelection: IssueSummary?
-        if newIDs.count == 1, let firstID = newIDs.first, let issue = issues.first(where: { $0.id == firstID }) {
-            nextSelection = issue
-        } else {
-            nextSelection = nil
-        }
-        guard nextSelection?.id != selection?.id else { return }
-        Task { @MainActor in
-            selection = nextSelection
-        }
-    }
-
-    private func updateLoadingVisibility() {
-        loadingVisibilityTask?.cancel()
-        guard isLoading, issues.isEmpty else {
-            showsLoadingView = false
-            loadingVisibilityTask = nil
-            return
-        }
-        loadingVisibilityTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: loadingIndicatorDelayNanoseconds)
-            guard !Task.isCancelled else { return }
-            showsLoadingView = true
-        }
-    }
-
-    private var diagnosticsOverlay: some View {
-        let events = diagnosticEvents
-        let displayEvents = Array(events.reversed())
-        let title = diagnosticsTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let titleLabel = (title?.isEmpty == false) ? title ?? "—" : "—"
-        let id = diagnosticsID?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let idLabel = (id?.isEmpty == false) ? id ?? "—" : "—"
-        let query = diagnosticsQuery?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let queryLabel = (query?.isEmpty == false) ? query ?? "—" : "—"
-        let search = diagnosticsSearch?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let searchLabel = (search?.isEmpty == false) ? search ?? "—" : "—"
-
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text("Issue list diagnostics")
-                    .font(.caption.weight(.semibold))
-                Spacer()
-                Button {
-                    copyDiagnostics()
-                } label: {
-                    Label("Copy diagnostics", systemImage: "doc.on.doc")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.borderless)
-                .font(.caption2)
-                .help("Copy issue list diagnostics")
-            }
-            Text("Selection: \(titleLabel)")
-            if idLabel != "—" {
-                Text("Selection ID: \(idLabel)")
-            }
-            Text("Issues: \(issues.count)  Loading: \(isLoading ? "Yes" : "No")")
-            Text("Query: \(queryLabel)")
-            Text("Search filter: \(searchLabel)")
-            if events.isEmpty {
-                Text("Data source events: none")
-            } else {
-                Divider()
-                Text("Data source events (\(events.count))")
-                    .font(.caption2.weight(.semibold))
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(displayEvents) { event in
-                            Text("\(formattedDiagnosticsTimestamp(event.timestamp))  \(event.message)")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 160)
-            }
-        }
-        .font(.caption2)
-        .padding(8)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .padding(.trailing, 12)
-        .padding(.top, 8)
-        .textSelection(.enabled)
-    }
-
-    private static let diagnosticsDisplayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter
-    }()
-
-    private static let diagnosticsCopyFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-        return formatter
-    }()
-
-    private func formattedDiagnosticsTimestamp(_ date: Date) -> String {
-        Self.diagnosticsDisplayFormatter.string(from: date)
-    }
-
-    private func diagnosticsCopyText() -> String {
-        let title = diagnosticsTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let titleLabel = (title?.isEmpty == false) ? title ?? "—" : "—"
-        let id = diagnosticsID?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let idLabel = (id?.isEmpty == false) ? id ?? "—" : "—"
-        let query = diagnosticsQuery?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let queryLabel = (query?.isEmpty == false) ? query ?? "—" : "—"
-        let search = diagnosticsSearch?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let searchLabel = (search?.isEmpty == false) ? search ?? "—" : "—"
-
-        var lines: [String] = []
-        lines.append("Selection: \(titleLabel)")
-        if idLabel != "—" {
-            lines.append("Selection ID: \(idLabel)")
-        }
-        lines.append("Issues: \(issues.count)  Loading: \(isLoading ? "Yes" : "No")")
-        lines.append("Query: \(queryLabel)")
-        lines.append("Search filter: \(searchLabel)")
-        if diagnosticEvents.isEmpty {
-            lines.append("Data source events: none")
-        } else {
-            lines.append("Data source events:")
-            for event in diagnosticEvents {
-                let stamp = Self.diagnosticsCopyFormatter.string(from: event.timestamp)
-                lines.append("\(stamp)  \(event.message)")
-            }
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    private func copyDiagnostics() {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(diagnosticsCopyText(), forType: .string)
-    }
-}
-
-@MainActor
-private struct AppKitIssueTableView: NSViewRepresentable {
-    let issues: [IssueSummary]
-    @Binding var selection: IssueSummary?
-    @Binding var selectedIDs: Set<IssueSummary.ID>
-    let showAssigneeColumn: Bool
-    let isIssueUnread: (IssueSummary) -> Bool
-    let onIssuesRendered: ((Int) -> Void)?
-    let onDeleteDraft: ((UUID) -> Void)?
+    private static let loadingIndicatorDelayNanoseconds: UInt64 = 250_000_000
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
 
-    func makeNSView(context: Context) -> IssueListTableContainerView {
-        let view = IssueListTableContainerView()
-        context.coordinator.configure(tableView: view.tableView)
-        context.coordinator.apply(parent: self, tableView: view.tableView)
+    func makeNSView(context: Context) -> IssueListContainerView {
+        let view = IssueListContainerView()
+        context.coordinator.configure(containerView: view)
+        context.coordinator.apply(parent: self, containerView: view)
         return view
     }
 
-    func updateNSView(_ nsView: IssueListTableContainerView, context: Context) {
-        context.coordinator.apply(parent: self, tableView: nsView.tableView)
+    func updateNSView(_ nsView: IssueListContainerView, context: Context) {
+        context.coordinator.apply(parent: self, containerView: nsView)
     }
 
     @MainActor
-    final class Coordinator: NSObject, @preconcurrency NSTableViewDataSource, @preconcurrency NSTableViewDelegate, @preconcurrency NSMenuDelegate {
-        private var parent: AppKitIssueTableView
+    final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
+        private var parent: IssueListView
         private weak var tableView: NSTableView?
+        private weak var containerView: IssueListContainerView?
         private var isApplyingSelection = false
         private let contextMenu = NSMenu(title: "Issue List")
         private let titleColumnID = NSUserInterfaceItemIdentifier("issue-title-column")
         private let assigneeColumnID = NSUserInterfaceItemIdentifier("issue-assignee-column")
 
-        init(parent: AppKitIssueTableView) {
+        private var loadingVisibilityTask: Task<Void, Never>?
+        private var showsLoadingView = false
+        private var loadingInput: LoadingInput?
+        private var hasAppliedSelectionState = false
+        private var lastSelectionID: IssueSummary.ID?
+        private var lastSelectedIDs: Set<IssueSummary.ID>?
+
+        private struct LoadingInput: Equatable {
+            let isLoading: Bool
+            let isEmpty: Bool
+        }
+
+        init(parent: IssueListView) {
             self.parent = parent
             super.init()
         }
 
-        func configure(tableView: NSTableView) {
-            self.tableView = tableView
+        deinit {
+            loadingVisibilityTask?.cancel()
+        }
+
+        func configure(containerView: IssueListContainerView) {
+            self.containerView = containerView
+            self.tableView = containerView.tableView
+            configure(tableView: containerView.tableView)
+            containerView.diagnosticsView.onCopy = { [weak self] in
+                self?.copyDiagnostics()
+            }
+        }
+
+        func apply(parent: IssueListView, containerView: IssueListContainerView) {
+            self.parent = parent
+            self.containerView = containerView
+            self.tableView = containerView.tableView
+
+            let isInitialApply = !hasAppliedSelectionState
+            let selectionChanged = lastSelectionID != parent.selection?.id
+            if isInitialApply || selectionChanged {
+                syncSelectionState()
+            }
+            let selectedIDsChanged = lastSelectedIDs != parent.selectedIDs
+            if isInitialApply || selectedIDsChanged {
+                updateSelection(from: parent.selectedIDs)
+            }
+            hasAppliedSelectionState = true
+            lastSelectionID = parent.selection?.id
+            lastSelectedIDs = parent.selectedIDs
+
+            rebuildColumns(on: containerView.tableView)
+            containerView.tableView.reloadData()
+            syncSelection(with: containerView.tableView)
+
+            updateLoadingVisibilityIfNeeded()
+            updateContentVisibility()
+            updateDiagnostics()
+
+            parent.onIssuesRendered?(parent.issues.count)
+        }
+
+        private func configure(tableView: NSTableView) {
             tableView.delegate = self
             tableView.dataSource = self
             tableView.menu = contextMenu
@@ -310,12 +123,157 @@ private struct AppKitIssueTableView: NSViewRepresentable {
             rebuildColumns(on: tableView)
         }
 
-        func apply(parent: AppKitIssueTableView, tableView: NSTableView) {
-            self.parent = parent
-            rebuildColumns(on: tableView)
-            tableView.reloadData()
-            syncSelection(with: tableView)
-            parent.onIssuesRendered?(parent.issues.count)
+        private func syncSelectionState() {
+            if let selectedIssue = parent.selection {
+                let nextIDs: Set<IssueSummary.ID> = [selectedIssue.id]
+                if parent.selectedIDs != nextIDs {
+                    parent.selectedIDs = nextIDs
+                }
+            } else if parent.selectedIDs.count <= 1, !parent.selectedIDs.isEmpty {
+                parent.selectedIDs.removeAll()
+            }
+        }
+
+        private func updateSelection(from newIDs: Set<IssueSummary.ID>) {
+            let nextSelection: IssueSummary?
+            if newIDs.count == 1,
+               let firstID = newIDs.first,
+               let issue = parent.issues.first(where: { $0.id == firstID }) {
+                nextSelection = issue
+            } else {
+                nextSelection = nil
+            }
+
+            if parent.selection?.id != nextSelection?.id {
+                parent.selection = nextSelection
+            }
+        }
+
+        private func updateLoadingVisibilityIfNeeded() {
+            let nextInput = LoadingInput(isLoading: parent.isLoading, isEmpty: parent.issues.isEmpty)
+            guard loadingInput != nextInput else { return }
+            loadingInput = nextInput
+
+            loadingVisibilityTask?.cancel()
+            loadingVisibilityTask = nil
+
+            guard nextInput.isLoading, nextInput.isEmpty else {
+                showsLoadingView = false
+                return
+            }
+
+            showsLoadingView = false
+            loadingVisibilityTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: IssueListView.loadingIndicatorDelayNanoseconds)
+                guard let self, !Task.isCancelled else { return }
+                self.showsLoadingView = true
+                self.loadingVisibilityTask = nil
+                self.updateContentVisibility()
+            }
+        }
+
+        private func updateContentVisibility() {
+            guard let containerView else { return }
+            let state: IssueListContainerView.ContentState
+            if !parent.issues.isEmpty {
+                state = .table
+            } else if showsLoadingView && parent.issues.isEmpty {
+                state = .loading
+            } else if parent.issues.isEmpty && parent.hasCompletedSync {
+                state = .empty
+            } else {
+                state = .placeholder
+            }
+            containerView.setContentState(state)
+        }
+
+        private func updateDiagnostics() {
+            guard let containerView else { return }
+            containerView.diagnosticsView.isHidden = !parent.showDiagnostics
+            guard parent.showDiagnostics else { return }
+            containerView.diagnosticsView.update(text: diagnosticsDisplayText())
+        }
+
+        private static let diagnosticsDisplayFormatter: DateFormatter = {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "HH:mm:ss"
+            return formatter
+        }()
+
+        private static let diagnosticsCopyFormatter: DateFormatter = {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+            return formatter
+        }()
+
+        private func diagnosticsDisplayText() -> String {
+            let title = parent.diagnosticsTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let titleLabel = (title?.isEmpty == false) ? title ?? "-" : "-"
+            let id = parent.diagnosticsID?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let idLabel = (id?.isEmpty == false) ? id ?? "-" : "-"
+            let query = parent.diagnosticsQuery?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let queryLabel = (query?.isEmpty == false) ? query ?? "-" : "-"
+            let search = parent.diagnosticsSearch?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let searchLabel = (search?.isEmpty == false) ? search ?? "-" : "-"
+
+            var lines: [String] = []
+            lines.append("Selection: \(titleLabel)")
+            if idLabel != "-" {
+                lines.append("Selection ID: \(idLabel)")
+            }
+            lines.append("Issues: \(parent.issues.count)  Loading: \(parent.isLoading ? "Yes" : "No")")
+            lines.append("Query: \(queryLabel)")
+            lines.append("Search filter: \(searchLabel)")
+
+            if parent.diagnosticEvents.isEmpty {
+                lines.append("Data source events: none")
+            } else {
+                lines.append("Data source events (\(parent.diagnosticEvents.count)):")
+                for event in parent.diagnosticEvents.reversed() {
+                    let stamp = Self.diagnosticsDisplayFormatter.string(from: event.timestamp)
+                    lines.append("\(stamp)  \(event.message)")
+                }
+            }
+
+            return lines.joined(separator: "\n")
+        }
+
+        private func diagnosticsCopyText() -> String {
+            let title = parent.diagnosticsTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let titleLabel = (title?.isEmpty == false) ? title ?? "-" : "-"
+            let id = parent.diagnosticsID?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let idLabel = (id?.isEmpty == false) ? id ?? "-" : "-"
+            let query = parent.diagnosticsQuery?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let queryLabel = (query?.isEmpty == false) ? query ?? "-" : "-"
+            let search = parent.diagnosticsSearch?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let searchLabel = (search?.isEmpty == false) ? search ?? "-" : "-"
+
+            var lines: [String] = []
+            lines.append("Selection: \(titleLabel)")
+            if idLabel != "-" {
+                lines.append("Selection ID: \(idLabel)")
+            }
+            lines.append("Issues: \(parent.issues.count)  Loading: \(parent.isLoading ? "Yes" : "No")")
+            lines.append("Query: \(queryLabel)")
+            lines.append("Search filter: \(searchLabel)")
+            if parent.diagnosticEvents.isEmpty {
+                lines.append("Data source events: none")
+            } else {
+                lines.append("Data source events:")
+                for event in parent.diagnosticEvents {
+                    let stamp = Self.diagnosticsCopyFormatter.string(from: event.timestamp)
+                    lines.append("\(stamp)  \(event.message)")
+                }
+            }
+            return lines.joined(separator: "\n")
+        }
+
+        private func copyDiagnostics() {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(diagnosticsCopyText(), forType: .string)
         }
 
         private func rebuildColumns(on tableView: NSTableView) {
@@ -455,25 +413,118 @@ private struct AppKitIssueTableView: NSViewRepresentable {
 }
 
 @MainActor
-private final class IssueListTableContainerView: NSView {
+final class IssueListContainerView: NSView {
+    enum ContentState {
+        case table
+        case loading
+        case empty
+        case placeholder
+    }
+
     let tableView = NSTableView(frame: .zero)
+    let diagnosticsView = IssueListDiagnosticsView(frame: .zero)
+
     private let scrollView = NSScrollView(frame: .zero)
+    private let loadingView = IssueListLoadingStateView(frame: .zero)
+    private let emptyView = IssueListEmptyStateView(frame: .zero)
+    private let placeholderView = NSView(frame: .zero)
+    private var currentState: ContentState?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
+
+        placeholderView.translatesAutoresizingMaskIntoConstraints = false
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
 
+        loadingView.translatesAutoresizingMaskIntoConstraints = false
+        emptyView.translatesAutoresizingMaskIntoConstraints = false
+        diagnosticsView.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(placeholderView)
         addSubview(scrollView)
+        addSubview(loadingView)
+        addSubview(emptyView)
+        addSubview(diagnosticsView)
+
         NSLayoutConstraint.activate([
+            placeholderView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            placeholderView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            placeholderView.topAnchor.constraint(equalTo: topAnchor),
+            placeholderView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            loadingView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            loadingView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            loadingView.topAnchor.constraint(equalTo: topAnchor),
+            loadingView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            emptyView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            emptyView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            emptyView.topAnchor.constraint(equalTo: topAnchor),
+            emptyView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            diagnosticsView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            diagnosticsView.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            diagnosticsView.widthAnchor.constraint(lessThanOrEqualToConstant: 420),
+            diagnosticsView.heightAnchor.constraint(lessThanOrEqualToConstant: 280)
+        ])
+
+        diagnosticsView.isHidden = true
+        setContentState(.placeholder)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func setContentState(_ state: ContentState) {
+        guard state != currentState else { return }
+        currentState = state
+        scrollView.isHidden = state != .table
+        loadingView.isHidden = state != .loading
+        emptyView.isHidden = state != .empty
+        placeholderView.isHidden = state != .placeholder
+    }
+}
+
+@MainActor
+private final class IssueListLoadingStateView: NSView {
+    private let stack = NSStackView(frame: .zero)
+    private let progress = NSProgressIndicator(frame: .zero)
+    private let label = NSTextField(labelWithString: "Loading issues...")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        progress.style = .spinning
+        progress.controlSize = .regular
+        progress.startAnimation(nil)
+
+        label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        label.textColor = .secondaryLabelColor
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 12
+        stack.addArrangedSubview(progress)
+        stack.addArrangedSubview(label)
+
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
     }
 
@@ -483,10 +534,143 @@ private final class IssueListTableContainerView: NSView {
     }
 }
 
+@MainActor
+private final class IssueListEmptyStateView: NSView {
+    private let stack = NSStackView(frame: .zero)
+    private let iconView = NSImageView(frame: .zero)
+    private let titleLabel = NSTextField(labelWithString: "No issues")
+    private let descriptionLabel = NSTextField(wrappingLabelWithString: "Refine your filters or sync to pull the latest issues.")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        if let image = NSImage(systemSymbolName: "tray", accessibilityDescription: nil) {
+            iconView.image = image
+            iconView.contentTintColor = .secondaryLabelColor
+        }
+
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.setContentHuggingPriority(.required, for: .vertical)
+        iconView.setContentCompressionResistancePriority(.required, for: .vertical)
+
+        titleLabel.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+
+        descriptionLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        descriptionLabel.textColor = .secondaryLabelColor
+        descriptionLabel.alignment = .center
+        descriptionLabel.maximumNumberOfLines = 2
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 12
+        stack.addArrangedSubview(iconView)
+        stack.addArrangedSubview(titleLabel)
+        stack.addArrangedSubview(descriptionLabel)
+
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 32),
+            iconView.heightAnchor.constraint(equalToConstant: 32),
+            descriptionLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 320),
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+}
+
+@MainActor
+final class IssueListDiagnosticsView: NSVisualEffectView {
+    var onCopy: (() -> Void)?
+
+    private let titleLabel = NSTextField(labelWithString: "Issue list diagnostics")
+    private let copyButton = NSButton(frame: .zero)
+    private let textView = NSTextView(frame: .zero)
+    private let scrollView = NSScrollView(frame: .zero)
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        material = .hudWindow
+        state = .active
+        blendingMode = .withinWindow
+
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.masksToBounds = true
+
+        titleLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        copyButton.translatesAutoresizingMaskIntoConstraints = false
+        copyButton.bezelStyle = .inline
+        copyButton.target = self
+        copyButton.action = #selector(handleCopy)
+        copyButton.toolTip = "Copy issue list diagnostics"
+        if let image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy diagnostics") {
+            copyButton.image = image
+            copyButton.imagePosition = .imageOnly
+        } else {
+            copyButton.title = "Copy"
+        }
+
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        textView.textContainerInset = NSSize(width: 2, height: 2)
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .noBorder
+        scrollView.documentView = textView
+
+        addSubview(titleLabel)
+        addSubview(copyButton)
+        addSubview(scrollView)
+
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+
+            copyButton.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 8),
+            copyButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            copyButton.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            scrollView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+            scrollView.heightAnchor.constraint(lessThanOrEqualToConstant: 220)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func update(text: String) {
+        textView.string = text
+    }
+
+    @objc private func handleCopy() {
+        onCopy?()
+    }
+}
+
 private final class IssueTitleCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("issue-title-cell")
     private static let avatarSize: CGFloat = 24
-    private let avatarHostingView = NSHostingView(rootView: UserAvatarView(person: nil, size: IssueTitleCell.avatarSize))
+    private let avatarView = IssueAvatarView(size: IssueTitleCell.avatarSize)
     private let titleLabel = NSTextField(labelWithString: "")
     private let metadataLabel = NSTextField(labelWithString: "")
 
@@ -494,7 +678,7 @@ private final class IssueTitleCell: NSTableCellView {
         super.init(frame: frameRect)
         identifier = Self.identifier
 
-        avatarHostingView.translatesAutoresizingMaskIntoConstraints = false
+        avatarView.translatesAutoresizingMaskIntoConstraints = false
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = .systemFont(ofSize: 13, weight: .regular)
@@ -507,16 +691,16 @@ private final class IssueTitleCell: NSTableCellView {
         metadataLabel.lineBreakMode = .byTruncatingTail
         metadataLabel.maximumNumberOfLines = 1
 
-        addSubview(avatarHostingView)
+        addSubview(avatarView)
         addSubview(titleLabel)
         addSubview(metadataLabel)
 
-        let textLeading = avatarHostingView.trailingAnchor
+        let textLeading = avatarView.trailingAnchor
         NSLayoutConstraint.activate([
-            avatarHostingView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            avatarHostingView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            avatarHostingView.widthAnchor.constraint(equalToConstant: Self.avatarSize),
-            avatarHostingView.heightAnchor.constraint(equalToConstant: Self.avatarSize),
+            avatarView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            avatarView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            avatarView.widthAnchor.constraint(equalToConstant: Self.avatarSize),
+            avatarView.heightAnchor.constraint(equalToConstant: Self.avatarSize),
 
             titleLabel.leadingAnchor.constraint(equalTo: textLeading, constant: 8),
             titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
@@ -541,7 +725,143 @@ private final class IssueTitleCell: NSTableCellView {
         metadataLabel.stringValue = metadata
         metadataLabel.textColor = isClosed ? .tertiaryLabelColor : .secondaryLabelColor
 
-        avatarHostingView.rootView = UserAvatarView(person: assignee, size: Self.avatarSize)
+        avatarView.configure(person: assignee)
+    }
+}
+
+@MainActor
+private final class IssueAvatarView: NSView {
+    private static let imageCache = NSCache<NSURL, NSImage>()
+
+    private let size: CGFloat
+    private let imageView = NSImageView(frame: .zero)
+    private let initialsLabel = NSTextField(labelWithString: "")
+    private let symbolImageView = NSImageView(frame: .zero)
+    private var loadTask: Task<Void, Never>?
+    private var currentURL: URL?
+
+    init(size: CGFloat) {
+        self.size = size
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.cornerRadius = size / 2
+        layer?.masksToBounds = true
+        layer?.backgroundColor = NSColor.secondaryLabelColor.withAlphaComponent(0.12).cgColor
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.4).cgColor
+
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.isHidden = true
+
+        initialsLabel.translatesAutoresizingMaskIntoConstraints = false
+        initialsLabel.font = .systemFont(ofSize: size * 0.42, weight: .semibold)
+        initialsLabel.textColor = .secondaryLabelColor
+        initialsLabel.alignment = .center
+        initialsLabel.isHidden = true
+
+        symbolImageView.translatesAutoresizingMaskIntoConstraints = false
+        symbolImageView.contentTintColor = .secondaryLabelColor
+        symbolImageView.imageScaling = .scaleProportionallyUpOrDown
+        symbolImageView.image = NSImage(systemSymbolName: "person.fill", accessibilityDescription: nil)
+        symbolImageView.isHidden = false
+
+        addSubview(imageView)
+        addSubview(initialsLabel)
+        addSubview(symbolImageView)
+        NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            initialsLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            initialsLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            symbolImageView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            symbolImageView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            symbolImageView.widthAnchor.constraint(equalToConstant: size * 0.5),
+            symbolImageView.heightAnchor.constraint(equalToConstant: size * 0.5)
+        ])
+    }
+
+    deinit {
+        loadTask?.cancel()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func configure(person: Person?) {
+        loadTask?.cancel()
+        loadTask = nil
+
+        currentURL = person?.avatarURL
+        setAccessibilityLabel(person.map { "Assignee: \($0.displayName)" } ?? "Unassigned")
+
+        showPlaceholder(initials: initials(for: person))
+
+        guard let url = person?.avatarURL else { return }
+        if let cached = Self.imageCache.object(forKey: url as NSURL) {
+            showImage(cached)
+            return
+        }
+
+        loadTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                guard !Task.isCancelled, let image = NSImage(data: data) else { return }
+                await MainActor.run {
+                    guard self.currentURL == url else { return }
+                    Self.imageCache.setObject(image, forKey: url as NSURL)
+                    self.showImage(image)
+                    self.loadTask = nil
+                }
+            } catch {
+                await MainActor.run {
+                    guard self.currentURL == url else { return }
+                    self.loadTask = nil
+                }
+            }
+        }
+    }
+
+    private func showPlaceholder(initials: String?) {
+        imageView.image = nil
+        imageView.isHidden = true
+        if let initials, !initials.isEmpty {
+            initialsLabel.stringValue = initials
+            initialsLabel.isHidden = false
+            symbolImageView.isHidden = true
+        } else {
+            initialsLabel.stringValue = ""
+            initialsLabel.isHidden = true
+            symbolImageView.isHidden = false
+        }
+    }
+
+    private func showImage(_ image: NSImage) {
+        imageView.image = image
+        imageView.isHidden = false
+        initialsLabel.isHidden = true
+        symbolImageView.isHidden = true
+    }
+
+    private func initials(for person: Person?) -> String? {
+        guard let person else { return nil }
+        let parts = person.displayName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split { $0 == " " || $0 == "\n" || $0 == "\t" }
+        guard let first = parts.first?.first else { return nil }
+        var letters: [Character] = [first]
+        if parts.count > 1, let second = parts[1].first {
+            letters.append(second)
+        }
+        return String(letters).uppercased()
     }
 }
 
@@ -603,28 +923,5 @@ enum IssueTimestampFormatter {
             return "Yesterday"
         }
         return dateFormatter.string(from: date)
-    }
-}
-
-private struct EmptyStateView: View {
-    let title: String
-    let systemImage: String
-    let description: String
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 32, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.headline)
-            Text(description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 320)
-        }
-        .padding(.horizontal, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

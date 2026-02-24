@@ -323,6 +323,7 @@ struct AppKitSidebarPane: NSViewRepresentable {
 final class SidebarOutlineContainerView: NSView {
     let outlineView = NSOutlineView(frame: .zero)
     private let scrollView = NSScrollView(frame: .zero)
+    private let backgroundView = NSVisualEffectView(frame: .zero)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -347,8 +348,18 @@ final class SidebarOutlineContainerView: NSView {
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
 
+        backgroundView.translatesAutoresizingMaskIntoConstraints = false
+        backgroundView.material = .sidebar
+        backgroundView.blendingMode = .behindWindow
+        backgroundView.state = .active
+
+        addSubview(backgroundView)
         addSubview(scrollView)
         NSLayoutConstraint.activate([
+            backgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            backgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            backgroundView.topAnchor.constraint(equalTo: topAnchor),
+            backgroundView.bottomAnchor.constraint(equalTo: bottomAnchor),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: topAnchor),
@@ -555,12 +566,14 @@ final class RootSplitViewController: NSSplitViewController {
         item.canCollapse = true
         item.minimumThickness = 220
         item.maximumThickness = 340
+        item.allowsFullHeightLayout = true
         return item
     }()
 
     private lazy var mainItem: NSSplitViewItem = {
         let item = NSSplitViewItem(viewController: mainController)
         item.minimumThickness = 420
+        item.allowsFullHeightLayout = false
         return item
     }()
 
@@ -569,6 +582,7 @@ final class RootSplitViewController: NSSplitViewController {
         item.canCollapse = true
         item.minimumThickness = 320
         item.maximumThickness = 500
+        item.allowsFullHeightLayout = false
         return item
     }()
 
@@ -1096,6 +1110,15 @@ struct MainToolbar: CustomizableToolbarContent {
     let onToggleInspector: () -> Void
 
     var body: some CustomizableToolbarContent {
+        ToolbarItem(id: "toggle-sidebar") {
+            Button(action: onToggleSidebar) {
+                Label("Toggle Sidebar", systemImage: "sidebar.left")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.accessoryBar)
+            .help("Show or hide the sidebar")
+        }
+
         ToolbarItem(id: "account-switcher") {
             accountSwitcher
         }

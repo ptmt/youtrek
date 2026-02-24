@@ -51,8 +51,8 @@ extension RootContentView {
                 }
             }
         )
+        .ignoresSafeArea(.all)
         .frame(minWidth: 220, maxHeight: .infinity)
-        .padding(.bottom, 28)
         .overlay(alignment: .bottomLeading) {
             if appState.isSyncing {
                 SyncStatusIndicator(label: appState.syncStatusMessage)

@@ -3,9 +3,7 @@ import SwiftUI
 extension RootContentView {
     var body: some View {
         rootSplitView
-            .background(ToolbarSidebarToggleHider())
-            .background(SplitViewFullHeightLayoutEnabler())
-            .toolbar(removing: .sidebarToggle)
+            .ignoresSafeArea(.container, edges: .top)
             .animation(.easeOut(duration: 0.15), value: appState.activeCommandPalette?.id)
     }
 
