@@ -573,7 +573,7 @@ final class RootSplitViewController: NSSplitViewController {
     private lazy var mainItem: NSSplitViewItem = {
         let item = NSSplitViewItem(viewController: mainController)
         item.minimumThickness = 420
-        item.allowsFullHeightLayout = false
+        item.allowsFullHeightLayout = true
         return item
     }()
 
@@ -582,7 +582,7 @@ final class RootSplitViewController: NSSplitViewController {
         item.canCollapse = true
         item.minimumThickness = 320
         item.maximumThickness = 500
-        item.allowsFullHeightLayout = false
+        item.allowsFullHeightLayout = true
         return item
     }()
 

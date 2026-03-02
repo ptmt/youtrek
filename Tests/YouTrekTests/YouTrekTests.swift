@@ -3,6 +3,14 @@ import XCTest
 
 final class YouTrekTests: XCTestCase {
     @MainActor
+    func testRootSplitViewControllerUsesFullHeightLayoutForMainAndInspector() {
+        let controller = RootSplitViewController()
+        XCTAssertGreaterThanOrEqual(controller.splitViewItems.count, 3)
+        XCTAssertTrue(controller.splitViewItems[1].allowsFullHeightLayout)
+        XCTAssertTrue(controller.splitViewItems[2].allowsFullHeightLayout)
+    }
+
+    @MainActor
     func testAppStartsWithExpectedBootstrapState() async throws {
         let container = AppContainer.preview
         XCTAssertNotNil(container)
@@ -148,7 +156,10 @@ final class YouTrekTests: XCTestCase {
     }
 
     func testMarkdownImageSourceResolverDecodesInlineDataURL() {
-        let resolved = MarkdownImageSourceResolver.resolve(source: "data:image/png;base64,AAEC")
+        let resolved = MarkdownImageSourceResolver.resolve(
+            source: "data:image/png;base64,AAEC",
+            baseURL: nil
+        )
         guard case .inlineData(let data) = resolved else {
             return XCTFail("Expected inline image data")
         }
