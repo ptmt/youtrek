@@ -1110,7 +1110,7 @@ struct MainToolbar: CustomizableToolbarContent {
     let onToggleInspector: () -> Void
 
     var body: some CustomizableToolbarContent {
-        ToolbarItem(id: "toggle-sidebar") {
+        ToolbarItem(id: "toggle-sidebar", placement: .navigation) {
             Button(action: onToggleSidebar) {
                 Label("Toggle Sidebar", systemImage: "sidebar.left")
                     .labelStyle(.iconOnly)
@@ -1119,7 +1119,7 @@ struct MainToolbar: CustomizableToolbarContent {
             .help("Show or hide the sidebar")
         }
 
-        ToolbarItem(id: "account-switcher") {
+        ToolbarItem(id: "account-switcher", placement: .navigation) {
             accountSwitcher
         }
 
@@ -1127,7 +1127,7 @@ struct MainToolbar: CustomizableToolbarContent {
             SearchToolbarField(text: $searchQuery)
         }
 
-        ToolbarItem(id: "command-palette") {
+        ToolbarItem(id: "command-palette", placement: .automatic) {
             Button(action: container.commandPalette.open) {
                 Label("Command Palette", systemImage: "command.square")
                     .labelStyle(.iconOnly)
@@ -1137,7 +1137,7 @@ struct MainToolbar: CustomizableToolbarContent {
             .help("Command palette")
         }
 
-        ToolbarItem(id: "progress-mode") {
+        ToolbarItem(id: "progress-mode", placement: .automatic) {
             Button {
                 isProgressReportingMode.toggle()
             } label: {
@@ -1151,7 +1151,7 @@ struct MainToolbar: CustomizableToolbarContent {
             .help(isProgressReportingMode ? "Exit progress reporting mode" : "Report progress on issues inline")
         }
 
-        ToolbarItem(id: "mark-all-read") {
+        ToolbarItem(id: "mark-all-read", placement: .automatic) {
             Button(action: container.markAllIssuesSeen) {
                 Label("Mark All as Read", systemImage: "checkmark.circle")
                     .labelStyle(.iconOnly)
@@ -1161,12 +1161,12 @@ struct MainToolbar: CustomizableToolbarContent {
             .help("Mark all issues in the current list as read")
         }
 
-        ToolbarItem(id: "new-issue") {
+        ToolbarItem(id: "new-issue", placement: .primaryAction) {
             NewIssueToolbar(container: container)
                 .frame(maxWidth: 280, alignment: .leading)
         }
 
-        ToolbarItem(id: "toggle-details") {
+        ToolbarItem(id: "toggle-details", placement: .automatic) {
             Button(action: onToggleInspector) {
                 Label("Toggle Details", systemImage: "sidebar.trailing")
             }

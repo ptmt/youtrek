@@ -171,4 +171,42 @@ final class YouTrekTests: XCTestCase {
         XCTAssertTrue(markdown.hasPrefix("![Pasted image](data:image/png;base64,"))
         XCTAssertTrue(markdown.hasSuffix(")"))
     }
+
+    @MainActor
+    func testSyncCompleteIndicatorAppearsAfterIdleDelay() async throws {
+        let state = AppState(
+            syncCompleteRevealDelay: .milliseconds(80),
+            syncCompleteVisibleDuration: .seconds(1)
+        )
+
+        state.updateSyncActivity(isSyncing: true, label: "Sync issues")
+        state.updateSyncActivity(isSyncing: false, label: nil)
+
+        XCTAssertFalse(state.showSyncComplete)
+        try await Task.sleep(nanoseconds: 40_000_000)
+        XCTAssertFalse(state.showSyncComplete)
+
+        try await Task.sleep(nanoseconds: 70_000_000)
+        XCTAssertTrue(state.showSyncComplete)
+    }
+
+    @MainActor
+    func testSyncCompleteIndicatorOnlyShowsForFinalSubsync() async throws {
+        let state = AppState(
+            syncCompleteRevealDelay: .milliseconds(100),
+            syncCompleteVisibleDuration: .seconds(1)
+        )
+
+        state.updateSyncActivity(isSyncing: true, label: "Sync issues")
+        state.updateSyncActivity(isSyncing: false, label: nil)
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+        state.updateSyncActivity(isSyncing: true, label: "Sync saved searches")
+        try await Task.sleep(nanoseconds: 90_000_000)
+        XCTAssertFalse(state.showSyncComplete)
+
+        state.updateSyncActivity(isSyncing: false, label: nil)
+        try await Task.sleep(nanoseconds: 130_000_000)
+        XCTAssertTrue(state.showSyncComplete)
+    }
 }

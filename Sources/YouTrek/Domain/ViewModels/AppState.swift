@@ -43,10 +43,18 @@ final class AppState: ObservableObject {
     private var didLogIssueListRendered = false
     private let boardDataSourceEventLimit = 60
     private let issueListDataSourceEventLimit = 60
+    private let syncCompleteRevealDelay: Duration
+    private let syncCompleteVisibleDuration: Duration
 
-    init(issues: [IssueSummary] = []) {
+    init(
+        issues: [IssueSummary] = [],
+        syncCompleteRevealDelay: Duration = .milliseconds(350),
+        syncCompleteVisibleDuration: Duration = .seconds(5)
+    ) {
         self.launchUptime = ProcessInfo.processInfo.systemUptime
         self.issues = issues
+        self.syncCompleteRevealDelay = syncCompleteRevealDelay
+        self.syncCompleteVisibleDuration = syncCompleteVisibleDuration
     }
 
     func replaceIssues(with newIssues: [IssueSummary]) {
@@ -308,7 +316,8 @@ final class AppState: ObservableObject {
         isInspectorVisible = isVisible
     }
 
-    private var syncCompleteTimer: Task<Void, Never>?
+    private var syncCompleteRevealTask: Task<Void, Never>?
+    private var syncCompleteHideTask: Task<Void, Never>?
 
     func updateSyncActivity(isSyncing: Bool, label: String?) {
         let wasSyncing = self.isSyncing
@@ -316,16 +325,30 @@ final class AppState: ObservableObject {
         self.syncStatusMessage = label
 
         if wasSyncing && !isSyncing {
-            syncCompleteTimer?.cancel()
-            showSyncComplete = true
-            syncCompleteTimer = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(5))
-                guard !Task.isCancelled else { return }
-                self?.showSyncComplete = false
+            syncCompleteRevealTask?.cancel()
+            syncCompleteHideTask?.cancel()
+            showSyncComplete = false
+            syncCompleteRevealTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(for: self.syncCompleteRevealDelay)
+                guard !Task.isCancelled, !self.isSyncing else { return }
+                self.showSyncComplete = true
+                self.scheduleSyncCompleteHide()
             }
         } else if isSyncing {
-            syncCompleteTimer?.cancel()
+            syncCompleteRevealTask?.cancel()
+            syncCompleteHideTask?.cancel()
             showSyncComplete = false
+        }
+    }
+
+    private func scheduleSyncCompleteHide() {
+        syncCompleteHideTask?.cancel()
+        syncCompleteHideTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: self.syncCompleteVisibleDuration)
+            guard !Task.isCancelled else { return }
+            self.showSyncComplete = false
         }
     }
 

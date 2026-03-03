@@ -24,7 +24,7 @@ extension RootContentView {
             columnVisibility: columnVisibilityBinding,
             isInspectorVisible: $isInspectorVisible
         )
-        .toolbar(id: "main-toolbar") { mainToolbar }
+        .toolbar(id: "main-toolbar-v2") { mainToolbar }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         #if DEBUG
         .safeAreaInset(edge: .bottom, spacing: 0) {
