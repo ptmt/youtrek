@@ -80,14 +80,15 @@
 		C8E2D3F4A5B6C7D8E9F0A112 /* StoredAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D1C9A2F3E4B5C6D7E8F901 /* StoredAccount.swift */; };
 		CCB6FC4CB76C79D60B3D8268 /* YouTrackIssueRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB6E61C64224428A2A41938 /* YouTrackIssueRepository.swift */; };
 		D4E5F60708090A0B0C0D0E0F /* IssueDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F60708090A0B0C0E0F /* IssueDraftStoreTests.swift */; };
-		DBAD2E130516EF0E97DA9505 /* IssueWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9834245476CD9C6340D38207 /* IssueWindows.swift */; };
-		E503D754E49097AD959569AD /* YouTrackProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */; };
-		E830DA0BDF2A88981E76A320 /* YouTrackAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */; };
-		E9C4B2243C4A344ED73BAE55 /* AppAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */; };
-		EA94D7A93E3499BBFB64C3CE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96D7F507180F29C1DBEBFD1A /* SettingsView.swift */; };
-		EE1E07C0A405D6A416EB6A4D /* IssueListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF004390F090F845328D6B /* IssueListView.swift */; };
-		EE1E07C1A405D6A416EB6A4E /* IssueProgressListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF004490F090F845328D6C /* IssueProgressListView.swift */; };
-		F058AB58B54E3B5254042C54 /* YouTrackIssueFieldRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */; };
+			DBAD2E130516EF0E97DA9505 /* IssueWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9834245476CD9C6340D38207 /* IssueWindows.swift */; };
+			E503D754E49097AD959569AD /* YouTrackProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */; };
+			E830DA0BDF2A88981E76A320 /* YouTrackAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */; };
+			E9C4B2243C4A344ED73BAE55 /* AppAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */; };
+			EA94D7A93E3499BBFB64C3CE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96D7F507180F29C1DBEBFD1A /* SettingsView.swift */; };
+			EE1E07C0A405D6A416EB6A4D /* IssueListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF004390F090F845328D6B /* IssueListView.swift */; };
+			EE1E07C1A405D6A416EB6A4E /* IssueProgressListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF004490F090F845328D6C /* IssueProgressListView.swift */; };
+			F1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift */; };
+			F058AB58B54E3B5254042C54 /* YouTrackIssueFieldRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */; };
 		F0D1C2B3A4E5968778695A4B /* UserAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D1C2B3A4E5968778695A4C /* UserAvatarView.swift */; };
 		F0D1C2B3A4E5968778695A4D /* IssueDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D1C2B3A4E5968778695A4E /* IssueDetail.swift */; };
 /* End PBXBuildFile section */
@@ -171,11 +172,12 @@
 		CC68C73EC8C04D7FA2BABD20 /* AttachmentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentViews.swift; sourceTree = "<group>"; };
 		D2BF004390F090F845328D6B /* IssueListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueListView.swift; sourceTree = "<group>"; };
 		D2BF004490F090F845328D6C /* IssueProgressListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueProgressListView.swift; sourceTree = "<group>"; };
-		D4FE22D10515F3D19C04518D /* YouTrackOAuthConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackOAuthConfiguration.swift; sourceTree = "<group>"; };
-		DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueLocalStore.swift; sourceTree = "<group>"; };
-		DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueField.swift; sourceTree = "<group>"; };
-		DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackPeopleRepository.swift; sourceTree = "<group>"; };
-		E827C5F39D5E4DFEA06C2463 /* MarkdownTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTextView.swift; sourceTree = "<group>"; };
+			D4FE22D10515F3D19C04518D /* YouTrackOAuthConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackOAuthConfiguration.swift; sourceTree = "<group>"; };
+			DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueLocalStore.swift; sourceTree = "<group>"; };
+			DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueField.swift; sourceTree = "<group>"; };
+			DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackPeopleRepository.swift; sourceTree = "<group>"; };
+			E1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitWindowContentControllers.swift; sourceTree = "<group>"; };
+			E827C5F39D5E4DFEA06C2463 /* MarkdownTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTextView.swift; sourceTree = "<group>"; };
 		EC1761A3048AA9CE39B1317D /* AppMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMain.swift; sourceTree = "<group>"; };
 		EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueFieldRepository.swift; sourceTree = "<group>"; };
 		F0D1C2B3A4E5968778695A4C /* UserAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserAvatarView.swift; sourceTree = "<group>"; };
@@ -293,26 +295,27 @@
 			);
 			path = Networking;
 			sourceTree = "<group>";
-		};
-		78078B57735A8D543CAA0E0A /* UI */ = {
-			isa = PBXGroup;
-			children = (
-				4A7250E3A5DD409013899A4B /* RootView.swift */,
-				A7B3D2E14F5A6789BC0D1E21 /* RootContentView.swift */,
-				A7B3D2E14F5A6789BC0D1E22 /* RootContentView+Layout.swift */,
-				A7B3D2E14F5A6789BC0D1E23 /* RootContentView+Sidebar.swift */,
-				A7B3D2E14F5A6789BC0D1E24 /* RootContentView+Main.swift */,
-				A7B3D2E14F5A6789BC0D1E25 /* RootContentView+Inspector.swift */,
-				A7B3D2E14F5A6789BC0D1E26 /* RootContentView+Helpers.swift */,
-				D0AB2C53443C67FC515AE1E8 /* Common */,
-				BD3334A3D8FDD36898ED02E8 /* IssueDetail */,
-				AEE1832E3065BE4BE02CC565 /* IssueList */,
-				B6A7C8D9E0F1122334455667 /* IssueBoard */,
-				A1B2C3D4E5F60718293A4B70 /* Todo */,
-			);
-			path = UI;
-			sourceTree = "<group>";
-		};
+			};
+			78078B57735A8D543CAA0E0A /* UI */ = {
+				isa = PBXGroup;
+				children = (
+					E1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift */,
+					4A7250E3A5DD409013899A4B /* RootView.swift */,
+					A7B3D2E14F5A6789BC0D1E21 /* RootContentView.swift */,
+					A7B3D2E14F5A6789BC0D1E22 /* RootContentView+Layout.swift */,
+					A7B3D2E14F5A6789BC0D1E23 /* RootContentView+Sidebar.swift */,
+					A7B3D2E14F5A6789BC0D1E24 /* RootContentView+Main.swift */,
+					A7B3D2E14F5A6789BC0D1E25 /* RootContentView+Inspector.swift */,
+					A7B3D2E14F5A6789BC0D1E26 /* RootContentView+Helpers.swift */,
+					D0AB2C53443C67FC515AE1E8 /* Common */,
+					BD3334A3D8FDD36898ED02E8 /* IssueDetail */,
+					AEE1832E3065BE4BE02CC565 /* IssueList */,
+					B6A7C8D9E0F1122334455667 /* IssueBoard */,
+					A1B2C3D4E5F60718293A4B70 /* Todo */,
+				);
+				path = UI;
+				sourceTree = "<group>";
+			};
 		78D300D18D4011F501E7E46E /* Models */ = {
 			isa = PBXGroup;
 			children = (
@@ -689,14 +692,15 @@
 				240719BA093F4DB3B371E4BC /* AttachmentViews.swift in Sources */,
 				7B01B951558244F8B758DFB5 /* TodoListEditorDependencies.swift in Sources */,
 				553B1161EE25492CBD4E5960 /* TodoIssueIDParser.swift in Sources */,
-				C4B1BC2E20F44F49838A214A /* TodoInlineMarkdownParser.swift in Sources */,
-				7AE22AB917B4430D9243B77F /* TodoChecklistMarkdownRenderer.swift in Sources */,
-				9DB8D80B206C40708C943193 /* TodoChecklistParsing.swift in Sources */,
-				A1B2C3D4E5F60718293A4B6D /* TodoListEditorViewModel.swift in Sources */,
-				A1B2C3D4E5F60718293A4B6F /* TodoListContentView.swift in Sources */,
-				ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */,
-				B7C4D3E25F6A7890CD1E2F31 /* RootContentView.swift in Sources */,
-				B7C4D3E25F6A7890CD1E2F32 /* RootContentView+Layout.swift in Sources */,
+					C4B1BC2E20F44F49838A214A /* TodoInlineMarkdownParser.swift in Sources */,
+					7AE22AB917B4430D9243B77F /* TodoChecklistMarkdownRenderer.swift in Sources */,
+					9DB8D80B206C40708C943193 /* TodoChecklistParsing.swift in Sources */,
+					A1B2C3D4E5F60718293A4B6D /* TodoListEditorViewModel.swift in Sources */,
+					A1B2C3D4E5F60718293A4B6F /* TodoListContentView.swift in Sources */,
+					F1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift in Sources */,
+					ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */,
+					B7C4D3E25F6A7890CD1E2F31 /* RootContentView.swift in Sources */,
+					B7C4D3E25F6A7890CD1E2F32 /* RootContentView+Layout.swift in Sources */,
 				B7C4D3E25F6A7890CD1E2F33 /* RootContentView+Sidebar.swift in Sources */,
 				B7C4D3E25F6A7890CD1E2F34 /* RootContentView+Main.swift in Sources */,
 				B7C4D3E25F6A7890CD1E2F35 /* RootContentView+Inspector.swift in Sources */,

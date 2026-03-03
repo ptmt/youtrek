@@ -557,9 +557,9 @@ struct AppKitRootSplitView: NSViewControllerRepresentable {
 final class RootSplitViewController: NSSplitViewController {
     var onSidebarVisibilityChanged: ((Bool) -> Void)?
 
-    private let sidebarController = NSHostingController(rootView: AnyView(EmptyView()))
-    private let mainController = NSHostingController(rootView: AnyView(EmptyView()))
-    private let inspectorController = NSHostingController(rootView: AnyView(EmptyView()))
+    private let sidebarController = SplitPaneHostingController()
+    private let mainController = SplitPaneHostingController()
+    private let inspectorController = SplitPaneHostingController()
 
     private lazy var sidebarItem: NSSplitViewItem = {
         let item = NSSplitViewItem(sidebarWithViewController: sidebarController)
@@ -599,9 +599,9 @@ final class RootSplitViewController: NSSplitViewController {
     }
 
     func configure(sidebar: AnyView, main: AnyView, inspector: AnyView) {
-        sidebarController.rootView = sidebar
-        mainController.rootView = main
-        inspectorController.rootView = inspector
+        sidebarController.setRootView(sidebar)
+        mainController.setRootView(main)
+        inspectorController.setRootView(inspector)
     }
 
     func apply(columnVisibility: NavigationSplitViewVisibility, isInspectorVisible: Bool) {
@@ -624,6 +624,28 @@ final class RootSplitViewController: NSSplitViewController {
 
     private func isSidebarVisible(for visibility: NavigationSplitViewVisibility) -> Bool {
         visibility != .detailOnly
+    }
+}
+
+@MainActor
+private final class SplitPaneHostingController: NSViewController {
+    private let hostingController = NSHostingController(rootView: AnyView(EmptyView()))
+
+    override func loadView() {
+        view = NSView(frame: .zero)
+        addChild(hostingController)
+        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(hostingController.view)
+        NSLayoutConstraint.activate([
+            hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            hostingController.view.topAnchor.constraint(equalTo: view.topAnchor),
+            hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+    }
+
+    func setRootView(_ rootView: AnyView) {
+        hostingController.rootView = rootView
     }
 }
 

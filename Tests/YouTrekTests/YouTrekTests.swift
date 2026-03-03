@@ -172,6 +172,16 @@ final class YouTrekTests: XCTestCase {
         XCTAssertTrue(markdown.hasSuffix(")"))
     }
 
+    func testYouTrackAPIErrorCancellationDetectionForTransportCancelled() {
+        let error = YouTrackAPIError.transport(underlying: URLError(.cancelled))
+        XCTAssertTrue(error.isCancellation)
+    }
+
+    func testYouTrackAPIErrorCancellationDetectionForTransportTimeout() {
+        let error = YouTrackAPIError.transport(underlying: URLError(.timedOut))
+        XCTAssertFalse(error.isCancellation)
+    }
+
     @MainActor
     func testSyncCompleteIndicatorAppearsAfterIdleDelay() async throws {
         let state = AppState(
@@ -208,5 +218,88 @@ final class YouTrekTests: XCTestCase {
         state.updateSyncActivity(isSyncing: false, label: nil)
         try await Task.sleep(nanoseconds: 130_000_000)
         XCTAssertTrue(state.showSyncComplete)
+    }
+
+    @MainActor
+    func testWorkspaceIssueListComposerShowsDraftsInInbox() {
+        let appState = AppState()
+        let issueA = makeIssue(readableID: "YT-1", title: "Server exception")
+        let issueB = makeIssue(readableID: "YT-2", title: "Toolbar polish")
+        appState.replaceIssues(with: [issueA, issueB])
+
+        let olderDraft = makeDraftRecord(title: "Older draft", updatedAt: Date(timeIntervalSince1970: 1_000))
+        let newerDraft = makeDraftRecord(title: "Newer draft", updatedAt: Date(timeIntervalSince1970: 2_000))
+        appState.setDrafts([olderDraft, newerDraft])
+
+        let visible = WorkspaceIssueListComposer.visibleIssues(
+            appState: appState,
+            selection: SidebarItem.inbox(page: .init(size: 50, offset: 0)),
+            searchQuery: ""
+        )
+
+        XCTAssertEqual(visible.count, 4)
+        XCTAssertEqual(visible.prefix(2).compactMap(\.draftID), [newerDraft.id, olderDraft.id])
+        XCTAssertEqual(Array(visible.dropFirst(2)).map(\.id), [issueA.id, issueB.id])
+    }
+
+    @MainActor
+    func testWorkspaceIssueListComposerSkipsDraftsOutsideInbox() {
+        let appState = AppState()
+        let issueA = makeIssue(readableID: "YT-10", title: "Background sync")
+        let issueB = makeIssue(readableID: "YT-11", title: "Command palette")
+        appState.replaceIssues(with: [issueA, issueB])
+        appState.setDrafts([makeDraftRecord(title: "Draft task", updatedAt: Date())])
+
+        let visible = WorkspaceIssueListComposer.visibleIssues(
+            appState: appState,
+            selection: SidebarItem.assignedToMe(page: .init(size: 50, offset: 0)),
+            searchQuery: ""
+        )
+
+        XCTAssertEqual(visible.map(\.id), [issueA.id, issueB.id])
+        XCTAssertTrue(visible.allSatisfy { $0.draftID == nil })
+    }
+
+    func testWorkspaceIssueListComposerTreatsInboxTitleAsDraftSelection() {
+        let item = SidebarItem(
+            id: "saved:inbox-alias",
+            kind: .savedSearch,
+            title: "inbox",
+            iconName: "tray",
+            query: IssueQuery(
+                rawQuery: nil,
+                search: "",
+                filters: [],
+                sort: nil,
+                page: .init(size: 50, offset: 0)
+            ),
+            board: nil
+        )
+
+        XCTAssertTrue(WorkspaceIssueListComposer.selectionShowsDrafts(item))
+    }
+
+    private func makeIssue(readableID: String, title: String) -> IssueSummary {
+        IssueSummary(
+            readableID: readableID,
+            title: title,
+            projectName: "YouTrek",
+            updatedAt: Date(timeIntervalSince1970: 100)
+        )
+    }
+
+    private func makeDraftRecord(title: String, updatedAt: Date) -> IssueDraftRecord {
+        IssueDraftRecord(
+            draft: IssueDraft(
+                title: title,
+                description: "",
+                projectID: "0-0",
+                module: nil,
+                priority: .normal,
+                assigneeID: nil
+            ),
+            createdAt: Date(timeIntervalSince1970: 10),
+            updatedAt: updatedAt
+        )
     }
 }

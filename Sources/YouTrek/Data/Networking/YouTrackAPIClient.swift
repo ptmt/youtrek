@@ -55,6 +55,18 @@ enum YouTrackAPIError: Error, LocalizedError {
             }
         }
     }
+
+    var isCancellation: Bool {
+        guard case let .transport(underlying) = self else { return false }
+        if underlying is CancellationError {
+            return true
+        }
+        if let urlError = underlying as? URLError, urlError.code == .cancelled {
+            return true
+        }
+        let nsError = underlying as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == URLError.cancelled.rawValue
+    }
 }
 
 struct YouTrackAPIClient: Sendable {
@@ -118,10 +130,19 @@ struct YouTrackAPIClient: Sendable {
             let duration = Date().timeIntervalSince(requestStart)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             let errorDescription = error?.localizedDescription
+            let isCancellation = Self.isCancellationError(error)
             if let errorDescription {
-                LoggingService.networking.error(
-                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
-                )
+                if isCancellation {
+                    if AppDebugSettings.verboseRequestLogging {
+                        LoggingService.networking.debug(
+                            "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                        )
+                    }
+                } else {
+                    LoggingService.networking.error(
+                        "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                    )
+                }
             } else if AppDebugSettings.verboseRequestLogging {
                 LoggingService.networking.debug(
                     "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=none"
@@ -134,7 +155,7 @@ struct YouTrackAPIClient: Sendable {
                 url: requestURL,
                 statusCode: statusCode,
                 duration: duration,
-                errorDescription: errorDescription
+                errorDescription: isCancellation ? nil : errorDescription
             )
         }
 
@@ -213,10 +234,19 @@ struct YouTrackAPIClient: Sendable {
             let duration = Date().timeIntervalSince(requestStart)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             let errorDescription = error?.localizedDescription
+            let isCancellation = Self.isCancellationError(error)
             if let errorDescription {
-                LoggingService.networking.error(
-                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
-                )
+                if isCancellation {
+                    if AppDebugSettings.verboseRequestLogging {
+                        LoggingService.networking.debug(
+                            "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                        )
+                    }
+                } else {
+                    LoggingService.networking.error(
+                        "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                    )
+                }
             } else if AppDebugSettings.verboseRequestLogging {
                 LoggingService.networking.debug(
                     "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=none"
@@ -229,7 +259,7 @@ struct YouTrackAPIClient: Sendable {
                 url: requestURL,
                 statusCode: statusCode,
                 duration: duration,
-                errorDescription: errorDescription
+                errorDescription: isCancellation ? nil : errorDescription
             )
         }
 
@@ -306,10 +336,19 @@ struct YouTrackAPIClient: Sendable {
             let duration = Date().timeIntervalSince(requestStart)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             let errorDescription = error?.localizedDescription
+            let isCancellation = Self.isCancellationError(error)
             if let errorDescription {
-                LoggingService.networking.error(
-                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
-                )
+                if isCancellation {
+                    if AppDebugSettings.verboseRequestLogging {
+                        LoggingService.networking.debug(
+                            "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                        )
+                    }
+                } else {
+                    LoggingService.networking.error(
+                        "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                    )
+                }
             } else if AppDebugSettings.verboseRequestLogging {
                 LoggingService.networking.debug(
                     "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=none"
@@ -322,7 +361,7 @@ struct YouTrackAPIClient: Sendable {
                 url: requestURL,
                 statusCode: statusCode,
                 duration: duration,
-                errorDescription: errorDescription
+                errorDescription: isCancellation ? nil : errorDescription
             )
         }
 
@@ -417,10 +456,19 @@ struct YouTrackAPIClient: Sendable {
             let duration = Date().timeIntervalSince(requestStart)
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             let errorDescription = error?.localizedDescription
+            let isCancellation = Self.isCancellationError(error)
             if let errorDescription {
-                LoggingService.networking.error(
-                    "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
-                )
+                if isCancellation {
+                    if AppDebugSettings.verboseRequestLogging {
+                        LoggingService.networking.debug(
+                            "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                        )
+                    }
+                } else {
+                    LoggingService.networking.error(
+                        "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=\(errorDescription, privacy: .public)"
+                    )
+                }
             } else if AppDebugSettings.verboseRequestLogging {
                 LoggingService.networking.debug(
                     "HTTP \(requestMethod, privacy: .public) finish status=\(statusCode ?? -1, privacy: .public) duration=\(duration, privacy: .public)s error=none"
@@ -433,7 +481,7 @@ struct YouTrackAPIClient: Sendable {
                 url: requestURL,
                 statusCode: statusCode,
                 duration: duration,
-                errorDescription: errorDescription
+                errorDescription: isCancellation ? nil : errorDescription
             )
         }
 
@@ -461,6 +509,23 @@ struct YouTrackAPIClient: Sendable {
             await logOnce(response: nil, error: transportError)
             throw transportError
         }
+    }
+}
+
+private extension YouTrackAPIClient {
+    static func isCancellationError(_ error: Error?) -> Bool {
+        guard let error else { return false }
+        if error is CancellationError {
+            return true
+        }
+        if let apiError = error as? YouTrackAPIError, apiError.isCancellation {
+            return true
+        }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return true
+        }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == URLError.cancelled.rawValue
     }
 }
 

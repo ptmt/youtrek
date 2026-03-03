@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 @main
 @MainActor
@@ -57,13 +56,7 @@ final class YouTrekApp: NSObject, NSApplicationDelegate {
 
     private func openMainWindow() {
         if mainWindowController == nil {
-            mainWindowController = makeWindow(
-                title: "YouTrek",
-                content: MainWindowContent()
-                    .environmentObject(container),
-                initialSize: NSSize(width: 1280, height: 800),
-                style: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-            )
+            mainWindowController = makeMainWindowController()
         }
         guard let window = mainWindowController?.window else { return }
         window.makeKeyAndOrderFront(nil)
@@ -72,32 +65,37 @@ final class YouTrekApp: NSObject, NSApplicationDelegate {
 
     private func openSettingsWindow() {
         if settingsWindowController == nil {
-            settingsWindowController = makeWindow(
-                title: "Settings",
-                content: SettingsView()
-                    .environmentObject(container),
-                initialSize: NSSize(width: 480, height: 420),
-                style: [.titled, .closable]
-            )
+            settingsWindowController = makeSettingsWindowController()
         }
         settingsWindowController?.showWindow(nil)
         settingsWindowController?.window?.makeKeyAndOrderFront(nil)
     }
 
-    private func makeWindow<Content: View>(
-        title: String,
-        content: Content,
-        initialSize: NSSize,
-        style: NSWindow.StyleMask
-    ) -> NSWindowController {
-        let contentController = NSHostingController(rootView: content)
+    private func makeMainWindowController() -> NSWindowController {
+        let contentController = MainWindowViewController(container: container)
         let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: initialSize),
-            styleMask: style,
+            contentRect: NSRect(origin: .zero, size: NSSize(width: 1280, height: 800)),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        window.title = title
+        window.title = "YouTrek"
+        window.contentViewController = contentController
+        window.center()
+        window.isReleasedWhenClosed = false
+        applyTheme(to: window)
+        return NSWindowController(window: window)
+    }
+
+    private func makeSettingsWindowController() -> NSWindowController {
+        let contentController = SettingsWindowViewController(container: container)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: NSSize(width: 480, height: 420)),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Settings"
         window.contentViewController = contentController
         window.center()
         window.isReleasedWhenClosed = false
@@ -622,143 +620,6 @@ final class YouTrekApp: NSObject, NSApplicationDelegate {
         return selectedText
     }
 }
-
-private struct MainWindowContent: View {
-    @EnvironmentObject private var container: AppContainer
-
-    var body: some View {
-        let needsSetupPresentation = container.requiresSetup || !container.appState.hasCompletedInitialSync
-        return Group {
-            if needsSetupPresentation {
-                SetupWindow()
-            } else {
-                RootContentView(appState: container.appState)
-                    .environmentObject(container)
-            }
-        }
-        .background(WindowAccessor(isSetup: needsSetupPresentation))
-    }
-}
-
-private struct WindowAccessor: NSViewRepresentable {
-    let isSetup: Bool
-
-    func makeNSView(context: Context) -> WindowAccessorView {
-        let view = WindowAccessorView()
-        view.isSetup = isSetup
-        return view
-    }
-
-    func updateNSView(_ nsView: WindowAccessorView, context: Context) {
-        nsView.isSetup = isSetup
-        nsView.scheduleWindowConfiguration()
-    }
-}
-
-@MainActor
-private final class WindowAccessorView: NSView {
-    var isSetup = false
-    private var lastConfiguredForSetup: Bool?
-    private var pendingConfiguration = false
-    private var hasAppliedSetupPresentation = false
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        scheduleWindowConfiguration()
-    }
-
-    func scheduleWindowConfiguration() {
-        guard !pendingConfiguration else { return }
-        pendingConfiguration = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.pendingConfiguration = false
-            self.configureWindowIfNeeded()
-        }
-    }
-
-    func configureWindowIfNeeded() {
-        guard let window else { return }
-        let needsReconfigure = lastConfiguredForSetup != isSetup
-        if needsReconfigure {
-            lastConfiguredForSetup = isSetup
-        }
-
-        #if DEBUG
-        let initialSize = window.frame.size
-        LoggingService.general.info(
-            "WindowAccessor: configure start isSetup=\(self.isSetup, privacy: .public) needsReconfigure=\(needsReconfigure, privacy: .public) size=\(Double(initialSize.width), privacy: .public)x\(Double(initialSize.height), privacy: .public)"
-        )
-        #endif
-
-        if isSetup {
-            if needsReconfigure {
-                window.styleMask = [.titled, .closable, .fullSizeContentView]
-                hasAppliedSetupPresentation = false
-            }
-            window.titlebarAppearsTransparent = true
-            window.titleVisibility = .hidden
-            window.standardWindowButton(.closeButton)?.isHidden = false
-            window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-            window.standardWindowButton(.zoomButton)?.isHidden = true
-            if #available(macOS 11.0, *) {
-                window.titlebarSeparatorStyle = .none
-            }
-            window.isMovableByWindowBackground = true
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.hasShadow = true
-            if let contentView = window.contentView {
-                contentView.wantsLayer = true
-                if let layer = contentView.layer {
-                    layer.cornerRadius = 12
-                    if #available(macOS 10.13, *) {
-                        layer.cornerCurve = .continuous
-                    }
-                    layer.masksToBounds = true
-                }
-            }
-            if !hasAppliedSetupPresentation {
-                window.setContentSize(NSSize(width: 480, height: 340))
-                window.center()
-                window.makeKeyAndOrderFront(nil)
-                hasAppliedSetupPresentation = true
-            }
-        } else if needsReconfigure {
-            window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-            window.titlebarAppearsTransparent = true
-            window.titleVisibility = .hidden
-            window.standardWindowButton(.closeButton)?.isHidden = false
-            window.standardWindowButton(.miniaturizeButton)?.isHidden = false
-            window.standardWindowButton(.zoomButton)?.isHidden = false
-            if #available(macOS 11.0, *) {
-                window.toolbarStyle = .unified
-                window.titlebarSeparatorStyle = .none
-            }
-            window.isMovableByWindowBackground = false
-            window.isOpaque = true
-            window.backgroundColor = .windowBackgroundColor
-            if let contentView = window.contentView, let layer = contentView.layer {
-                layer.cornerRadius = 0
-                if #available(macOS 10.13, *) {
-                    layer.cornerCurve = .continuous
-                }
-                layer.masksToBounds = false
-            }
-            window.setContentSize(NSSize(width: 1280, height: 800))
-            window.center()
-            hasAppliedSetupPresentation = false
-        }
-
-        #if DEBUG
-        let finalSize = window.frame.size
-        LoggingService.general.info(
-            "WindowAccessor: configure end isSetup=\(self.isSetup, privacy: .public) size=\(Double(finalSize.width), privacy: .public)x\(Double(finalSize.height), privacy: .public)"
-        )
-        #endif
-    }
-}
-
 enum SceneID: String {
     case main
     case issue
