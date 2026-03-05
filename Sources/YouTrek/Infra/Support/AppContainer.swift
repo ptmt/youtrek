@@ -651,24 +651,33 @@ final class AppContainer: ObservableObject {
     }
 
     func loadSubIssues(for issue: IssueSummary) async throws -> [IssueSummary] {
+        let queries = subIssueQueryCandidates(parentReadableID: issue.readableID)
+        return try await loadRelatedIssues(for: issue, queryCandidates: queries)
+    }
+
+    func loadParentIssues(for issue: IssueSummary) async throws -> [IssueSummary] {
+        let queries = parentIssueQueryCandidates(childReadableID: issue.readableID)
+        return try await loadRelatedIssues(for: issue, queryCandidates: queries)
+    }
+
+    private func loadRelatedIssues(
+        for issue: IssueSummary,
+        queryCandidates: [String]
+    ) async throws -> [IssueSummary] {
+        guard !issue.isDraft else { return [] }
         let trimmedID = issue.readableID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedID.isEmpty, !issue.isDraft else { return [] }
-        let queries = subIssueQueryCandidates(parentReadableID: trimmedID)
+        guard !trimmedID.isEmpty else { return [] }
+        let queries = queryCandidates
         guard !queries.isEmpty else { return [] }
 
         let page = IssueQuery.Page(size: 50, offset: 0)
-        var results: [IssueSummary] = []
-        var seen = Set<IssueSummary.ID>()
-
         for queryString in queries {
             do {
                 let query = IssueQuery.saved(queryString, page: page)
                 let fetched = try await issueRepositorySwitcher.fetchIssues(query: query)
-                for candidate in fetched where candidate.id != issue.id {
-                    if seen.insert(candidate.id).inserted {
-                        results.append(candidate)
-                    }
-                }
+                return fetched
+                    .filter { $0.id != issue.id }
+                    .sorted { $0.updatedAt > $1.updatedAt }
             } catch let error as YouTrackAPIError {
                 if case .http(let statusCode, _) = error, statusCode == 400 {
                     continue
@@ -677,7 +686,7 @@ final class AppContainer: ObservableObject {
             }
         }
 
-        return results.sorted { $0.updatedAt > $1.updatedAt }
+        return []
     }
 
     private func subIssueQueryCandidates(parentReadableID: String) -> [String] {
@@ -686,6 +695,15 @@ final class AppContainer: ObservableObject {
         return [
             "subtask of: \(wrapped)",
             "parent for: \(wrapped)"
+        ]
+    }
+
+    private func parentIssueQueryCandidates(childReadableID: String) -> [String] {
+        let wrapped = wrapQueryValue(childReadableID)
+        guard !wrapped.isEmpty else { return [] }
+        return [
+            "parent for: \(wrapped)",
+            "subtask of: \(wrapped)"
         ]
     }
 
@@ -1816,12 +1834,7 @@ final class AppContainer: ObservableObject {
                 }
             case .token:
                 let baseURL = configurationStore.loadBaseURL()
-                var token = configurationStore.loadToken()
-                if token == nil, baseURL != nil {
-                    token = await MainActor.run {
-                        configurationStore.loadToken(allowInteraction: true)
-                    }
-                }
+                let token = configurationStore.loadToken()
 
                 if let baseURL, let token, !token.isEmpty {
                     let needsProfile = configurationStore.loadUserDisplayName() == nil

@@ -13,6 +13,9 @@ struct IssueDetailView: View {
     @State private var isLoadingProjects: Bool = false
     @State private var customFields: [IssueField] = []
     @State private var isLoadingCustomFields: Bool = false
+    @State private var parentIssues: [IssueSummary] = []
+    @State private var isLoadingParentIssues: Bool = false
+    @State private var parentIssuesError: String?
     @State private var subIssues: [IssueSummary] = []
     @State private var isLoadingSubIssues: Bool = false
     @State private var subIssuesError: String?
@@ -36,6 +39,8 @@ struct IssueDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                Divider()
+                parentIssuesSection
                 Divider()
                 metadata
                 Divider()
@@ -94,6 +99,9 @@ struct IssueDetailView: View {
             isLoadingCustomFields = true
             customFields = await loadCustomFields()
             isLoadingCustomFields = false
+        }
+        .task(id: issue.readableID) {
+            await loadParentIssues()
         }
         .task(id: issue.readableID) {
             await loadSubIssues()
@@ -166,17 +174,18 @@ struct IssueDetailView: View {
 
     @ViewBuilder
     private var issueIDLink: some View {
-        let label = Text(issue.readableID)
-            .font(.callout.weight(.semibold))
-            .foregroundStyle(.secondary)
         if let url = container.issueWebURL(for: issue) {
             Link(destination: url) {
-                label
+                Text(issue.readableID)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .underline()
             }
-            .buttonStyle(.plain)
             .help("Open in YouTrack")
         } else {
-            label
+            Text(issue.readableID)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -651,8 +660,54 @@ struct IssueDetailView: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(subIssues) { subIssue in
-                        SubIssueRow(issue: subIssue) {
-                            openSubIssue(subIssue)
+                        LinkedIssueRow(issue: subIssue) {
+                            openLinkedIssue(subIssue)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var parentIssuesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Parent issues")
+                .font(.headline)
+
+            if issue.isDraft {
+                Text("Create the issue to load parent issues.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else if isLoadingParentIssues {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading parent issues…")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let parentIssuesError {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                    Text(parentIssuesError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    Spacer()
+                    Button("Retry") {
+                        Task { await loadParentIssues() }
+                    }
+                    .buttonStyle(.link)
+                }
+            } else if parentIssues.isEmpty {
+                Text("No parent issues.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(parentIssues) { parentIssue in
+                        LinkedIssueRow(issue: parentIssue) {
+                            openLinkedIssue(parentIssue)
                         }
                     }
                 }
@@ -703,6 +758,22 @@ struct IssueDetailView: View {
         }
     }
 
+    private func loadParentIssues() async {
+        parentIssues = []
+        parentIssuesError = nil
+        guard !issue.isDraft else {
+            isLoadingParentIssues = false
+            return
+        }
+        isLoadingParentIssues = true
+        defer { isLoadingParentIssues = false }
+        do {
+            parentIssues = try await container.loadParentIssues(for: issue)
+        } catch {
+            parentIssuesError = error.localizedDescription
+        }
+    }
+
     private func presentSubIssueDialog() {
         let parentID = issue.readableID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !parentID.isEmpty else { return }
@@ -724,7 +795,7 @@ struct IssueDetailView: View {
         container.presentNewIssueDialog(state: state)
     }
 
-    private func openSubIssue(_ issue: IssueSummary) {
+    private func openLinkedIssue(_ issue: IssueSummary) {
         let isInList = container.appState.issues.contains { $0.id == issue.id }
         container.appState.selectedIssue = issue
         container.appState.selectedIssueIDs = isInList ? [issue.id] : []
@@ -1033,6 +1104,7 @@ struct IssueDetailView: View {
                             .foregroundStyle(.secondary)
                             .padding(.top, 5)
                             .padding(.leading, 5)
+                            .allowsHitTesting(false)
                     }
                 }
             }
@@ -1893,7 +1965,7 @@ private struct TimelineRow: View {
     }
 }
 
-private struct SubIssueRow: View {
+private struct LinkedIssueRow: View {
     let issue: IssueSummary
     let onSelect: () -> Void
 

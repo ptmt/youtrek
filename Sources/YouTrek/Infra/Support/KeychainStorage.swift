@@ -15,36 +15,42 @@ struct KeychainStorage {
     }
 
     func save(data: Data, account: String) throws {
+        let trimmedAccount = account.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAccount.isEmpty else {
+            throw KeychainStorageError.operationFailed(status: errSecParam)
+        }
         guard prefersDataProtectionKeychain else {
-            try saveData(data, account: account, useDataProtectionKeychain: false)
+            try saveData(data, account: trimmedAccount, useDataProtectionKeychain: false)
             return
         }
         do {
-            try saveData(data, account: account, useDataProtectionKeychain: true)
+            try saveData(data, account: trimmedAccount, useDataProtectionKeychain: true)
             let readback = try? loadData(
-                account: account,
+                account: trimmedAccount,
                 useDataProtectionKeychain: true,
                 allowInteraction: false
             )
             if readback != nil {
-                try? deleteLegacy(account: account)
+                try? deleteLegacy(account: trimmedAccount)
             } else {
-                try saveData(data, account: account, useDataProtectionKeychain: false)
+                try saveData(data, account: trimmedAccount, useDataProtectionKeychain: false)
             }
         } catch {
             // Fall back to the legacy keychain when data protection keychain isn't available.
-            try saveData(data, account: account, useDataProtectionKeychain: false)
+            try saveData(data, account: trimmedAccount, useDataProtectionKeychain: false)
         }
     }
 
     func load(account: String, allowInteraction: Bool = false) throws -> Data? {
+        let trimmedAccount = account.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAccount.isEmpty else { return nil }
         if !prefersDataProtectionKeychain {
-            return try loadLegacy(account: account, allowInteraction: allowInteraction)
+            return try loadLegacy(account: trimmedAccount, allowInteraction: allowInteraction)
         }
         var dataProtectionError: Error?
         do {
             if let data = try loadData(
-                account: account,
+                account: trimmedAccount,
                 useDataProtectionKeychain: true,
                 allowInteraction: allowInteraction
             ) {
@@ -54,15 +60,15 @@ struct KeychainStorage {
             dataProtectionError = error
         }
 
-        if let legacyData = try loadLegacy(account: account, allowInteraction: allowInteraction) {
+        if let legacyData = try loadLegacy(account: trimmedAccount, allowInteraction: allowInteraction) {
             if dataProtectionError == nil {
                 do {
                     try saveData(
                         legacyData,
-                        account: account,
+                        account: trimmedAccount,
                         useDataProtectionKeychain: true
                     )
-                    try deleteLegacy(account: account)
+                    try deleteLegacy(account: trimmedAccount)
                 } catch {
                     // Ignore migration failures; legacy data is still available.
                 }
@@ -77,18 +83,22 @@ struct KeychainStorage {
     }
 
     func delete(account: String) throws {
+        let trimmedAccount = account.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAccount.isEmpty else {
+            throw KeychainStorageError.operationFailed(status: errSecParam)
+        }
         if !prefersDataProtectionKeychain {
-            try deleteLegacy(account: account)
+            try deleteLegacy(account: trimmedAccount)
             return
         }
         var dataProtectionError: Error?
         do {
-            try deleteData(account: account, useDataProtectionKeychain: true)
+            try deleteData(account: trimmedAccount, useDataProtectionKeychain: true)
         } catch {
             dataProtectionError = error
         }
         do {
-            try deleteLegacy(account: account)
+            try deleteLegacy(account: trimmedAccount)
         } catch {
             if dataProtectionError == nil {
                 throw error
@@ -150,6 +160,7 @@ struct KeychainStorage {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         switch status {
         case errSecSuccess:
+            ensureLabel(account: account, useDataProtectionKeychain: useDataProtectionKeychain)
             return item as? Data
         case errSecItemNotFound:
             return nil
@@ -180,6 +191,7 @@ struct KeychainStorage {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         switch status {
         case errSecSuccess:
+            ensureLabel(account: account, useDataProtectionKeychain: false)
             return item as? Data
         case errSecItemNotFound:
             return nil
@@ -232,6 +244,15 @@ struct KeychainStorage {
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainStorageError.operationFailed(status: status)
+        }
+    }
+
+    private func ensureLabel(account: String, useDataProtectionKeychain: Bool) {
+        let query = identityQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
+        let attributes: [String: Any] = [kSecAttrLabel as String: service]
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            return
         }
     }
 }
