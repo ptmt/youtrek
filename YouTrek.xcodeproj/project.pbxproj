@@ -128,7 +128,7 @@
 		4AB6E61C64224428A2A41938 /* YouTrackIssueRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueRepository.swift; sourceTree = "<group>"; };
 		4E1E46F7C4BD4B5E8068A8C6 /* TodoChecklistMarkdownRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoChecklistMarkdownRenderer.swift; sourceTree = "<group>"; };
 		4EE25293D0B475678E0E9AAD /* PeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeopleRepository.swift; sourceTree = "<group>"; };
-		5127E6BFCB6228BCCACF3248 /* AppMenus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMenus.swift; sourceTree = "<group>"; };
+		5127E6BFCB6228BCCACF3248 /* AppMenus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/YouTrek/App/unused_swiftui/AppMenus.swift; sourceTree = SOURCE_ROOT; };
 		603472AD6E49B166DD1EAE1E /* Issue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Issue.swift; sourceTree = "<group>"; };
 		67EE0549798C5BB97F80099A /* YouTrekTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrekTests.swift; sourceTree = "<group>"; };
 		6A2BB972C688C970A43F8706 /* AuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepository.swift; sourceTree = "<group>"; };
@@ -138,7 +138,7 @@
 		8D3751AABB25A233B2008788 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		8EBD085B49E4D2450109D389 /* YouTrackIssueRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueRepositoryTests.swift; sourceTree = "<group>"; };
 		8F4883822D7B393D38B7D0BD /* IssueDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDetailView.swift; sourceTree = "<group>"; };
-		96D7F507180F29C1DBEBFD1A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		96D7F507180F29C1DBEBFD1A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/YouTrek/App/unused_swiftui/SettingsView.swift; sourceTree = SOURCE_ROOT; };
 		9834245476CD9C6340D38207 /* IssueWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueWindows.swift; sourceTree = "<group>"; };
 		A11B22C33D44E55F66778899 /* IssueBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueBoard.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5C /* IssueBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueBoardView.swift; sourceTree = "<group>"; };
@@ -153,12 +153,12 @@
 		A2B3C4D5E6F708192A3B4C5D /* IssueDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDraftStore.swift; sourceTree = "<group>"; };
 		A33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueBoardLocalStore.swift; sourceTree = "<group>"; };
 		A44B55C66D77E88F99AABBCC /* YouTrackIssueBoardRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueBoardRepository.swift; sourceTree = "<group>"; };
-		A7B3D2E14F5A6789BC0D1E21 /* RootContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootContentView.swift; sourceTree = "<group>"; };
-		A7B3D2E14F5A6789BC0D1E22 /* RootContentView+Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootContentView+Layout.swift"; sourceTree = "<group>"; };
-		A7B3D2E14F5A6789BC0D1E23 /* RootContentView+Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootContentView+Sidebar.swift"; sourceTree = "<group>"; };
-		A7B3D2E14F5A6789BC0D1E24 /* RootContentView+Main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootContentView+Main.swift"; sourceTree = "<group>"; };
-		A7B3D2E14F5A6789BC0D1E25 /* RootContentView+Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootContentView+Inspector.swift"; sourceTree = "<group>"; };
-		A7B3D2E14F5A6789BC0D1E26 /* RootContentView+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootContentView+Helpers.swift"; sourceTree = "<group>"; };
+		A7B3D2E14F5A6789BC0D1E21 /* RootContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/YouTrek/App/unused_swiftui/RootContentView.swift; sourceTree = SOURCE_ROOT; };
+		A7B3D2E14F5A6789BC0D1E22 /* RootContentView+Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/YouTrek/App/unused_swiftui/RootContentView+Layout.swift"; sourceTree = SOURCE_ROOT; };
+		A7B3D2E14F5A6789BC0D1E23 /* RootContentView+Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/YouTrek/App/unused_swiftui/RootContentView+Sidebar.swift"; sourceTree = SOURCE_ROOT; };
+		A7B3D2E14F5A6789BC0D1E24 /* RootContentView+Main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/YouTrek/App/unused_swiftui/RootContentView+Main.swift"; sourceTree = SOURCE_ROOT; };
+		A7B3D2E14F5A6789BC0D1E25 /* RootContentView+Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/YouTrek/App/unused_swiftui/RootContentView+Inspector.swift"; sourceTree = SOURCE_ROOT; };
+		A7B3D2E14F5A6789BC0D1E26 /* RootContentView+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/YouTrek/App/unused_swiftui/RootContentView+Helpers.swift"; sourceTree = SOURCE_ROOT; };
 		A9B8C7D6E5F40123456789AB /* NetworkRequestMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkRequestMonitor.swift; sourceTree = "<group>"; };
 		A9B8C7D6E5F40123456789AD /* NetworkRequestFooterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkRequestFooterView.swift; sourceTree = "<group>"; };
 		A9C0A1D2E3F4A5B6C7D8E9F1 /* SavedQueryLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedQueryLocalStore.swift; sourceTree = "<group>"; };

@@ -39,6 +39,8 @@ struct AppKitSidebarPane: NSViewRepresentable {
         private var childNodesBySectionID: [String: [AnyObject]] = [:]
         private var isApplyingSelection = false
         private let contextMenu = NSMenu(title: "Sidebar")
+        private var lastAppliedSections: [SidebarSection] = []
+        private var lastAppliedSelectionID: SidebarItem.ID?
 
         init(parent: AppKitSidebarPane) {
             self.parent = parent
@@ -55,12 +57,20 @@ struct AppKitSidebarPane: NSViewRepresentable {
 
         func apply(parent: AppKitSidebarPane, outlineView: NSOutlineView) {
             self.parent = parent
-            rebuildNodes()
-            outlineView.reloadData()
-            for sectionNode in sectionNodes {
-                outlineView.expandItem(sectionNode)
+            let sectionsChanged = lastAppliedSections != parent.sections
+            if sectionsChanged {
+                rebuildNodes()
+                outlineView.reloadData()
+                for sectionNode in sectionNodes {
+                    outlineView.expandItem(sectionNode)
+                }
+                lastAppliedSections = parent.sections
             }
-            syncSelection(with: outlineView)
+            let selectionID = parent.selection?.id
+            if sectionsChanged || selectionID != lastAppliedSelectionID {
+                syncSelection(with: outlineView)
+                lastAppliedSelectionID = selectionID
+            }
         }
 
         private func rebuildNodes() {

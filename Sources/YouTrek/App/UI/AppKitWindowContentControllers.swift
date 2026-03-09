@@ -206,6 +206,7 @@ final class WorkspaceViewController: NSViewController {
 
     private var isRendering = false
     private var needsRender = false
+    private var isRenderScheduled = false
 
     init(container: AppContainer) {
         self.container = container
@@ -318,11 +319,17 @@ final class WorkspaceViewController: NSViewController {
     }
 
     private func scheduleRender() {
-        if isRendering {
-            needsRender = true
-            return
+        guard !isRenderScheduled else { return }
+        isRenderScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isRenderScheduled = false
+            if self.isRendering {
+                self.needsRender = true
+                return
+            }
+            self.render()
         }
-        render()
     }
 
     private func render() {

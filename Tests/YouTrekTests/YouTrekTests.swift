@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import XCTest
 @testable import YouTrek
 
@@ -27,6 +29,68 @@ final class YouTrekTests: XCTestCase {
 
         let todoSection = try XCTUnwrap(container.appState.sidebarSections.first { $0.id == "todo" })
         XCTAssertEqual(todoSection.title, "Todo Lists")
+    }
+
+    @MainActor
+    func testSidebarCoordinatorDoesNotReapplyStaleSelectionDuringSelectionChange() {
+        final class CoordinatorBox {
+            var coordinator: AppKitSidebarPane.Coordinator?
+        }
+
+        let page = IssueQuery.Page(size: 50, offset: 0)
+        let inbox = SidebarItem.inbox(page: page)
+        let assigned = SidebarItem.assignedToMe(page: page)
+        let sections = [SidebarSection(id: "smart", title: "Smart Filters", items: [inbox, assigned])]
+
+        let containerView = SidebarOutlineContainerView(frame: .init(x: 0, y: 0, width: 280, height: 320))
+        let outlineView = containerView.outlineView
+
+        var selectedItem: SidebarItem? = inbox
+        let coordinatorBox = CoordinatorBox()
+
+        let selectionBinding = Binding<SidebarItem?>(
+            get: { selectedItem },
+            set: { newValue in
+                let staleParent = AppKitSidebarPane(
+                    sections: sections,
+                    selection: .constant(selectedItem),
+                    onDeleteSavedSearch: nil,
+                    onRefreshBoard: nil,
+                    onOpenBoardInWeb: nil,
+                    boardSyncStatus: nil,
+                    onCreateTodoList: nil,
+                    onRenameTodoList: nil,
+                    onDeleteTodoList: nil
+                )
+                coordinatorBox.coordinator?.apply(parent: staleParent, outlineView: outlineView)
+                selectedItem = newValue
+            }
+        )
+
+        let pane = AppKitSidebarPane(
+            sections: sections,
+            selection: selectionBinding,
+            onDeleteSavedSearch: nil,
+            onRefreshBoard: nil,
+            onOpenBoardInWeb: nil,
+            boardSyncStatus: nil,
+            onCreateTodoList: nil,
+            onRenameTodoList: nil,
+            onDeleteTodoList: nil
+        )
+
+        let coordinator = pane.makeCoordinator()
+        coordinatorBox.coordinator = coordinator
+        coordinator.configure(outlineView: outlineView)
+        coordinator.apply(parent: pane, outlineView: outlineView)
+
+        outlineView.selectRowIndexes(IndexSet(integer: 2), byExtendingSelection: false)
+        coordinator.outlineViewSelectionDidChange(
+            Notification(name: NSOutlineView.selectionDidChangeNotification, object: outlineView)
+        )
+
+        XCTAssertEqual(selectedItem?.id, assigned.id)
+        XCTAssertEqual(outlineView.selectedRow, 2)
     }
 
     func testTodoListSidebarItemRoundTripsDocumentID() {
