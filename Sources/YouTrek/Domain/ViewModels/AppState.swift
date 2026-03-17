@@ -248,11 +248,11 @@ final class AppState: ObservableObject {
         searchQuery = query
     }
 
-    func showToast(_ message: String) {
+    func showToast(_ message: String, issueToOpen: IssueSummary? = nil) {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         withAnimation(.easeOut(duration: 0.2)) {
-            activeToast = ToastNotice(message: trimmed)
+            activeToast = ToastNotice(message: trimmed, issueToOpen: issueToOpen)
         }
     }
 
@@ -519,6 +519,11 @@ final class AppState: ObservableObject {
 struct ToastNotice: Identifiable, Equatable {
     let id = UUID()
     let message: String
+    let issueToOpen: IssueSummary?
+
+    var isInteractive: Bool {
+        issueToOpen != nil
+    }
 }
 
 struct SubIssueRefresh: Identifiable, Equatable {

@@ -190,6 +190,45 @@ final class YouTrekTests: XCTestCase {
         XCTAssertEqual(state.title, "Queue this issue")
     }
 
+    @MainActor
+    func testShowToastCanCarryCreatedIssueTarget() {
+        let state = AppState()
+        let issue = IssueSummary(
+            readableID: "YT-42",
+            title: "Refresh issue list after create",
+            projectName: "YouTrek"
+        )
+
+        state.showToast("Issue YT-42 created", issueToOpen: issue)
+
+        XCTAssertEqual(state.activeToast?.message, "Issue YT-42 created")
+        XCTAssertEqual(state.activeToast?.issueToOpen, issue)
+        XCTAssertEqual(state.activeToast?.isInteractive, true)
+    }
+
+    @MainActor
+    func testActivateToastOpensIssueInInspector() {
+        let container = AppContainer.preview
+        let issue = IssueSummary(
+            readableID: "YT-77",
+            title: "Open created issue from toast",
+            projectName: "YouTrek"
+        )
+        let toast = ToastNotice(message: "Issue YT-77 created", issueToOpen: issue)
+
+        container.appState.setInspectorVisible(false)
+        container.appState.selectedIssue = nil
+        container.appState.selectedIssueIDs = []
+        container.appState.activeToast = toast
+
+        container.activateToast(toast)
+
+        XCTAssertNil(container.appState.activeToast)
+        XCTAssertEqual(container.appState.selectedIssue, issue)
+        XCTAssertEqual(container.appState.selectedIssueIDs, [issue.id])
+        XCTAssertTrue(container.appState.isInspectorVisible)
+    }
+
     func testMarkdownImageParserSplitsTextAndImageFragments() {
         let markdown = """
         Before text

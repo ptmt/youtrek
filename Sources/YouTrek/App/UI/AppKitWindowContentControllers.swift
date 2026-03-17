@@ -998,7 +998,9 @@ private struct WorkspaceOverlayHostView: View {
             }
             .overlay(alignment: .topTrailing) {
                 if let toast = appState.activeToast {
-                    ToastView(toast: toast)
+                    ToastView(toast: toast) {
+                        container.activateToast(toast)
+                    }
                         .padding(.top, 12)
                         .padding(.trailing, 12)
                         .transition(.move(edge: .top).combined(with: .opacity))

@@ -32,6 +32,7 @@ final class AppContainer: ObservableObject {
     private var savedQueryLocalStore: SavedQueryLocalStore
     private var todoListStore: TodoListMarkdownStore
     private var lastLoadedIssueQuery: IssueQuery?
+    private var lastLoadedIssueSelection: SidebarItem?
     private var cachedProjects: [IssueProject] = []
     private var cachedSavedQueries: [SavedQuery] = []
     private var cachedBoards: [IssueBoard] = []
@@ -419,6 +420,7 @@ final class AppContainer: ObservableObject {
         appState.setIssuesLoading(false)
         appState.updateInboxFieldUsage(from: [])
         lastLoadedIssueQuery = nil
+        lastLoadedIssueSelection = nil
         statusOptionsCache.removeAll()
         priorityOptionsCache.removeAll()
         cachedSavedQueries = []
@@ -493,6 +495,7 @@ final class AppContainer: ObservableObject {
         if let queryLabel = query.diagnosticsLabel {
             recordDataEvent("Issue query: \(queryLabel).")
         }
+        lastLoadedIssueSelection = selection
         if query == lastLoadedIssueQuery {
             recordDataEvent("Load issues skipped (same query).")
             return
@@ -728,6 +731,8 @@ final class AppContainer: ObservableObject {
             projectNames: []
         )
         let query = boardIssueQuery(for: boardForQuery, page: item.query.page)
+        lastLoadedIssueSelection = item
+        lastLoadedIssueQuery = query
         if isSelected,
            let resolvedBoard,
            item.board != resolvedBoard {
@@ -900,6 +905,20 @@ final class AppContainer: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
+    func activateToast(_ toast: ToastNotice) {
+        guard let issue = toast.issueToOpen else { return }
+        appState.dismissToast()
+        openIssueFromToast(issue)
+    }
+
+    func openIssueFromToast(_ issue: IssueSummary) {
+        NSApp?.activate(ignoringOtherApps: true)
+        presentIssueInInspector(issue)
+        Task { [weak self] in
+            await self?.loadIssueDetail(for: issue)
+        }
+    }
+
     func openIssueFromTodoLink(_ readableID: String) async {
         let normalized = normalizeIssueReadableID(readableID)
         guard !normalized.isEmpty else { return }
@@ -907,9 +926,7 @@ final class AppContainer: ObservableObject {
             appState.showToast("Issue \(normalized) not found")
             return
         }
-        appState.setInspectorVisible(true)
-        appState.selectedIssue = issue
-        appState.selectedIssueIDs = [issue.id]
+        presentIssueInInspector(issue)
         await loadIssueDetail(for: issue)
     }
 
@@ -1035,8 +1052,8 @@ final class AppContainer: ObservableObject {
         let created = try await syncCoordinator.enqueue(label: "Create issue") {
             try await self.issueRepositorySwitcher.createIssue(draft: draft)
         }
-        appState.updateIssue(created)
-        markIssueSeen(created)
+        registerCreatedIssue(created, showToast: false)
+        scheduleIssueListRefreshAfterCreation()
         await linkSubIssueIfNeeded(parentReadableID: draft.parentIssueReadableID, childIssue: created)
         await uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
         return created
@@ -1073,6 +1090,7 @@ final class AppContainer: ObservableObject {
                 appState.selectedIssue = nil
                 appState.setIssuesLoading(true)
                 self.lastLoadedIssueQuery = nil
+                self.lastLoadedIssueSelection = nil
                 self.cachedSavedQueries = []
                 self.cachedBoards = []
                 self.statusOptionsCache.removeAll()
@@ -1274,6 +1292,71 @@ final class AppContainer: ObservableObject {
         return "\(trimmedTitle[..<endIndex])..."
     }
 
+    private func registerCreatedIssue(
+        _ created: IssueSummary,
+        removeDraftID: UUID? = nil,
+        resetComposer: Bool = false,
+        showToast: Bool = true
+    ) {
+        appState.updateIssue(created)
+        if let removeDraftID {
+            appState.removeDraft(id: removeDraftID)
+        }
+        if resetComposer {
+            issueComposer.resetDraft()
+        }
+        markIssueSeen(created)
+        if showToast {
+            appState.showToast("Issue \(created.readableID) created", issueToOpen: created)
+        }
+    }
+
+    private func scheduleIssueListRefreshAfterCreation() {
+        Task { [weak self] in
+            guard let self else { return }
+            await self.refreshIssueListsAfterCreation()
+        }
+    }
+
+    private func refreshIssueListsAfterCreation() async {
+        guard !requiresSetup else { return }
+        if let selection = appState.selectedSidebarItem,
+           !selection.isDraft,
+           !selection.isTodoList {
+            if selection.isBoard {
+                await refreshBoardIssues(for: selection)
+            } else {
+                await forceReloadIssues(for: selection)
+            }
+            return
+        }
+
+        guard let query = lastLoadedIssueQuery else { return }
+        let syncResult = await syncCoordinator.refreshIssuesWithStatus(
+            using: query,
+            currentUserID: appState.currentUserID,
+            currentUserLogin: appState.currentUserLogin,
+            currentUserDisplayName: appState.currentUserDisplayName,
+            paginate: lastLoadedIssueSelection?.isBoard == true
+        )
+        if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
+            recordIssueSyncCompleted()
+        }
+    }
+
+    private func forceReloadIssues(for selection: SidebarItem) async {
+        lastLoadedIssueQuery = nil
+        await loadIssues(for: selection)
+    }
+
+    private func presentIssueInInspector(_ issue: IssueSummary) {
+        appState.setInspectorVisible(true)
+        appState.selectedDraftID = nil
+        appState.selectedIssue = issue
+        appState.selectedIssueIDs = [issue.id]
+        markIssueSeen(issue)
+    }
+
     func submitDraftFromDialog(_ draft: IssueDraft, queueAsUncommitted: Bool = false) {
         if queueAsUncommitted {
             enqueueTodoUncommittedOperation(
@@ -1296,9 +1379,8 @@ final class AppContainer: ObservableObject {
                 }
                 _ = await issueDraftStore.markDraftSubmitted(id: record.id)
                 await MainActor.run {
-                    self.appState.updateIssue(created)
-                    self.markIssueSeen(created)
-                    self.appState.showToast("Issue \(created.readableID) created")
+                    self.registerCreatedIssue(created)
+                    self.scheduleIssueListRefreshAfterCreation()
                 }
                 await self.linkSubIssueIfNeeded(parentReadableID: draft.parentIssueReadableID, childIssue: created)
                 await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
@@ -1331,9 +1413,8 @@ final class AppContainer: ObservableObject {
                 }
                 _ = await issueDraftStore.markDraftSubmitted(id: record.id)
                 await MainActor.run {
-                    self.appState.updateIssue(created)
-                    self.markIssueSeen(created)
-                    self.appState.showToast("Issue \(created.readableID) created")
+                    self.registerCreatedIssue(created)
+                    self.scheduleIssueListRefreshAfterCreation()
                 }
                 await self.linkSubIssueIfNeeded(parentReadableID: draft.parentIssueReadableID, childIssue: created)
                 await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)
@@ -1389,10 +1470,8 @@ final class AppContainer: ObservableObject {
                 }
                 _ = await issueDraftStore.markDraftSubmitted(id: recordID)
                 await MainActor.run {
-                    self.appState.updateIssue(created)
-                    self.appState.removeDraft(id: recordID)
-                    self.issueComposer.resetDraft()
-                    self.appState.showToast("Issue \(created.readableID) created")
+                    self.registerCreatedIssue(created, removeDraftID: recordID, resetComposer: true)
+                    self.scheduleIssueListRefreshAfterCreation()
                 }
                 await self.linkSubIssueIfNeeded(parentReadableID: draft.parentIssueReadableID, childIssue: created)
                 await self.uploadDraftAttachmentsIfNeeded(draft: draft, issue: created)

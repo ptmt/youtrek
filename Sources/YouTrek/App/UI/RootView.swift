@@ -1517,14 +1517,35 @@ struct SyncCompleteIndicator: View {
 
 struct ToastView: View {
     let toast: ToastNotice
+    var onActivate: (() -> Void)? = nil
 
     var body: some View {
+        Group {
+            if let onActivate, toast.isInteractive {
+                Button(action: onActivate) {
+                    content
+                }
+                .buttonStyle(.plain)
+                .help(toast.issueToOpen.map { "Open \($0.readableID)" } ?? "")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Open issue")
+            } else {
+                content
+            }
+        }
+    }
+
+    private var content: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
             Text(toast.message)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.primary)
+            if toast.isInteractive {
+                Image(systemName: "arrow.right.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
