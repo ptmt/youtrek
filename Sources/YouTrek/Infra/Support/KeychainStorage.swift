@@ -5,12 +5,19 @@ import Security
 struct KeychainStorage {
     let service: String
     let accessGroup: String?
+    let synchronizable: Bool
     // When false, skip the data-protection keychain to use the legacy keychain store.
     let prefersDataProtectionKeychain: Bool
 
-    init(service: String, accessGroup: String? = nil, prefersDataProtectionKeychain: Bool = true) {
+    init(
+        service: String,
+        accessGroup: String? = nil,
+        synchronizable: Bool = false,
+        prefersDataProtectionKeychain: Bool = true
+    ) {
         self.service = service
         self.accessGroup = accessGroup
+        self.synchronizable = synchronizable
         self.prefersDataProtectionKeychain = prefersDataProtectionKeychain
     }
 
@@ -20,12 +27,12 @@ struct KeychainStorage {
             throw KeychainStorageError.operationFailed(status: errSecParam)
         }
         guard prefersDataProtectionKeychain else {
-            try saveData(data, account: trimmedAccount, useDataProtectionKeychain: false)
+            try savePreferredData(data, account: trimmedAccount, useDataProtectionKeychain: false)
             return
         }
         do {
-            try saveData(data, account: trimmedAccount, useDataProtectionKeychain: true)
-            let readback = try? loadData(
+            try savePreferredData(data, account: trimmedAccount, useDataProtectionKeychain: true)
+            let readback = try? loadPreferredData(
                 account: trimmedAccount,
                 useDataProtectionKeychain: true,
                 allowInteraction: false
@@ -33,11 +40,11 @@ struct KeychainStorage {
             if readback != nil {
                 try? deleteLegacy(account: trimmedAccount)
             } else {
-                try saveData(data, account: trimmedAccount, useDataProtectionKeychain: false)
+                try savePreferredData(data, account: trimmedAccount, useDataProtectionKeychain: false)
             }
         } catch {
             // Fall back to the legacy keychain when data protection keychain isn't available.
-            try saveData(data, account: trimmedAccount, useDataProtectionKeychain: false)
+            try savePreferredData(data, account: trimmedAccount, useDataProtectionKeychain: false)
         }
     }
 
@@ -45,11 +52,15 @@ struct KeychainStorage {
         let trimmedAccount = account.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedAccount.isEmpty else { return nil }
         if !prefersDataProtectionKeychain {
-            return try loadLegacy(account: trimmedAccount, allowInteraction: allowInteraction)
+            return try loadPreferredData(
+                account: trimmedAccount,
+                useDataProtectionKeychain: false,
+                allowInteraction: allowInteraction
+            )
         }
         var dataProtectionError: Error?
         do {
-            if let data = try loadData(
+            if let data = try loadPreferredData(
                 account: trimmedAccount,
                 useDataProtectionKeychain: true,
                 allowInteraction: allowInteraction
@@ -63,7 +74,7 @@ struct KeychainStorage {
         if let legacyData = try loadLegacy(account: trimmedAccount, allowInteraction: allowInteraction) {
             if dataProtectionError == nil {
                 do {
-                    try saveData(
+                    try savePreferredData(
                         legacyData,
                         account: trimmedAccount,
                         useDataProtectionKeychain: true
@@ -88,12 +99,12 @@ struct KeychainStorage {
             throw KeychainStorageError.operationFailed(status: errSecParam)
         }
         if !prefersDataProtectionKeychain {
-            try deleteLegacy(account: trimmedAccount)
+            try deletePreferredData(account: trimmedAccount, useDataProtectionKeychain: false)
             return
         }
         var dataProtectionError: Error?
         do {
-            try deleteData(account: trimmedAccount, useDataProtectionKeychain: true)
+            try deletePreferredData(account: trimmedAccount, useDataProtectionKeychain: true)
         } catch {
             dataProtectionError = error
         }
@@ -106,18 +117,23 @@ struct KeychainStorage {
         }
     }
 
-    private func identityQuery(for account: String, useDataProtectionKeychain: Bool) -> [String: Any] {
+    private func identityQuery(
+        for account: String,
+        useDataProtectionKeychain: Bool,
+        synchronizable: Bool
+    ) -> [String: Any] {
         // Keep identity keys minimal so reads/updates match what was written.
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: account,
+            kSecAttrSynchronizable as String: (synchronizable ? kCFBooleanTrue : kCFBooleanFalse) as Any
         ]
         if let accessGroup {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
         if useDataProtectionKeychain {
-            if #available(macOS 10.15, *) {
+            if #available(iOS 13.0, macOS 10.15, *) {
                 query[kSecUseDataProtectionKeychain as String] = true
             }
         }
@@ -127,9 +143,14 @@ struct KeychainStorage {
     private func addQuery(
         for account: String,
         data: Data,
-        useDataProtectionKeychain: Bool
+        useDataProtectionKeychain: Bool,
+        synchronizable: Bool
     ) -> [String: Any] {
-        var query = identityQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
+        var query = identityQuery(
+            for: account,
+            useDataProtectionKeychain: useDataProtectionKeychain,
+            synchronizable: synchronizable
+        )
         query[kSecValueData as String] = data
         // Ensure the keychain prompt includes a stable, non-empty label if it ever appears.
         query[kSecAttrLabel as String] = service
@@ -142,10 +163,15 @@ struct KeychainStorage {
     private func loadData(
         account: String,
         useDataProtectionKeychain: Bool,
+        synchronizable: Bool,
         allowInteraction: Bool
     ) throws -> Data? {
-        var query = identityQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
-        if #available(macOS 10.10, *) {
+        var query = identityQuery(
+            for: account,
+            useDataProtectionKeychain: useDataProtectionKeychain,
+            synchronizable: synchronizable
+        )
+        if #available(iOS 9.0, macOS 10.10, *) {
             let context = LAContext()
             context.interactionNotAllowed = !allowInteraction
             if allowInteraction {
@@ -160,7 +186,11 @@ struct KeychainStorage {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         switch status {
         case errSecSuccess:
-            ensureLabel(account: account, useDataProtectionKeychain: useDataProtectionKeychain)
+            ensureLabel(
+                account: account,
+                useDataProtectionKeychain: useDataProtectionKeychain,
+                synchronizable: synchronizable
+            )
             return item as? Data
         case errSecItemNotFound:
             return nil
@@ -174,58 +204,128 @@ struct KeychainStorage {
         }
     }
 
-    private func loadLegacy(account: String, allowInteraction: Bool) throws -> Data? {
-        var query = identityQuery(for: account, useDataProtectionKeychain: false)
-        if #available(macOS 10.10, *) {
-            let context = LAContext()
-            context.interactionNotAllowed = !allowInteraction
-            if allowInteraction {
-                context.localizedReason = "Allow YouTrek to access your saved token."
+    private func loadPreferredData(
+        account: String,
+        useDataProtectionKeychain: Bool,
+        allowInteraction: Bool
+    ) throws -> Data? {
+        if synchronizable {
+            if let data = try loadData(
+                account: account,
+                useDataProtectionKeychain: useDataProtectionKeychain,
+                synchronizable: true,
+                allowInteraction: allowInteraction
+            ) {
+                return data
             }
-            query[kSecUseAuthenticationContext as String] = context
-        }
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        switch status {
-        case errSecSuccess:
-            ensureLabel(account: account, useDataProtectionKeychain: false)
-            return item as? Data
-        case errSecItemNotFound:
+            if let legacyData = try loadData(
+                account: account,
+                useDataProtectionKeychain: useDataProtectionKeychain,
+                synchronizable: false,
+                allowInteraction: allowInteraction
+            ) {
+                do {
+                    try saveData(
+                        legacyData,
+                        account: account,
+                        useDataProtectionKeychain: useDataProtectionKeychain,
+                        synchronizable: true
+                    )
+                    try deleteData(
+                        account: account,
+                        useDataProtectionKeychain: useDataProtectionKeychain,
+                        synchronizable: false
+                    )
+                } catch {
+                    // Ignore migration failures; the legacy item is still available.
+                }
+                return legacyData
+            }
             return nil
-        case errSecInteractionNotAllowed:
-            if !allowInteraction {
-                return nil
+        }
+
+        return try loadData(
+            account: account,
+            useDataProtectionKeychain: useDataProtectionKeychain,
+            synchronizable: false,
+            allowInteraction: allowInteraction
+        )
+    }
+
+    private func loadLegacy(account: String, allowInteraction: Bool) throws -> Data? {
+        try loadPreferredData(
+            account: account,
+            useDataProtectionKeychain: false,
+            allowInteraction: allowInteraction
+        )
+    }
+
+    private func savePreferredData(
+        _ data: Data,
+        account: String,
+        useDataProtectionKeychain: Bool
+    ) throws {
+        let preferredSynchronizable = synchronizable
+        try saveData(
+            data,
+            account: account,
+            useDataProtectionKeychain: useDataProtectionKeychain,
+            synchronizable: preferredSynchronizable
+        )
+        guard preferredSynchronizable else { return }
+        try? deleteData(
+            account: account,
+            useDataProtectionKeychain: useDataProtectionKeychain,
+            synchronizable: false
+        )
+    }
+
+    private func deletePreferredData(account: String, useDataProtectionKeychain: Bool) throws {
+        var firstError: Error?
+        let variants = synchronizable ? [true, false] : [false]
+        for variant in variants {
+            do {
+                try deleteData(
+                    account: account,
+                    useDataProtectionKeychain: useDataProtectionKeychain,
+                    synchronizable: variant
+                )
+            } catch {
+                firstError = firstError ?? error
             }
-            fallthrough
-        default:
-            throw KeychainStorageError.operationFailed(status: status)
+        }
+
+        if let firstError {
+            throw firstError
         }
     }
 
     private func deleteLegacy(account: String) throws {
-        var query = identityQuery(for: account, useDataProtectionKeychain: false)
-        if #available(macOS 10.10, *) {
-            let context = LAContext()
-            context.interactionNotAllowed = true
-            query[kSecUseAuthenticationContext as String] = context
-        }
-        let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound || status == errSecInteractionNotAllowed else {
-            throw KeychainStorageError.operationFailed(status: status)
-        }
+        try deletePreferredData(account: account, useDataProtectionKeychain: false)
     }
 
-    private func saveData(_ data: Data, account: String, useDataProtectionKeychain: Bool) throws {
-        let insertQuery = addQuery(for: account, data: data, useDataProtectionKeychain: useDataProtectionKeychain)
+    private func saveData(
+        _ data: Data,
+        account: String,
+        useDataProtectionKeychain: Bool,
+        synchronizable: Bool
+    ) throws {
+        let insertQuery = addQuery(
+            for: account,
+            data: data,
+            useDataProtectionKeychain: useDataProtectionKeychain,
+            synchronizable: synchronizable
+        )
         let status = SecItemAdd(insertQuery as CFDictionary, nil)
         switch status {
         case errSecSuccess:
             return
         case errSecDuplicateItem:
-            let updateQuery = identityQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
+            let updateQuery = identityQuery(
+                for: account,
+                useDataProtectionKeychain: useDataProtectionKeychain,
+                synchronizable: synchronizable
+            )
             let attributes: [String: Any] = [
                 kSecValueData as String: data,
                 kSecAttrLabel as String: service
@@ -239,16 +339,33 @@ struct KeychainStorage {
         }
     }
 
-    private func deleteData(account: String, useDataProtectionKeychain: Bool) throws {
-        let query = identityQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
+    private func deleteData(
+        account: String,
+        useDataProtectionKeychain: Bool,
+        synchronizable: Bool
+    ) throws {
+        var query = identityQuery(
+            for: account,
+            useDataProtectionKeychain: useDataProtectionKeychain,
+            synchronizable: synchronizable
+        )
+        if #available(iOS 9.0, macOS 10.10, *) {
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            query[kSecUseAuthenticationContext as String] = context
+        }
         let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
+        guard status == errSecSuccess || status == errSecItemNotFound || status == errSecInteractionNotAllowed else {
             throw KeychainStorageError.operationFailed(status: status)
         }
     }
 
-    private func ensureLabel(account: String, useDataProtectionKeychain: Bool) {
-        let query = identityQuery(for: account, useDataProtectionKeychain: useDataProtectionKeychain)
+    private func ensureLabel(account: String, useDataProtectionKeychain: Bool, synchronizable: Bool) {
+        let query = identityQuery(
+            for: account,
+            useDataProtectionKeychain: useDataProtectionKeychain,
+            synchronizable: synchronizable
+        )
         let attributes: [String: Any] = [kSecAttrLabel as String: service]
         let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
@@ -280,6 +397,7 @@ enum KeychainAccessGroupResolver {
     ]
 
     static func resolve(matchingSuffix suffix: String) -> String? {
+        #if os(macOS)
         guard let task = SecTaskCreateFromSelf(nil) else { return nil }
         for key in entitlementKeys {
             guard let value = SecTaskCopyValueForEntitlement(
@@ -294,6 +412,7 @@ enum KeychainAccessGroupResolver {
                 return match
             }
         }
+        #endif
         return nil
     }
 
@@ -307,6 +426,7 @@ enum KeychainAccessGroupResolver {
     }
 
     static func availableGroups() -> [String] {
+        #if os(macOS)
         guard let task = SecTaskCreateFromSelf(nil) else { return [] }
         var groups: [String] = []
         for key in entitlementKeys {
@@ -322,5 +442,8 @@ enum KeychainAccessGroupResolver {
             }
         }
         return Array(Set(groups))
+        #else
+        return []
+        #endif
     }
 }

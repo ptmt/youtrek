@@ -4,6 +4,8 @@ struct AppConfigurationStore {
     private enum Keys {
         static let accounts = "com.potomushto.youtrek.config.accounts"
         static let activeAccountID = "com.potomushto.youtrek.config.active-account-id"
+        static let syncedAccounts = "com.potomushto.youtrek.config.synced-accounts"
+        static let syncedActiveAccountID = "com.potomushto.youtrek.config.synced-active-account-id"
         static let baseURL = "com.potomushto.youtrek.config.base-url"
         static let tokenAccount = "com.potomushto.youtrek.config.token"
         static let lastSidebarSelectionID = "com.potomushto.youtrek.config.last-sidebar-selection"
@@ -15,7 +17,8 @@ struct AppConfigurationStore {
         static let initialSavedSearchSyncCompleted = "com.potomushto.youtrek.config.initial-sync-saved-searches"
     }
 
-    private static let sharedSuiteName = "com.potomushto.youtrek.shared"
+    private static let sharedSuiteName = "group.com.potomushto.youtrek.shared"
+    private static let legacySharedSuiteNames = ["com.potomushto.youtrek.shared"]
     private static let sharedKeychainGroupSuffix = "com.potomushto.youtrek.shared"
     private static let configKeychainGroupSuffix = "com.potomushto.youtrek.config"
     private static let legacyKeychainGroupSuffixes = [
@@ -28,15 +31,12 @@ struct AppConfigurationStore {
 
     init(
         defaults: UserDefaults = AppConfigurationStore.defaultDefaults(),
-        keychain: KeychainStorage = KeychainStorage(
-            service: "com.potomushto.youtrek.config",
-            accessGroup: AppConfigurationStore.resolveAccessGroup(),
-            prefersDataProtectionKeychain: false
-        )
+        keychain: KeychainStorage = AppConfigurationStore.defaultKeychain(service: "com.potomushto.youtrek.config")
     ) {
         self.defaults = defaults
         self.keychain = keychain
         migrateLegacyAccountsIfNeeded()
+        refreshSyncedMetadataIfNeeded()
     }
 
     private static func defaultDefaults() -> UserDefaults {
@@ -44,10 +44,44 @@ struct AppConfigurationStore {
             return .standard
         }
         migrateDefaultsIfNeeded(from: .standard, to: sharedDefaults)
+        for legacySuiteName in legacySharedSuiteNames {
+            if let legacyDefaults = UserDefaults(suiteName: legacySuiteName) {
+                migrateDefaultsIfNeeded(from: legacyDefaults, to: sharedDefaults)
+            }
+        }
         return sharedDefaults
     }
 
+    static func sharedDefaultsSuiteName() -> String {
+        sharedSuiteName
+    }
+
+    static func sharedAccessGroup() -> String? {
+        resolveAccessGroup()
+    }
+
+    static func defaultKeychain(
+        service: String,
+        prefersDataProtectionKeychain: Bool = false
+    ) -> KeychainStorage {
+        KeychainStorage(
+            service: service,
+            accessGroup: sharedAccessGroup(),
+            synchronizable: true,
+            prefersDataProtectionKeychain: prefersDataProtectionKeychain
+        )
+    }
+
     private static func migrateDefaultsIfNeeded(from source: UserDefaults, to target: UserDefaults) {
+        if target.data(forKey: Keys.accounts) == nil,
+           let accounts = source.data(forKey: Keys.accounts) {
+            target.set(accounts, forKey: Keys.accounts)
+        }
+        if target.string(forKey: Keys.activeAccountID) == nil,
+           let activeAccountID = source.string(forKey: Keys.activeAccountID),
+           !activeAccountID.isEmpty {
+            target.set(activeAccountID, forKey: Keys.activeAccountID)
+        }
         if target.string(forKey: Keys.baseURL) == nil,
            let baseURL = source.string(forKey: Keys.baseURL),
            !baseURL.isEmpty {
@@ -88,14 +122,14 @@ struct AppConfigurationStore {
     }
 
     func loadAccounts() -> [StoredAccount] {
-        migrateLegacyAccountsIfNeeded()
+        refreshSyncedMetadataIfNeeded()
         let accounts = loadStoredAccounts()
         _ = ensureActiveAccountID(in: accounts)
         return accounts
     }
 
     func activeAccountID() -> UUID? {
-        migrateLegacyAccountsIfNeeded()
+        refreshSyncedMetadataIfNeeded()
         let accounts = loadStoredAccounts()
         return ensureActiveAccountID(in: accounts)
     }
@@ -108,18 +142,18 @@ struct AppConfigurationStore {
 
     @discardableResult
     func activateAccount(id: UUID) -> Bool {
-        migrateLegacyAccountsIfNeeded()
+        refreshSyncedMetadataIfNeeded()
         var accounts = loadStoredAccounts()
         guard let index = accounts.firstIndex(where: { $0.id == id }) else { return false }
         accounts[index].lastUsedAt = Date()
         saveStoredAccounts(accounts)
-        defaults.set(id.uuidString, forKey: Keys.activeAccountID)
+        saveActiveAccountID(id)
         return true
     }
 
     func setActiveAccountID(_ id: UUID?) {
         guard let id else {
-            defaults.removeObject(forKey: Keys.activeAccountID)
+            saveActiveAccountID(nil)
             return
         }
         _ = activateAccount(id: id)
@@ -180,7 +214,7 @@ struct AppConfigurationStore {
         }
 
         saveStoredAccounts(accounts)
-        defaults.set(resolvedAccount.id.uuidString, forKey: Keys.activeAccountID)
+        saveActiveAccountID(resolvedAccount.id)
         return resolvedAccount
     }
 
@@ -191,15 +225,15 @@ struct AppConfigurationStore {
         accounts.removeAll { $0.id == id }
         saveStoredAccounts(accounts)
         guard !accounts.isEmpty else {
-            defaults.removeObject(forKey: Keys.activeAccountID)
+            saveActiveAccountID(nil)
             return nil
         }
         let next = accounts.sorted(by: accountSortPredicate).first
         if let next {
-            defaults.set(next.id.uuidString, forKey: Keys.activeAccountID)
+            saveActiveAccountID(next.id)
             return next.id
         }
-        defaults.removeObject(forKey: Keys.activeAccountID)
+        saveActiveAccountID(nil)
         return nil
     }
 
@@ -267,7 +301,7 @@ struct AppConfigurationStore {
         let data = Data(token.utf8)
         let tokenKey = tokenAccountKey(for: accountID)
         try keychain.save(data: data, account: tokenKey)
-        if keychain.accessGroup != nil {
+        if keychain.accessGroup != nil || keychain.synchronizable {
             try? KeychainStorage(
                 service: "com.potomushto.youtrek.config",
                 prefersDataProtectionKeychain: false
@@ -280,7 +314,7 @@ struct AppConfigurationStore {
         guard let accountID = activeAccountID() else { return }
         let tokenKey = tokenAccountKey(for: accountID)
         try keychain.delete(account: tokenKey)
-        if keychain.accessGroup != nil {
+        if keychain.accessGroup != nil || keychain.synchronizable {
             try? KeychainStorage(
                 service: "com.potomushto.youtrek.config",
                 prefersDataProtectionKeychain: false
@@ -391,11 +425,22 @@ struct AppConfigurationStore {
     }
 
     private static func resolveAccessGroup() -> String? {
+        if let infoPrefix = appIdentifierPrefixFromBundle() {
+            return infoPrefix + sharedKeychainGroupSuffix
+        }
         let preferredSuffixes = [sharedKeychainGroupSuffix, configKeychainGroupSuffix]
             + legacyKeychainGroupSuffixes
         if let match = KeychainAccessGroupResolver.resolve(matchingSuffixes: preferredSuffixes) { return match }
         let availableGroups = KeychainAccessGroupResolver.availableGroups().sorted()
         return availableGroups.first
+    }
+
+    private static func appIdentifierPrefixFromBundle(bundle: Bundle = .main) -> String? {
+        guard let raw = bundle.object(forInfoDictionaryKey: "APP_IDENTIFIER_PREFIX") as? String else {
+            return nil
+        }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func loadFromAlternateAccessGroups(allowInteraction: Bool) throws -> Data? {
@@ -404,7 +449,12 @@ struct AppConfigurationStore {
         let candidates = availableGroups.filter { $0 != currentGroup }
         guard !candidates.isEmpty else { return nil }
         for group in candidates {
-            let alternate = KeychainStorage(service: keychain.service, accessGroup: group)
+            let alternate = KeychainStorage(
+                service: keychain.service,
+                accessGroup: group,
+                synchronizable: keychain.synchronizable,
+                prefersDataProtectionKeychain: keychain.prefersDataProtectionKeychain
+            )
             if let data = try alternate.load(
                 account: Keys.tokenAccount,
                 allowInteraction: allowInteraction
@@ -422,7 +472,12 @@ struct AppConfigurationStore {
         let candidates = availableGroups.filter { $0 != currentGroup }
         guard !candidates.isEmpty else { return nil }
         for group in candidates {
-            let alternate = KeychainStorage(service: keychain.service, accessGroup: group)
+            let alternate = KeychainStorage(
+                service: keychain.service,
+                accessGroup: group,
+                synchronizable: keychain.synchronizable,
+                prefersDataProtectionKeychain: keychain.prefersDataProtectionKeychain
+            )
             if let data = try alternate.load(
                 account: account,
                 allowInteraction: allowInteraction
@@ -489,7 +544,7 @@ struct AppConfigurationStore {
             lastUsedAt: Date()
         )
         saveStoredAccounts([account])
-        defaults.set(account.id.uuidString, forKey: Keys.activeAccountID)
+        saveActiveAccountID(account.id)
 
         if let legacyData = try? loadTokenData(account: Keys.tokenAccount, allowInteraction: false) {
             try? keychain.save(data: legacyData, account: tokenAccountKey(for: account.id))
@@ -508,7 +563,7 @@ struct AppConfigurationStore {
         encoder.outputFormatting = []
         encoder.dateEncodingStrategy = .iso8601
         guard let data = try? encoder.encode(accounts) else { return }
-        defaults.set(data, forKey: Keys.accounts)
+        saveStoredAccountsData(data)
     }
 
     private func ensureActiveAccountID(in accounts: [StoredAccount]) -> UUID? {
@@ -523,7 +578,7 @@ struct AppConfigurationStore {
         }
         let sorted = accounts.sorted(by: accountSortPredicate)
         guard let fallback = sorted.first else { return nil }
-        defaults.set(fallback.id.uuidString, forKey: Keys.activeAccountID)
+        saveActiveAccountID(fallback.id)
         return fallback.id
     }
 
@@ -571,6 +626,64 @@ struct AppConfigurationStore {
 
     private func tokenAccountKey(for accountID: UUID) -> String {
         "\(Keys.tokenAccount).\(accountID.uuidString)"
+    }
+
+    private func refreshSyncedMetadataIfNeeded() {
+        migrateLegacyAccountsIfNeeded()
+
+        let localAccountsData = defaults.data(forKey: Keys.accounts)
+        if let syncedAccountsData = loadSyncedAccounts() {
+            if syncedAccountsData != localAccountsData {
+                defaults.set(syncedAccountsData, forKey: Keys.accounts)
+            }
+        } else if let localAccountsData {
+            saveSyncedAccountsData(localAccountsData)
+        }
+
+        let localActiveID = defaults.string(forKey: Keys.activeAccountID).flatMap(UUID.init(uuidString:))
+        if let syncedActiveID = loadSyncedActiveAccountID() {
+            if localActiveID != syncedActiveID {
+                defaults.set(syncedActiveID.uuidString, forKey: Keys.activeAccountID)
+            }
+        } else if let localActiveID {
+            saveSyncedActiveAccountID(localActiveID)
+        }
+    }
+
+    private func saveStoredAccountsData(_ data: Data) {
+        defaults.set(data, forKey: Keys.accounts)
+        saveSyncedAccountsData(data)
+    }
+
+    private func saveSyncedAccountsData(_ data: Data) {
+        try? keychain.save(data: data, account: Keys.syncedAccounts)
+    }
+
+    private func loadSyncedAccounts() -> Data? {
+        try? keychain.load(account: Keys.syncedAccounts, allowInteraction: false)
+    }
+
+    private func saveActiveAccountID(_ id: UUID?) {
+        guard let id else {
+            defaults.removeObject(forKey: Keys.activeAccountID)
+            try? keychain.delete(account: Keys.syncedActiveAccountID)
+            return
+        }
+        defaults.set(id.uuidString, forKey: Keys.activeAccountID)
+        saveSyncedActiveAccountID(id)
+    }
+
+    private func saveSyncedActiveAccountID(_ id: UUID) {
+        try? keychain.save(data: Data(id.uuidString.utf8), account: Keys.syncedActiveAccountID)
+    }
+
+    private func loadSyncedActiveAccountID() -> UUID? {
+        guard let data = try? keychain.load(account: Keys.syncedActiveAccountID, allowInteraction: false),
+              let raw = String(data: data, encoding: .utf8)
+        else {
+            return nil
+        }
+        return UUID(uuidString: raw)
     }
 }
 

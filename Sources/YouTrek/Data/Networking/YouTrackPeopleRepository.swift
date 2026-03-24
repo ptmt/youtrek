@@ -22,14 +22,11 @@ final class YouTrackPeopleRepository: PeopleRepository, Sendable {
         let trimmedQuery = query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let trimmedProjectID = projectID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-        if trimmedQuery.isEmpty, !trimmedProjectID.isEmpty {
-            do {
-                if let projectAssignees = try await fetchProjectAssignees(projectID: trimmedProjectID) {
-                    return sortedPeople(projectAssignees)
-                }
-            } catch {
-                // Fall back to the global directory when project-scoped assignees cannot be resolved.
+        if !trimmedProjectID.isEmpty {
+            if let projectAssignees = try await fetchProjectAssignees(projectID: trimmedProjectID) {
+                return filterPeople(sortedPeople(projectAssignees), matching: trimmedQuery)
             }
+            return []
         }
 
         let data = try await client.get(path: "users", queryItems: peopleQueryItems(query: trimmedQuery))
@@ -71,6 +68,18 @@ private extension YouTrackPeopleRepository {
 
     func sortedPeople(_ options: [IssueFieldOption]) -> [IssueFieldOption] {
         options.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    func filterPeople(_ options: [IssueFieldOption], matching query: String) -> [IssueFieldOption] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return options }
+
+        return options.filter { option in
+            [option.displayName, option.name, option.login ?? ""]
+                .joined(separator: " ")
+                .lowercased()
+                .contains(needle)
+        }
     }
 
     static func assigneeBundleID(from field: YouTrackProjectCustomField) -> String? {

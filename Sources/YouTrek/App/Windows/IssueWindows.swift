@@ -1312,6 +1312,179 @@ struct PeoplePickerView: View {
     }
 }
 
+struct ProjectAssigneePickerPopover: View {
+    @EnvironmentObject private var container: AppContainer
+    let projectID: String?
+    let projectName: String?
+    let selectedOption: IssueFieldOption?
+    let onSelect: (IssueFieldOption?) -> Void
+
+    @State private var query: String = ""
+    @State private var options: [IssueFieldOption] = []
+    @State private var resolvedProjectID: String?
+    @State private var isLoading = false
+    @State private var searchTask: Task<Void, Never>?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Assignee")
+                .font(.headline)
+
+            TextField("Search project assignees", text: $query)
+                .onChange(of: query) { _, newValue in
+                    scheduleSearch(newValue)
+                }
+
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    Button {
+                        onSelect(nil)
+                    } label: {
+                        projectAssigneeRow(title: "Unassigned", subtitle: nil, isSelected: selectedOption == nil)
+                    }
+                    .buttonStyle(.plain)
+
+                    if options.isEmpty, !isLoading {
+                        Text(emptyMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 4)
+                    } else {
+                        ForEach(options, id: \.stableID) { option in
+                            Button {
+                                onSelect(option)
+                            } label: {
+                                PersonRow(option: option, isSelected: option.stableID == selectedOption?.stableID)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 220)
+
+            Text(helperText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .frame(width: 320)
+        .task(id: projectReloadKey) {
+            await loadOptions(query: nil)
+        }
+        .onDisappear {
+            searchTask?.cancel()
+        }
+    }
+
+    private var projectReloadKey: String {
+        [
+            projectID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            projectName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        ].joined(separator: "|")
+    }
+
+    private var helperText: String {
+        if let resolvedProjectID, !resolvedProjectID.isEmpty {
+            return query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "Showing assignees allowed in this project."
+                : "Filtering assignees allowed in this project."
+        }
+        return "Project assignees are unavailable until the project can be resolved."
+    }
+
+    private var emptyMessage: String {
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "No assignees available for this project."
+        }
+        return "No assignees match that search."
+    }
+
+    private func scheduleSearch(_ newValue: String) {
+        searchTask?.cancel()
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            await loadOptions(query: newValue)
+        }
+    }
+
+    private func loadOptions(query: String?) async {
+        let resolvedProjectID = await resolveProjectID()
+        if Task.isCancelled { return }
+
+        await MainActor.run {
+            self.resolvedProjectID = resolvedProjectID
+            isLoading = true
+        }
+
+        let trimmedQuery = query?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let results: [IssueFieldOption]
+        if let resolvedProjectID, !resolvedProjectID.isEmpty {
+            results = await container.searchPeople(
+                query: trimmedQuery?.isEmpty == false ? trimmedQuery : nil,
+                projectID: resolvedProjectID
+            )
+        } else {
+            results = []
+        }
+        if Task.isCancelled { return }
+
+        await MainActor.run {
+            options = mergeSelectedOption(into: results)
+            isLoading = false
+        }
+    }
+
+    private func resolveProjectID() async -> String? {
+        let trimmedProjectID = projectID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedProjectID.isEmpty {
+            if trimmedProjectID.isLikelyYouTrackID {
+                return trimmedProjectID
+            }
+            if let resolved = await container.resolveProjectID(named: trimmedProjectID) {
+                return resolved
+            }
+        }
+
+        let trimmedProjectName = projectName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedProjectName.isEmpty else { return nil }
+        return await container.resolveProjectID(named: trimmedProjectName)
+    }
+
+    private func mergeSelectedOption(into options: [IssueFieldOption]) -> [IssueFieldOption] {
+        guard let selectedOption else { return options }
+        guard !options.contains(where: { $0.stableID == selectedOption.stableID }) else { return options }
+        return [selectedOption] + options
+    }
+
+    private func projectAssigneeRow(title: String, subtitle: String?, isSelected: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "person.crop.circle.badge.xmark")
+                .foregroundStyle(.secondary)
+                .frame(width: 20, height: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
 struct PersonRow: View {
     let option: IssueFieldOption
     let isSelected: Bool
@@ -1319,7 +1492,14 @@ struct PersonRow: View {
     var body: some View {
         HStack(spacing: 8) {
             UserAvatarView(person: Person(displayName: option.displayName, avatarURL: option.avatarURL), size: 20)
-            Text(option.displayName)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(option.displayName)
+                if let login = option.login, !login.isEmpty {
+                    Text("@\(login)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Spacer()
             if isSelected {
                 Image(systemName: "checkmark")
@@ -1331,6 +1511,12 @@ struct PersonRow: View {
 }
 
 private extension String {
+    var isLikelyYouTrackID: Bool {
+        let parts = split(separator: "-")
+        guard parts.count == 2 else { return false }
+        return parts.allSatisfy { !$0.isEmpty && $0.allSatisfy(\.isNumber) }
+    }
+
     var trimmedNonEmpty: String? {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed

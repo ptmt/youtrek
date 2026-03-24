@@ -1734,126 +1734,21 @@ private struct AssigneePickerPopover: View {
     @EnvironmentObject private var container: AppContainer
     let issue: IssueSummary
     @Binding var isPresented: Bool
-    @State private var query: String = ""
-    @State private var remoteOptions: [IssueFieldOption] = []
-    @State private var isSearching: Bool = false
-    @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Assign to")
-                .font(.headline)
-            TextField("Search people", text: $query)
-                .onChange(of: query) { _, newValue in
-                    scheduleSearch(newValue)
-                }
-
-            if isSearching {
-                ProgressView()
-                    .controlSize(.small)
+        ProjectAssigneePickerPopover(
+            projectID: nil,
+            projectName: issue.projectName,
+            selectedOption: issue.assignee?.issueFieldOption,
+            onSelect: { option in
+                selectAssignee(option)
             }
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 6) {
-                    Button {
-                        selectAssignee(nil)
-                    } label: {
-                        UnassignedRow(isSelected: issue.assignee == nil)
-                    }
-                    .buttonStyle(.plain)
-
-                    ForEach(mergedOptions, id: \.stableID) { option in
-                        Button {
-                            selectAssignee(option)
-                        } label: {
-                            AssigneeOptionRow(option: option, isSelected: option.stableID == selectedStableID)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .frame(maxHeight: 220)
-
-            Text(localHint)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(12)
-        .frame(width: 300)
-        .onDisappear {
-            searchTask?.cancel()
-        }
+        )
+        .environmentObject(container)
     }
 
     private var selectedStableID: String? {
         issue.assignee?.issueFieldOption?.stableID
-    }
-
-    private var localHint: String {
-        query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "Showing people you've already worked with. Type to search the directory."
-            : "Local matches are shown first. Keep typing to refine the list."
-    }
-
-    private var mergedOptions: [IssueFieldOption] {
-        let local = localOptions
-        var seen = Set(local.map(\.stableID))
-        var merged = local
-        for option in remoteOptions where !seen.contains(option.stableID) {
-            merged.append(option)
-            seen.insert(option.stableID)
-        }
-        return merged
-    }
-
-    private var localOptions: [IssueFieldOption] {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        var latestByID: [String: (IssueFieldOption, Date)] = [:]
-        for issue in container.appState.issues {
-            guard let option = issue.assignee?.issueFieldOption else { continue }
-            if !needle.isEmpty {
-                let haystack = [option.displayName, option.login].compactMap { $0 }.joined(separator: " ").lowercased()
-                guard haystack.contains(needle) else { continue }
-            }
-            let updatedAt = issue.updatedAt
-            if let existing = latestByID[option.stableID], existing.1 >= updatedAt {
-                continue
-            }
-            latestByID[option.stableID] = (option, updatedAt)
-        }
-        return latestByID.values.sorted { lhs, rhs in
-            if lhs.1 != rhs.1 {
-                return lhs.1 > rhs.1
-            }
-            return lhs.0.displayName.localizedCaseInsensitiveCompare(rhs.0.displayName) == .orderedAscending
-        }
-        .map { $0.0 }
-    }
-
-    private func scheduleSearch(_ newValue: String) {
-        searchTask?.cancel()
-        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= 2 else {
-            remoteOptions = []
-            isSearching = false
-            return
-        }
-        searchTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            await runSearch(query: trimmed)
-        }
-    }
-
-    private func runSearch(query: String) async {
-        await MainActor.run {
-            isSearching = true
-        }
-        let results = await container.searchPeople(query: query, projectID: nil)
-        if Task.isCancelled { return }
-        await MainActor.run {
-            isSearching = false
-            remoteOptions = results
-        }
     }
 
     private func selectAssignee(_ option: IssueFieldOption?) {
@@ -1870,51 +1765,6 @@ private struct AssigneePickerPopover: View {
             await container.updateIssue(id: issue.id, patch: patch)
         }
         isPresented = false
-    }
-}
-
-private struct AssigneeOptionRow: View {
-    let option: IssueFieldOption
-    let isSelected: Bool
-
-    var body: some View {
-        HStack(spacing: 8) {
-            UserAvatarView(person: Person.from(option: option), size: IssueDetailMetrics.assigneeOptionAvatarSize)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(option.displayName)
-                if let login = option.login, !login.isEmpty {
-                    Text(login)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .contentShape(Rectangle())
-    }
-}
-
-private struct UnassignedRow: View {
-    let isSelected: Bool
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "person.crop.circle.badge.questionmark")
-                .font(.system(size: IssueDetailMetrics.assigneeOptionAvatarSize * 0.6, weight: .semibold))
-                .frame(width: IssueDetailMetrics.assigneeOptionAvatarSize, height: IssueDetailMetrics.assigneeOptionAvatarSize)
-                .foregroundStyle(.secondary)
-            Text("Unassigned")
-            Spacer()
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .contentShape(Rectangle())
     }
 }
 

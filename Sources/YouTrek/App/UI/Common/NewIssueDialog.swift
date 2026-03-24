@@ -8,18 +8,26 @@ struct NewIssueDialog: View {
     @State private var projects: [IssueProject] = []
     @State private var statusOptions: [IssueFieldOption] = []
     @State private var priorityOptions: [IssueFieldOption] = []
-    @State private var assigneeOptions: [IssueFieldOption] = []
     @State private var customFields: [IssueField] = []
     @State private var isLoadingProjects = false
     @State private var isLoadingFields = false
     @State private var isLoadingCustomFields = false
     @State private var isProjectPickerPresented = false
+    @State private var isAssigneePickerPresented = false
     @State private var isMoreOptionsPresented = false
     @State private var showsAllCustomFields = false
     @FocusState private var isTitleFocused: Bool
 
     private var selectedProject: IssueProject? {
-        projects.first { $0.id == state.projectID }
+        guard let identifier = state.projectID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !identifier.isEmpty else {
+            return nil
+        }
+        return projects.first { $0.matches(identifier: identifier) }
+    }
+
+    private var effectiveProjectID: String? {
+        selectedProject?.id ?? state.projectID
     }
 
     private var projectChipLabel: String {
@@ -31,7 +39,7 @@ struct NewIssueDialog: View {
 
     private var projectSelection: ProjectSelection {
         ProjectSelection(
-            projectID: state.projectID,
+            projectID: effectiveProjectID,
             projectName: selectedProject?.name ?? selectedProject?.shortName
         )
     }
@@ -69,6 +77,7 @@ struct NewIssueDialog: View {
         .background(.regularMaterial)
         .task {
             await loadInitialData()
+            await loadFieldsForProject()
             isTitleFocused = true
         }
         .task(id: state.projectID) {
@@ -266,29 +275,27 @@ struct NewIssueDialog: View {
     }
 
     private var assigneeChip: some View {
-        Menu {
-            Button("Unassigned") {
-                state.assigneeOption = nil
-            }
-            Divider()
-            if assigneeOptions.isEmpty && !isLoadingFields {
-                Text("No assignees loaded")
-            } else {
-                ForEach(assigneeOptions, id: \.stableID) { option in
-                    Button {
-                        state.assigneeOption = option
-                    } label: {
-                        Text(option.displayName)
-                    }
-                }
-            }
+        Button {
+            isAssigneePickerPresented.toggle()
         } label: {
             metadataChipLabel(
                 icon: "person",
                 text: state.assigneeOption?.displayName ?? "Assignee"
             )
         }
-        .menuStyle(.borderlessButton)
+        .buttonStyle(.plain)
+        .popover(isPresented: $isAssigneePickerPresented, arrowEdge: .bottom) {
+            ProjectAssigneePickerPopover(
+                projectID: effectiveProjectID,
+                projectName: selectedProject?.name ?? selectedProject?.shortName,
+                selectedOption: state.assigneeOption,
+                onSelect: { option in
+                    state.assigneeOption = option
+                    isAssigneePickerPresented = false
+                }
+            )
+            .environmentObject(container)
+        }
     }
 
     private var moreChip: some View {
@@ -530,7 +537,7 @@ struct NewIssueDialog: View {
 
     private var canCreate: Bool {
         !state.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        state.projectID != nil
+        effectiveProjectID != nil
     }
 
     private var createButtonTitle: String {
@@ -558,11 +565,9 @@ struct NewIssueDialog: View {
     }
 
     private func loadFieldsForProject() async {
-        guard let projectID = state.projectID,
-              let project = projects.first(where: { $0.id == projectID }) else {
+        guard let project = selectedProject else {
             statusOptions = []
             priorityOptions = []
-            assigneeOptions = []
             customFields = []
             return
         }
@@ -575,12 +580,10 @@ struct NewIssueDialog: View {
         let issueContext = issueContext(for: project)
         async let statusTask = container.loadStatusOptions(for: issueContext)
         async let priorityTask = container.loadPriorityOptions(for: issueContext)
-        async let assigneeTask = container.searchPeople(query: nil, projectID: projectID)
         async let customFieldsTask = loadCustomFields(for: project)
 
         statusOptions = await statusTask
         priorityOptions = await priorityTask
-        assigneeOptions = await assigneeTask
         customFields = await customFieldsTask
 
         isLoadingFields = false
@@ -630,7 +633,7 @@ struct NewIssueDialog: View {
     }
 
     private func prefetchPeopleIfNeeded() {
-        guard let projectID = state.projectID else { return }
+        guard let projectID = effectiveProjectID else { return }
         Task {
             let options = await container.searchPeople(query: nil, projectID: projectID)
             await MainActor.run {
@@ -640,7 +643,7 @@ struct NewIssueDialog: View {
     }
 
     private func searchPeople(query: String, fieldID: String) async {
-        guard let projectID = state.projectID else { return }
+        guard let projectID = effectiveProjectID else { return }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let options = await container.searchPeople(query: trimmed.isEmpty ? nil : trimmed, projectID: projectID)
         await MainActor.run {
@@ -714,7 +717,7 @@ struct NewIssueDialog: View {
 
     private func createIssue() {
         let trimmedTitle = state.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty, let projectID = state.projectID else { return }
+        guard !trimmedTitle.isEmpty, let projectID = effectiveProjectID else { return }
 
         var customFields: [IssueDraftField] = []
 

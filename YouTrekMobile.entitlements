@@ -10,7 +10,7 @@
 	<array>
 		<string>$(AppIdentifierPrefix)com.potomushto.youtrek</string>
 		<string>$(AppIdentifierPrefix)com.potomushto.youtrek.config</string>
-		<string>$(AppIdentifierPrefix)com.potomushto.youtrek.macos</string>
+		<string>$(AppIdentifierPrefix)com.potomushto.youtrek.ios</string>
 		<string>$(AppIdentifierPrefix)com.potomushto.youtrek.shared</string>
 	</array>
 </dict>

@@ -278,44 +278,99 @@ final class YouTrackPeopleRepositoryTests: XCTestCase {
         XCTAssertEqual(MockURLProtocol.requests[1].url?.path, "/api/admin/customFieldSettings/bundles/user/bundle-users")
     }
 
-    func testFetchPeopleFallsBackToGlobalUsersWhenProjectAssigneeBundleIsUnavailable() async throws {
-        let globalUsersResponse = """
+    func testFetchPeopleReturnsEmptyWhenProjectHasNoAssigneeBundle() async throws {
+        let projectFieldsResponse = """
         [
           {
-            "id": "1",
-            "login": "priya",
-            "name": "Priya",
-            "fullName": "Priya Desai",
-            "avatarUrl": "https://example.com/priya.png"
+            "bundle": { "id": "bundle-watchers" },
+            "field": {
+              "name": "Watcher",
+              "localizedName": "Watcher",
+              "fieldType": { "kind": "user" }
+            }
           }
         ]
         """.data(using: .utf8)!
 
         MockURLProtocol.requestHandler = { request in
-            let path = request.url?.path ?? ""
-            if path == "/api/admin/projects/0-1/customFields" {
-                throw URLError(.badServerResponse)
-            }
-
             let response = HTTPURLResponse(
                 url: try XCTUnwrap(request.url),
                 statusCode: 200,
                 httpVersion: nil,
                 headerFields: ["Content-Type": "application/json"]
             )!
-            XCTAssertEqual(path, "/api/users")
-            return (response, globalUsersResponse)
+            XCTAssertEqual(request.url?.path, "/api/admin/projects/0-1/customFields")
+            return (response, projectFieldsResponse)
         }
 
         let repo = makePeopleRepository()
         let people = try await repo.fetchPeople(query: nil, projectID: "0-1")
 
-        XCTAssertEqual(people.map(\.displayName), ["Priya Desai"])
-        XCTAssertEqual(MockURLProtocol.requests.count, 2)
-        XCTAssertEqual(MockURLProtocol.requests[1].url?.path, "/api/users")
+        XCTAssertTrue(people.isEmpty)
+        XCTAssertEqual(MockURLProtocol.requests.count, 1)
+        XCTAssertEqual(MockURLProtocol.requests[0].url?.path, "/api/admin/projects/0-1/customFields")
     }
 
-    func testFetchPeopleUsesGlobalUsersForSearchQueries() async throws {
+    func testFetchPeopleFiltersWithinProjectAssigneeBundleForSearchQueries() async throws {
+        let projectFieldsResponse = """
+        [
+          {
+            "bundle": { "id": "bundle-users" },
+            "field": {
+              "name": "Assignee",
+              "localizedName": "Assignee",
+              "fieldType": { "kind": "user" }
+            }
+          }
+        ]
+        """.data(using: .utf8)!
+        let userBundleResponse = """
+        {
+          "values": [
+            {
+              "id": "2",
+              "login": "morgan",
+              "name": "Morgan",
+              "fullName": "Morgan Chan"
+            },
+            {
+              "id": "3",
+              "login": "priya",
+              "name": "Priya",
+              "fullName": "Priya Desai"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let path = request.url?.path ?? ""
+            switch path {
+            case "/api/admin/projects/0-1/customFields":
+                return (response, projectFieldsResponse)
+            case "/api/admin/customFieldSettings/bundles/user/bundle-users":
+                return (response, userBundleResponse)
+            default:
+                XCTFail("Unexpected request path: \(path)")
+                return (response, Data("[]".utf8))
+            }
+        }
+
+        let repo = makePeopleRepository()
+        let people = try await repo.fetchPeople(query: "mor", projectID: "0-1")
+
+        XCTAssertEqual(people.map(\.displayName), ["Morgan Chan"])
+        XCTAssertEqual(MockURLProtocol.requests.count, 2)
+        XCTAssertFalse(MockURLProtocol.requests.contains { $0.url?.path == "/api/users" })
+    }
+
+    func testFetchPeopleUsesGlobalUsersWhenProjectScopeIsNotProvided() async throws {
         let globalUsersResponse = """
         [
           {
@@ -341,7 +396,7 @@ final class YouTrackPeopleRepositoryTests: XCTestCase {
         }
 
         let repo = makePeopleRepository()
-        let people = try await repo.fetchPeople(query: "mor", projectID: "0-1")
+        let people = try await repo.fetchPeople(query: "mor", projectID: nil)
 
         XCTAssertEqual(people.map(\.displayName), ["Morgan Chan"])
         XCTAssertEqual(MockURLProtocol.requests.count, 1)

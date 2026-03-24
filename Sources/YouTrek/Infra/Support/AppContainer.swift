@@ -39,6 +39,7 @@ final class AppContainer: ObservableObject {
     private var cachedTodoLists: [TodoListDocument] = []
     private var statusOptionsCache: [String: [IssueFieldOption]] = [:]
     private var priorityOptionsCache: [String: [IssueFieldOption]] = [:]
+    private var assigneeOptionsCache: [String: [IssueFieldOption]] = [:]
     private var hasStartedBoardPrefetch = false
     private var appStateCancellable: AnyCancellable?
     private var draftSaveTask: Task<Void, Never>?
@@ -423,6 +424,7 @@ final class AppContainer: ObservableObject {
         lastLoadedIssueSelection = nil
         statusOptionsCache.removeAll()
         priorityOptionsCache.removeAll()
+        assigneeOptionsCache.removeAll()
         cachedSavedQueries = []
         cachedBoards = []
         cachedTodoLists = []
@@ -1095,6 +1097,7 @@ final class AppContainer: ObservableObject {
                 self.cachedBoards = []
                 self.statusOptionsCache.removeAll()
                 self.priorityOptionsCache.removeAll()
+                self.assigneeOptionsCache.removeAll()
             }
             await refreshSidebarData()
             if let selection = appState.selectedSidebarItem {
@@ -1128,7 +1131,9 @@ final class AppContainer: ObservableObject {
             appState.updateIssue(updated)
             markIssueSeen(updated)
         } catch {
-            print("Failed to update issue locally: \(error.localizedDescription)")
+            let message = "Failed to update issue: \(error.localizedDescription)"
+            print(message)
+            appState.showToast(message)
         }
     }
 
@@ -1631,7 +1636,7 @@ final class AppContainer: ObservableObject {
             do {
                 self.resetInitialSyncState()
                 LoggingService.sync.info("Sign-in: starting.")
-                guard let configuration = try? YouTrackOAuthConfiguration.loadFromEnvironment() else {
+                guard let configuration = try? YouTrackOAuthConfiguration.load() else {
                     throw AuthError.configurationMissing("Missing OAuth environment configuration.")
                 }
                 await self.applyOAuth(
@@ -1889,7 +1894,7 @@ final class AppContainer: ObservableObject {
     private func configureIfNeeded() async {
         refreshAccounts()
         let activeAccount = configurationStore.activeAccount()
-        let oauthConfiguration = try? YouTrackOAuthConfiguration.loadFromEnvironment()
+        let oauthConfiguration = try? YouTrackOAuthConfiguration.load()
         let hasOAuthState = oauthConfiguration != nil && AppAuthRepository.hasSavedAuthState()
         supportsBrowserAuth = oauthConfiguration != nil
 
@@ -1972,7 +1977,7 @@ final class AppContainer: ObservableObject {
         oauthConfiguration = configuration
         let appAuthRepository = oauthRepository ?? AppAuthRepository(
             configuration: configuration,
-            keychain: KeychainStorage(service: "com.potomushto.youtrek.auth")
+            keychain: AppAuthRepository.defaultKeychain()
         )
         oauthRepository = appAuthRepository
         authRepositorySwitcher.replace(with: appAuthRepository)
@@ -2068,7 +2073,7 @@ private extension AppContainer {
         let hasManualToken = configurationStore.loadBaseURL() != nil &&
             (configurationStore.loadToken()?.isEmpty == false)
 
-        if (try? YouTrackOAuthConfiguration.loadFromEnvironment()) != nil {
+        if (try? YouTrackOAuthConfiguration.load()) != nil {
             if AppAuthRepository.hasSavedAuthState() {
                 return false
             }
@@ -2671,11 +2676,42 @@ extension AppContainer {
     }
 
     func searchPeople(query: String?, projectID: String?) async -> [IssueFieldOption] {
+        let trimmedQuery = query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedProjectID = projectID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !trimmedProjectID.isEmpty {
+            let projectPeople: [IssueFieldOption]
+            if let cached = assigneeOptionsCache[trimmedProjectID] {
+                projectPeople = cached
+            } else {
+                do {
+                    let fetched = try await peopleRepositorySwitcher.fetchPeople(query: nil, projectID: trimmedProjectID)
+                    let sorted = sortPeopleOptions(fetched)
+                    assigneeOptionsCache[trimmedProjectID] = sorted
+                    projectPeople = sorted
+                } catch {
+                    return []
+                }
+            }
+
+            if trimmedQuery.isEmpty {
+                return projectPeople
+            }
+            return filterPeopleOptions(projectPeople, matching: trimmedQuery)
+        }
+
         do {
-            return try await peopleRepositorySwitcher.fetchPeople(query: query, projectID: projectID)
+            return try await peopleRepositorySwitcher.fetchPeople(
+                query: trimmedQuery.isEmpty ? nil : trimmedQuery,
+                projectID: nil
+            )
         } catch {
             return []
         }
+    }
+
+    func resolveProjectID(named name: String) async -> String? {
+        await resolveProject(named: name)?.id
     }
 
     func loadStatusOptions(for issue: IssueSummary) async -> [IssueFieldOption] {
@@ -2752,6 +2788,24 @@ private extension AppContainer {
                 return leftOrdinal < rightOrdinal
             }
             return left.displayName.localizedCaseInsensitiveCompare(right.displayName) == .orderedAscending
+        }
+    }
+
+    func sortPeopleOptions(_ options: [IssueFieldOption]) -> [IssueFieldOption] {
+        options.sorted { left, right in
+            left.displayName.localizedCaseInsensitiveCompare(right.displayName) == .orderedAscending
+        }
+    }
+
+    func filterPeopleOptions(_ options: [IssueFieldOption], matching query: String) -> [IssueFieldOption] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return options }
+
+        return options.filter { option in
+            [option.displayName, option.name, option.login ?? ""]
+                .joined(separator: " ")
+                .lowercased()
+                .contains(needle)
         }
     }
 

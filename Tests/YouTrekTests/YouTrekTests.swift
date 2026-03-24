@@ -275,6 +275,50 @@ final class YouTrekTests: XCTestCase {
         XCTAssertTrue(markdown.hasSuffix(")"))
     }
 
+    func testOAuthConfigurationFallsBackToInfoDictionaryValues() throws {
+        let configuration = try YouTrackOAuthConfiguration.load(
+            environment: [:],
+            infoDictionary: [
+                "YOUTRACK_BASE_URL": "https://example.jetbrains.space/api",
+                "YOUTRACK_CLIENT_ID": "mobile-client",
+                "YOUTRACK_REDIRECT_URI": "youtrek://oauth_callback",
+                "YOUTRACK_SCOPES": "YouTrack, Hub"
+            ]
+        )
+
+        XCTAssertEqual(configuration.apiBaseURL.absoluteString, "https://example.jetbrains.space/api")
+        XCTAssertEqual(
+            configuration.authorizationEndpoint.absoluteString,
+            "https://example.jetbrains.space/hub/api/rest/oauth2/auth"
+        )
+        XCTAssertEqual(
+            configuration.tokenEndpoint.absoluteString,
+            "https://example.jetbrains.space/hub/api/rest/oauth2/token"
+        )
+        XCTAssertEqual(configuration.clientID, "mobile-client")
+        XCTAssertEqual(configuration.redirectURI.absoluteString, "youtrek://oauth_callback")
+        XCTAssertEqual(configuration.scopes, ["YouTrack", "Hub"])
+    }
+
+    func testOAuthConfigurationEnvironmentOverridesInfoDictionary() throws {
+        let configuration = try YouTrackOAuthConfiguration.load(
+            environment: [
+                "YOUTRACK_CLIENT_ID": "env-client",
+                "YOUTRACK_BASE_URL": "https://env.example.com/api",
+                "YOUTRACK_SCOPES": "YouTrack"
+            ],
+            infoDictionary: [
+                "YOUTRACK_CLIENT_ID": "plist-client",
+                "YOUTRACK_BASE_URL": "https://plist.example.com/api",
+                "YOUTRACK_SCOPES": "Hub"
+            ]
+        )
+
+        XCTAssertEqual(configuration.clientID, "env-client")
+        XCTAssertEqual(configuration.apiBaseURL.absoluteString, "https://env.example.com/api")
+        XCTAssertEqual(configuration.scopes, ["YouTrack"])
+    }
+
     func testYouTrackAPIErrorCancellationDetectionForTransportCancelled() {
         let error = YouTrackAPIError.transport(underlying: URLError(.cancelled))
         XCTAssertTrue(error.isCancellation)

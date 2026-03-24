@@ -8,11 +8,28 @@
 
 /* Begin PBXBuildFile section */
 		00FEB9220801E5364D578CD8 /* IssueRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413164C575D17B66BEBD006E /* IssueRepository.swift */; };
+		01D1B7A4C9E54AE0A4D1F001 /* IssueBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11B22C33D44E55F66778899 /* IssueBoard.swift */; };
+		01D1B7A4C9E54AE0A4D1F002 /* IssueBoardLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift */; };
+		01D1B7A4C9E54AE0A4D1F003 /* IssueBoardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22B33C44D55E66F778899AA /* IssueBoardRepository.swift */; };
+		01D1B7A4C9E54AE0A4D1F004 /* YouTrackIssueBoardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44B55C66D77E88F99AABBCC /* YouTrackIssueBoardRepository.swift */; };
+		01D1B7A4C9E54AE0A4D1F005 /* IssueProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837E26CF86C45D20765721F4 /* IssueProject.swift */; };
+		01D1B7A4C9E54AE0A4D1F006 /* ProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22474C986C8B156AE420F86D /* ProjectRepository.swift */; };
+		01D1B7A4C9E54AE0A4D1F007 /* YouTrackProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */; };
 		03C386F12EEB26CD00BF8B68 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 03C386EF2EEB26BC00BF8B68 /* Assets.xcassets */; };
+		0890807397FD84691D9753BD /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = F143938D9A52504ED5E98C7F /* SQLite */; };
 		08C5D4B53937B5F198D5F1A4 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D3751AABB25A233B2008788 /* AppState.swift */; };
+		0C243EBECFA4A0C15103D17A /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41A20A5EA468A3FDD6C766F3 /* SyncCoordinator.swift */; };
 		17484CD88BC62E1E13CF6D9D /* IssueLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */; };
+		18B2AC942F15982527D2BF93 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DC1DE75EC3C2A956735D746D /* Assets.xcassets */; };
 		1E4C578BD3384B5530AB96DE /* YouTrackIssueRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EBD085B49E4D2450109D389 /* YouTrackIssueRepositoryTests.swift */; };
+		1E54A328DC10825FEEFC1B87 /* KeychainStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86D2C2DB3FD959E98B994951 /* KeychainStorage.swift */; };
+		218F42790239D94BEFFAEFE3 /* YouTrekMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0320DC32451D113DE40CC6ED /* YouTrekMobileApp.swift */; };
+		22EB3261F5EC65EB1914E03C /* ConflictNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC1D8D1231CC2E467087682 /* ConflictNotice.swift */; };
 		240719BA093F4DB3B371E4BC /* AttachmentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC68C73EC8C04D7FA2BABD20 /* AttachmentViews.swift */; };
+		253CAD51F1A0C91BD2A46CDA /* YouTrekMobileRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 514CB17B6579A110024B5E48 /* YouTrekMobileRootView.swift */; };
+		26A91E73FBCDC64349FD4003 /* YouTrekMobileBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6CF48AB03BE902B7518C446 /* YouTrekMobileBootstrap.swift */; };
+		27B6AAC1F670D113FEDB0FE4 /* ConflictNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC1D8D1231CC2E467087682 /* ConflictNotice.swift */; };
+		28329703C4291BAE04476F8A /* AppAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */; };
 		2A3B4C5D6E7F8091A2B3C4D5 /* SavedQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708192A3B4C5 /* SavedQuery.swift */; };
 		2A3B4C5D6E7F8091A2B3C4D6 /* SavedQueryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708192A3B4C6 /* SavedQueryRepository.swift */; };
 		2A3B4C5D6E7F8091A2B3C4D7 /* YouTrackSavedQueryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708192A3B4C7 /* YouTrackSavedQueryRepository.swift */; };
@@ -21,14 +38,20 @@
 		2C2E2C2E2C2E2C2E2C2E2C2E /* CLIEntrypoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1E1C1E1C1E1C1E1C1E1C1E /* CLIEntrypoint.swift */; };
 		2C7F193FF8B70AEE455E2DA1 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 259D750A7F2F67E76894DD3F /* AppContainer.swift */; };
 		2D2E2D2E2D2E2D2E2D2E2D2E /* CLIInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D1E1D1E1D1E1D1E1D1E1D1E /* CLIInstaller.swift */; };
+		33E475DD9CD2FB710741B171 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 265D07AEAB2FF911AE2E8467 /* Foundation.framework */; };
 		34624FC5D5AC4824962DC87C /* IssueAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1F6D0374F7E4408A078BCF5 /* IssueAttachment.swift */; };
+		39B20D930A2D3EB322AFDBC7 /* ManualTokenAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A04 /* ManualTokenAuthRepository.swift */; };
 		40CFE17D5D0249E263CCDE90 /* IssueProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837E26CF86C45D20765721F4 /* IssueProject.swift */; };
+		4B04F4E32C146C3AB539686A /* IssueDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D1C2B3A4E5968778695A4E /* IssueDetail.swift */; };
 		4C6245368EDF72B81D7E85EB /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = B83164E55F38E5918B1AC16B /* SQLite */; };
+		4E0013C2653D01124064396D /* SyncOperationQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCADEBB49EB84E5BB481AFA5 /* SyncOperationQueue.swift */; };
+		533E8F8D05148C953D3B09D6 /* AppConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F0E1B28F16D4C39B3F8A00 /* AppConfigurationStore.swift */; };
 		553B1161EE25492CBD4E5960 /* TodoIssueIDParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB27A62160674AF58AB8D782 /* TodoIssueIDParser.swift */; };
 		5AD0AADC8F374977AD5209A1 /* SyncOperationQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE80E5F4EA04BE5A252AD14 /* SyncOperationQueueTests.swift */; };
 		5E2253FC639018566A8117DC /* YouTrackOAuthConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4FE22D10515F3D19C04518D /* YouTrackOAuthConfiguration.swift */; };
 		5FF6DD8ABD04D24EB1CB3B43 /* PeopleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE25293D0B475678E0E9AAD /* PeopleRepository.swift */; };
 		6154B2B141184ED2B93861A6 /* CommandPaletteDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BF8D7F6E11A42FDA2178071 /* CommandPaletteDialog.swift */; };
+		664D811F566734629CED34F5 /* AppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 31C7606ABF8EE5886D700A52 /* AppAuth */; };
 		67267D8D7D4B0FE29F5DEB44 /* SidebarItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F838F96136D2FC3F66D4B91 /* SidebarItem.swift */; };
 		6A1F91B3569145A98D660C5E /* ConflictResolutionDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE4E28048614444791892CC7 /* ConflictResolutionDialog.swift */; };
 		6B0CC68F84764DA397C2D889 /* SyncOperationQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCADEBB49EB84E5BB481AFA5 /* SyncOperationQueue.swift */; };
@@ -38,8 +61,13 @@
 		778FF05D4EAC43E62857C01E /* NewIssueDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FA72E4D9ACF4E1772ABD80 /* NewIssueDialog.swift */; };
 		7AE22AB917B4430D9243B77F /* TodoChecklistMarkdownRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E1E46F7C4BD4B5E8068A8C6 /* TodoChecklistMarkdownRenderer.swift */; };
 		7B01B951558244F8B758DFB5 /* TodoListEditorDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138A65DE64414C11B8195521 /* TodoListEditorDependencies.swift */; };
+		7C8032A8681D91B6190FF3D3 /* Issue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603472AD6E49B166DD1EAE1E /* Issue.swift */; };
+		7F8E9D9437F139CF5583EB0E /* YouTrackOAuthConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4FE22D10515F3D19C04518D /* YouTrackOAuthConfiguration.swift */; };
+		8175BA735A4F9002FF7576CC /* StoredAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D1C9A2F3E4B5C6D7E8F901 /* StoredAccount.swift */; };
 		879DC3DC38B8CC95B2F99F90 /* YouTrekTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67EE0549798C5BB97F80099A /* YouTrekTests.swift */; };
+		8DBFCFEF3B672162F873A4A3 /* YouTrackIssueRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB6E61C64224428A2A41938 /* YouTrackIssueRepository.swift */; };
 		90DD2022BD6F618D47EB07C3 /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41A20A5EA468A3FDD6C766F3 /* SyncCoordinator.swift */; };
+		9219219BF3E9E2D7EA4AD702 /* IssueRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413164C575D17B66BEBD006E /* IssueRepository.swift */; };
 		9655E060C50B90B629C560AD /* IssueField.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */; };
 		98C448F02392A199D2C15637 /* YouTrackPeopleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */; };
 		9ABF8CA24DA93B1795EDF5E7 /* ProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22474C986C8B156AE420F86D /* ProjectRepository.swift */; };
@@ -61,6 +89,7 @@
 		B22B33C44D55E66F778899AA /* IssueBoardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22B33C44D55E66F778899AA /* IssueBoardRepository.swift */; };
 		B33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A33B44C55D66E77F8899AABB /* IssueBoardLocalStore.swift */; };
 		B44B55C66D77E88F99AABBCC /* YouTrackIssueBoardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44B55C66D77E88F99AABBCC /* YouTrackIssueBoardRepository.swift */; };
+		B5876614E6E7D392F24AB00E /* YouTrackAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */; };
 		B5E95DA444F525E699F17F2F /* AppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 79FB59A8C56FB49F29358D40 /* AppAuth */; };
 		B6F7001D7CF24BDB9EF0D0A7 /* MarkdownTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E827C5F39D5E4DFEA06C2463 /* MarkdownTextView.swift */; };
 		B7C4D3E25F6A7890CD1E2F31 /* RootContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B3D2E14F5A6789BC0D1E21 /* RootContentView.swift */; };
@@ -76,21 +105,28 @@
 		C1D2E3F405060708090A0B0C /* IssueBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* IssueBoardView.swift */; };
 		C2D3E4F5060708090A0B0C0D /* IssueDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D5E6F708192A3B4C5D /* IssueDraftStore.swift */; };
 		C4B1BC2E20F44F49838A214A /* TodoInlineMarkdownParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C31721A6EE9426BACCAE11D /* TodoInlineMarkdownParser.swift */; };
+		C55B7C7860CC7969C3FB47B8 /* IssueDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D5E6F708192A3B4C5D /* IssueDraftStore.swift */; };
 		C8D69D755B9F5965999415BA /* AppMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC1761A3048AA9CE39B1317D /* AppMain.swift */; };
 		C8E2D3F4A5B6C7D8E9F0A112 /* StoredAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D1C9A2F3E4B5C6D7E8F901 /* StoredAccount.swift */; };
 		CCB6FC4CB76C79D60B3D8268 /* YouTrackIssueRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB6E61C64224428A2A41938 /* YouTrackIssueRepository.swift */; };
 		D4E5F60708090A0B0C0D0E0F /* IssueDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F60708090A0B0C0E0F /* IssueDraftStoreTests.swift */; };
-			DBAD2E130516EF0E97DA9505 /* IssueWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9834245476CD9C6340D38207 /* IssueWindows.swift */; };
-			E503D754E49097AD959569AD /* YouTrackProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */; };
-			E830DA0BDF2A88981E76A320 /* YouTrackAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */; };
-			E9C4B2243C4A344ED73BAE55 /* AppAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */; };
-			EA94D7A93E3499BBFB64C3CE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96D7F507180F29C1DBEBFD1A /* SettingsView.swift */; };
-			EE1E07C0A405D6A416EB6A4D /* IssueListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF004390F090F845328D6B /* IssueListView.swift */; };
-			EE1E07C1A405D6A416EB6A4E /* IssueProgressListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF004490F090F845328D6C /* IssueProgressListView.swift */; };
-			F1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift */; };
-			F058AB58B54E3B5254042C54 /* YouTrackIssueFieldRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */; };
+		D83E1A03384C1487B4036784 /* AuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2BB972C688C970A43F8706 /* AuthRepository.swift */; };
+		DBAD2E130516EF0E97DA9505 /* IssueWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9834245476CD9C6340D38207 /* IssueWindows.swift */; };
+		E128AACDDE7DC1D07E2A4004 /* IssueAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1F6D0374F7E4408A078BCF5 /* IssueAttachment.swift */; };
+		E503D754E49097AD959569AD /* YouTrackProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */; };
+		E5F40BB5A38E6E23094C871B /* LoggingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E846A3202CA8FD93450D72F /* LoggingService.swift */; };
+		E830DA0BDF2A88981E76A320 /* YouTrackAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */; };
+		E9C4B2243C4A344ED73BAE55 /* AppAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */; };
+		EA94D7A93E3499BBFB64C3CE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96D7F507180F29C1DBEBFD1A /* SettingsView.swift */; };
+		EC7712F0B7C46B5847549B9E /* IssueLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */; };
+		EE1E07C0A405D6A416EB6A4D /* IssueListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF004390F090F845328D6B /* IssueListView.swift */; };
+		EE1E07C1A405D6A416EB6A4E /* IssueProgressListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF004490F090F845328D6C /* IssueProgressListView.swift */; };
+		EFFB5813E3F53F8EBD89F58A /* NetworkRequestMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B8C7D6E5F40123456789AB /* NetworkRequestMonitor.swift */; };
+		F058AB58B54E3B5254042C54 /* YouTrackIssueFieldRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */; };
 		F0D1C2B3A4E5968778695A4B /* UserAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D1C2B3A4E5968778695A4C /* UserAvatarView.swift */; };
 		F0D1C2B3A4E5968778695A4D /* IssueDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D1C2B3A4E5968778695A4E /* IssueDetail.swift */; };
+		F1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift */; };
+		F5F9DF80F6C67652AFC7D5C8 /* IssueField.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -104,10 +140,12 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0320DC32451D113DE40CC6ED /* YouTrekMobileApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = YouTrekMobileApp.swift; sourceTree = "<group>"; };
 		03C386EF2EEB26BC00BF8B68 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Sources/YouTrek/Assets.xcassets; sourceTree = "<group>"; };
 		03C386F22F27D9D500BF8B68 /* YouTrek.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YouTrek.entitlements; sourceTree = "<group>"; };
 		0BF8D7F6E11A42FDA2178071 /* CommandPaletteDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteDialog.swift; sourceTree = "<group>"; };
 		0C31721A6EE9426BACCAE11D /* TodoInlineMarkdownParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoInlineMarkdownParser.swift; sourceTree = "<group>"; };
+		0CC1D8D1231CC2E467087682 /* ConflictNotice.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConflictNotice.swift; sourceTree = "<group>"; };
 		138A65DE64414C11B8195521 /* TodoListEditorDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoListEditorDependencies.swift; sourceTree = "<group>"; };
 		17406340445C66429F51F7FD /* YouTrackProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackProjectRepository.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708192A3B4C5 /* SavedQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedQuery.swift; sourceTree = "<group>"; };
@@ -118,6 +156,7 @@
 		22474C986C8B156AE420F86D /* ProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRepository.swift; sourceTree = "<group>"; };
 		246CBF4F7505546908106B4E /* YouTrekTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YouTrekTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		259D750A7F2F67E76894DD3F /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
+		265D07AEAB2FF911AE2E8467 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		2AE80E5F4EA04BE5A252AD14 /* SyncOperationQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOperationQueueTests.swift; sourceTree = "<group>"; };
 		2E4FEE5B968D4FFFBC1197E1 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		3E846A3202CA8FD93450D72F /* LoggingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingService.swift; sourceTree = "<group>"; };
@@ -129,6 +168,8 @@
 		4E1E46F7C4BD4B5E8068A8C6 /* TodoChecklistMarkdownRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoChecklistMarkdownRenderer.swift; sourceTree = "<group>"; };
 		4EE25293D0B475678E0E9AAD /* PeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeopleRepository.swift; sourceTree = "<group>"; };
 		5127E6BFCB6228BCCACF3248 /* AppMenus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/YouTrek/App/unused_swiftui/AppMenus.swift; sourceTree = SOURCE_ROOT; };
+		514CB17B6579A110024B5E48 /* YouTrekMobileRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = YouTrekMobileRootView.swift; sourceTree = "<group>"; };
+		5B1C2F282B4D8595FFBEBFCA /* YouTrekMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YouTrekMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		603472AD6E49B166DD1EAE1E /* Issue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Issue.swift; sourceTree = "<group>"; };
 		67EE0549798C5BB97F80099A /* YouTrekTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrekTests.swift; sourceTree = "<group>"; };
 		6A2BB972C688C970A43F8706 /* AuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepository.swift; sourceTree = "<group>"; };
@@ -159,11 +200,13 @@
 		A7B3D2E14F5A6789BC0D1E24 /* RootContentView+Main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/YouTrek/App/unused_swiftui/RootContentView+Main.swift"; sourceTree = SOURCE_ROOT; };
 		A7B3D2E14F5A6789BC0D1E25 /* RootContentView+Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/YouTrek/App/unused_swiftui/RootContentView+Inspector.swift"; sourceTree = SOURCE_ROOT; };
 		A7B3D2E14F5A6789BC0D1E26 /* RootContentView+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/YouTrek/App/unused_swiftui/RootContentView+Helpers.swift"; sourceTree = SOURCE_ROOT; };
+		A92AE8BE50547C2CAF88F728 /* YouTrekMobile.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = YouTrekMobile.entitlements; sourceTree = "<group>"; };
 		A9B8C7D6E5F40123456789AB /* NetworkRequestMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkRequestMonitor.swift; sourceTree = "<group>"; };
 		A9B8C7D6E5F40123456789AD /* NetworkRequestFooterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkRequestFooterView.swift; sourceTree = "<group>"; };
 		A9C0A1D2E3F4A5B6C7D8E9F1 /* SavedQueryLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedQueryLocalStore.swift; sourceTree = "<group>"; };
 		AE4E28048614444791892CC7 /* ConflictResolutionDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConflictResolutionDialog.swift; sourceTree = "<group>"; };
 		B19ECD87B561BBF7954653FA /* YouTrek.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YouTrek.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B442E27086830234EEC05CF8 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAuthRepository.swift; sourceTree = "<group>"; };
 		B7D1C9A2F3E4B5C6D7E8F901 /* StoredAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoredAccount.swift; sourceTree = "<group>"; };
 		BCADEBB49EB84E5BB481AFA5 /* SyncOperationQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOperationQueue.swift; sourceTree = "<group>"; };
@@ -172,18 +215,20 @@
 		CC68C73EC8C04D7FA2BABD20 /* AttachmentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentViews.swift; sourceTree = "<group>"; };
 		D2BF004390F090F845328D6B /* IssueListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueListView.swift; sourceTree = "<group>"; };
 		D2BF004490F090F845328D6C /* IssueProgressListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueProgressListView.swift; sourceTree = "<group>"; };
-			D4FE22D10515F3D19C04518D /* YouTrackOAuthConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackOAuthConfiguration.swift; sourceTree = "<group>"; };
-			DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueLocalStore.swift; sourceTree = "<group>"; };
-			DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueField.swift; sourceTree = "<group>"; };
-			DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackPeopleRepository.swift; sourceTree = "<group>"; };
-			E1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitWindowContentControllers.swift; sourceTree = "<group>"; };
-			E827C5F39D5E4DFEA06C2463 /* MarkdownTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTextView.swift; sourceTree = "<group>"; };
+		D4FE22D10515F3D19C04518D /* YouTrackOAuthConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackOAuthConfiguration.swift; sourceTree = "<group>"; };
+		DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueLocalStore.swift; sourceTree = "<group>"; };
+		DC1DE75EC3C2A956735D746D /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		DE9F4461DE8B8BB59A4A40DC /* IssueField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueField.swift; sourceTree = "<group>"; };
+		DF8B1638D8B77ADD01D2C33E /* YouTrackPeopleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackPeopleRepository.swift; sourceTree = "<group>"; };
+		E1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitWindowContentControllers.swift; sourceTree = "<group>"; };
+		E827C5F39D5E4DFEA06C2463 /* MarkdownTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTextView.swift; sourceTree = "<group>"; };
 		EC1761A3048AA9CE39B1317D /* AppMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMain.swift; sourceTree = "<group>"; };
 		EF3553D7D4004AB2A92811DD /* YouTrackIssueFieldRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackIssueFieldRepository.swift; sourceTree = "<group>"; };
 		F0D1C2B3A4E5968778695A4C /* UserAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserAvatarView.swift; sourceTree = "<group>"; };
 		F0D1C2B3A4E5968778695A4E /* IssueDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDetail.swift; sourceTree = "<group>"; };
 		F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTrackAPIClient.swift; sourceTree = "<group>"; };
 		F1F6D0374F7E4408A078BCF5 /* IssueAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueAttachment.swift; sourceTree = "<group>"; };
+		F6CF48AB03BE902B7518C446 /* YouTrekMobileBootstrap.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = YouTrekMobileBootstrap.swift; sourceTree = "<group>"; };
 		F6FA72E4D9ACF4E1772ABD7F /* NewIssueToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewIssueToolbar.swift; sourceTree = "<group>"; };
 		F6FA72E4D9ACF4E1772ABD80 /* NewIssueDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewIssueDialog.swift; sourceTree = "<group>"; };
 		FB27A62160674AF58AB8D782 /* TodoIssueIDParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoIssueIDParser.swift; sourceTree = "<group>"; };
@@ -192,6 +237,16 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		2C7A7D1AC5DE9636952EF28A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				33E475DD9CD2FB710741B171 /* Foundation.framework in Frameworks */,
+				664D811F566734629CED34F5 /* AppAuth in Frameworks */,
+				0890807397FD84691D9753BD /* SQLite in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		9DAAAD463DBD1B628A7E52A1 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -204,6 +259,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		2477BA839EEA2330B12D4BC6 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				0320DC32451D113DE40CC6ED /* YouTrekMobileApp.swift */,
+				F6CF48AB03BE902B7518C446 /* YouTrekMobileBootstrap.swift */,
+				514CB17B6579A110024B5E48 /* YouTrekMobileRootView.swift */,
+			);
+			name = App;
+			path = App;
+			sourceTree = "<group>";
+		};
 		2DC391CDFBB11198F1B3886C /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
@@ -240,6 +306,17 @@
 				1C1E1C1E1C1E1C1E1C1E1C1E /* CLIEntrypoint.swift */,
 			);
 			path = CLI;
+			sourceTree = "<group>";
+		};
+		3C5E4259D131A4FE0F037C32 /* YouTrekMobile */ = {
+			isa = PBXGroup;
+			children = (
+				B442E27086830234EEC05CF8 /* Info.plist */,
+				2477BA839EEA2330B12D4BC6 /* App */,
+				DC1DE75EC3C2A956735D746D /* Assets.xcassets */,
+			);
+			name = YouTrekMobile;
+			path = YouTrekMobile;
 			sourceTree = "<group>";
 		};
 		3D9633587A41A7AE34DF812F /* Sync */ = {
@@ -295,27 +372,27 @@
 			);
 			path = Networking;
 			sourceTree = "<group>";
-			};
-			78078B57735A8D543CAA0E0A /* UI */ = {
-				isa = PBXGroup;
-				children = (
-					E1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift */,
-					4A7250E3A5DD409013899A4B /* RootView.swift */,
-					A7B3D2E14F5A6789BC0D1E21 /* RootContentView.swift */,
-					A7B3D2E14F5A6789BC0D1E22 /* RootContentView+Layout.swift */,
-					A7B3D2E14F5A6789BC0D1E23 /* RootContentView+Sidebar.swift */,
-					A7B3D2E14F5A6789BC0D1E24 /* RootContentView+Main.swift */,
-					A7B3D2E14F5A6789BC0D1E25 /* RootContentView+Inspector.swift */,
-					A7B3D2E14F5A6789BC0D1E26 /* RootContentView+Helpers.swift */,
-					D0AB2C53443C67FC515AE1E8 /* Common */,
-					BD3334A3D8FDD36898ED02E8 /* IssueDetail */,
-					AEE1832E3065BE4BE02CC565 /* IssueList */,
-					B6A7C8D9E0F1122334455667 /* IssueBoard */,
-					A1B2C3D4E5F60718293A4B70 /* Todo */,
-				);
-				path = UI;
-				sourceTree = "<group>";
-			};
+		};
+		78078B57735A8D543CAA0E0A /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				E1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift */,
+				4A7250E3A5DD409013899A4B /* RootView.swift */,
+				A7B3D2E14F5A6789BC0D1E21 /* RootContentView.swift */,
+				A7B3D2E14F5A6789BC0D1E22 /* RootContentView+Layout.swift */,
+				A7B3D2E14F5A6789BC0D1E23 /* RootContentView+Sidebar.swift */,
+				A7B3D2E14F5A6789BC0D1E24 /* RootContentView+Main.swift */,
+				A7B3D2E14F5A6789BC0D1E25 /* RootContentView+Inspector.swift */,
+				A7B3D2E14F5A6789BC0D1E26 /* RootContentView+Helpers.swift */,
+				D0AB2C53443C67FC515AE1E8 /* Common */,
+				BD3334A3D8FDD36898ED02E8 /* IssueDetail */,
+				AEE1832E3065BE4BE02CC565 /* IssueList */,
+				B6A7C8D9E0F1122334455667 /* IssueBoard */,
+				A1B2C3D4E5F60718293A4B70 /* Todo */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
 		78D300D18D4011F501E7E46E /* Models */ = {
 			isa = PBXGroup;
 			children = (
@@ -327,8 +404,17 @@
 				A11B22C33D44E55F66778899 /* IssueBoard.swift */,
 				1A2B3C4D5E6F708192A3B4C5 /* SavedQuery.swift */,
 				6F838F96136D2FC3F66D4B91 /* SidebarItem.swift */,
+				0CC1D8D1231CC2E467087682 /* ConflictNotice.swift */,
 			);
 			path = Models;
+			sourceTree = "<group>";
+		};
+		83B61157A7048052FE26167E /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				265D07AEAB2FF911AE2E8467 /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 		86689D7076440B24C476444F /* Networking */ = {
@@ -354,6 +440,7 @@
 			isa = PBXGroup;
 			children = (
 				BDD37F138DABF9207822D405 /* YouTrek */,
+				3C5E4259D131A4FE0F037C32 /* YouTrekMobile */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -389,6 +476,8 @@
 				95AC1BC550B7FDE44AD3CCE2 /* Sources */,
 				FBE4E18818B112C66C8092BE /* Tests */,
 				C2833F037193A549995747EC /* Products */,
+				BCF2F709A37DBFB5839B2301 /* Frameworks */,
+				A92AE8BE50547C2CAF88F728 /* YouTrekMobile.entitlements */,
 			);
 			sourceTree = "<group>";
 		};
@@ -412,6 +501,14 @@
 				1A2B3C4D5E6F708192A3B4C6 /* SavedQueryRepository.swift */,
 			);
 			path = Repositories;
+			sourceTree = "<group>";
+		};
+		BCF2F709A37DBFB5839B2301 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				83B61157A7048052FE26167E /* iOS */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		BD3334A3D8FDD36898ED02E8 /* IssueDetail */ = {
@@ -439,6 +536,7 @@
 			children = (
 				B19ECD87B561BBF7954653FA /* YouTrek.app */,
 				246CBF4F7505546908106B4E /* YouTrekTests.xctest */,
+				5B1C2F282B4D8595FFBEBFCA /* YouTrekMobile.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -571,11 +669,30 @@
 				4D22D958225B3ABE849A1DD9 /* PBXTargetDependency */,
 			);
 			name = YouTrekTests;
-			packageProductDependencies = (
-			);
 			productName = YouTrekTests;
 			productReference = 246CBF4F7505546908106B4E /* YouTrekTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		C52FEEF8E5B5C52E53C1639D /* YouTrekMobile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FD10C3111AC22B3C8DF80915 /* Build configuration list for PBXNativeTarget "YouTrekMobile" */;
+			buildPhases = (
+				5FAF6884E55736E0ECAC4C1B /* Sources */,
+				2C7A7D1AC5DE9636952EF28A /* Frameworks */,
+				425B71164B002312B62EC652 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = YouTrekMobile;
+			packageProductDependencies = (
+				31C7606ABF8EE5886D700A52 /* AppAuth */,
+				F143938D9A52504ED5E98C7F /* SQLite */,
+			);
+			productName = YouTrekMobile;
+			productReference = 5B1C2F282B4D8595FFBEBFCA /* YouTrekMobile.app */;
+			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
@@ -593,6 +710,8 @@
 						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
+					C52FEEF8E5B5C52E53C1639D = {
+					};
 				};
 			};
 			buildConfigurationList = 1070EF04CB12E2FE101FB1C7 /* Build configuration list for PBXProject "YouTrek" */;
@@ -607,13 +726,15 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				6FD98FFEE4686191886A9284 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */,
-				82E23A91878F56103FFB6768 /* XCRemoteSwiftPackageReference "SQLite" */,
+				82E23A91878F56103FFB6768 /* XCRemoteSwiftPackageReference "SQLite.swift" */,
 			);
+			productRefGroup = C2833F037193A549995747EC /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				333627F18207691738BF0870 /* YouTrek */,
 				BA5274D42815CBD943A8D8C1 /* YouTrekTests */,
+				C52FEEF8E5B5C52E53C1639D /* YouTrekMobile */,
 			);
 		};
 /* End PBXProject section */
@@ -627,9 +748,55 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		425B71164B002312B62EC652 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				18B2AC942F15982527D2BF93 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		5FAF6884E55736E0ECAC4C1B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				22EB3261F5EC65EB1914E03C /* ConflictNotice.swift in Sources */,
+				01D1B7A4C9E54AE0A4D1F005 /* IssueProject.swift in Sources */,
+				7C8032A8681D91B6190FF3D3 /* Issue.swift in Sources */,
+				E128AACDDE7DC1D07E2A4004 /* IssueAttachment.swift in Sources */,
+				4B04F4E32C146C3AB539686A /* IssueDetail.swift in Sources */,
+				F5F9DF80F6C67652AFC7D5C8 /* IssueField.swift in Sources */,
+				01D1B7A4C9E54AE0A4D1F001 /* IssueBoard.swift in Sources */,
+				D83E1A03384C1487B4036784 /* AuthRepository.swift in Sources */,
+				9219219BF3E9E2D7EA4AD702 /* IssueRepository.swift in Sources */,
+				01D1B7A4C9E54AE0A4D1F003 /* IssueBoardRepository.swift in Sources */,
+				01D1B7A4C9E54AE0A4D1F006 /* ProjectRepository.swift in Sources */,
+				28329703C4291BAE04476F8A /* AppAuthRepository.swift in Sources */,
+				39B20D930A2D3EB322AFDBC7 /* ManualTokenAuthRepository.swift in Sources */,
+				7F8E9D9437F139CF5583EB0E /* YouTrackOAuthConfiguration.swift in Sources */,
+				EC7712F0B7C46B5847549B9E /* IssueLocalStore.swift in Sources */,
+				01D1B7A4C9E54AE0A4D1F002 /* IssueBoardLocalStore.swift in Sources */,
+				B5876614E6E7D392F24AB00E /* YouTrackAPIClient.swift in Sources */,
+				8DBFCFEF3B672162F873A4A3 /* YouTrackIssueRepository.swift in Sources */,
+				01D1B7A4C9E54AE0A4D1F004 /* YouTrackIssueBoardRepository.swift in Sources */,
+				01D1B7A4C9E54AE0A4D1F007 /* YouTrackProjectRepository.swift in Sources */,
+				0C243EBECFA4A0C15103D17A /* SyncCoordinator.swift in Sources */,
+				4E0013C2653D01124064396D /* SyncOperationQueue.swift in Sources */,
+				E5F40BB5A38E6E23094C871B /* LoggingService.swift in Sources */,
+				533E8F8D05148C953D3B09D6 /* AppConfigurationStore.swift in Sources */,
+				C55B7C7860CC7969C3FB47B8 /* IssueDraftStore.swift in Sources */,
+				1E54A328DC10825FEEFC1B87 /* KeychainStorage.swift in Sources */,
+				EFFB5813E3F53F8EBD89F58A /* NetworkRequestMonitor.swift in Sources */,
+				8175BA735A4F9002FF7576CC /* StoredAccount.swift in Sources */,
+				218F42790239D94BEFFAEFE3 /* YouTrekMobileApp.swift in Sources */,
+				26A91E73FBCDC64349FD4003 /* YouTrekMobileBootstrap.swift in Sources */,
+				253CAD51F1A0C91BD2A46CDA /* YouTrekMobileRootView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		74031281EE7288FCF0654F22 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -692,15 +859,15 @@
 				240719BA093F4DB3B371E4BC /* AttachmentViews.swift in Sources */,
 				7B01B951558244F8B758DFB5 /* TodoListEditorDependencies.swift in Sources */,
 				553B1161EE25492CBD4E5960 /* TodoIssueIDParser.swift in Sources */,
-					C4B1BC2E20F44F49838A214A /* TodoInlineMarkdownParser.swift in Sources */,
-					7AE22AB917B4430D9243B77F /* TodoChecklistMarkdownRenderer.swift in Sources */,
-					9DB8D80B206C40708C943193 /* TodoChecklistParsing.swift in Sources */,
-					A1B2C3D4E5F60718293A4B6D /* TodoListEditorViewModel.swift in Sources */,
-					A1B2C3D4E5F60718293A4B6F /* TodoListContentView.swift in Sources */,
-					F1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift in Sources */,
-					ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */,
-					B7C4D3E25F6A7890CD1E2F31 /* RootContentView.swift in Sources */,
-					B7C4D3E25F6A7890CD1E2F32 /* RootContentView+Layout.swift in Sources */,
+				C4B1BC2E20F44F49838A214A /* TodoInlineMarkdownParser.swift in Sources */,
+				7AE22AB917B4430D9243B77F /* TodoChecklistMarkdownRenderer.swift in Sources */,
+				9DB8D80B206C40708C943193 /* TodoChecklistParsing.swift in Sources */,
+				A1B2C3D4E5F60718293A4B6D /* TodoListEditorViewModel.swift in Sources */,
+				A1B2C3D4E5F60718293A4B6F /* TodoListContentView.swift in Sources */,
+				F1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift in Sources */,
+				ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */,
+				B7C4D3E25F6A7890CD1E2F31 /* RootContentView.swift in Sources */,
+				B7C4D3E25F6A7890CD1E2F32 /* RootContentView+Layout.swift in Sources */,
 				B7C4D3E25F6A7890CD1E2F33 /* RootContentView+Sidebar.swift in Sources */,
 				B7C4D3E25F6A7890CD1E2F34 /* RootContentView+Main.swift in Sources */,
 				B7C4D3E25F6A7890CD1E2F35 /* RootContentView+Inspector.swift in Sources */,
@@ -722,6 +889,7 @@
 				B44B55C66D77E88F99AABBCC /* YouTrackIssueBoardRepository.swift in Sources */,
 				2A3B4C5D6E7F8091A2B3C4D7 /* YouTrackSavedQueryRepository.swift in Sources */,
 				5E2253FC639018566A8117DC /* YouTrackOAuthConfiguration.swift in Sources */,
+				27B6AAC1F670D113FEDB0FE4 /* ConflictNotice.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -853,6 +1021,39 @@
 			};
 			name = Debug;
 		};
+		8111A8E41B36FA70294D9CD2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = YouTrekMobile.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 49PJNAT2WC;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Sources/YouTrekMobile/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.potomushto.youtrek.ios;
+				PRODUCT_NAME = YouTrekMobile;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				YOUTRACK_BASE_URL = "https://youtrack.jetbrains.com/api";
+				YOUTRACK_CLIENT_ID = "";
+				YOUTRACK_HUB_AUTHORIZE_URL = "";
+				YOUTRACK_HUB_TOKEN_URL = "";
+				YOUTRACK_REDIRECT_SCHEME = youtrek;
+				YOUTRACK_REDIRECT_URI = "$(YOUTRACK_REDIRECT_SCHEME)://oauth_callback";
+				YOUTRACK_SCOPES = YouTrack;
+			};
+			name = Debug;
+		};
 		879392DBFA65D33FAFEF5BBF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -941,6 +1142,40 @@
 			};
 			name = Release;
 		};
+		CC504D95C8249042A8203347 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = YouTrekMobile.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 49PJNAT2WC;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Sources/YouTrekMobile/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.potomushto.youtrek.ios;
+				PRODUCT_NAME = YouTrekMobile;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				YOUTRACK_BASE_URL = "https://youtrack.jetbrains.com/api";
+				YOUTRACK_CLIENT_ID = "";
+				YOUTRACK_HUB_AUTHORIZE_URL = "";
+				YOUTRACK_HUB_TOKEN_URL = "";
+				YOUTRACK_REDIRECT_SCHEME = youtrek;
+				YOUTRACK_REDIRECT_URI = "$(YOUTRACK_REDIRECT_SCHEME)://oauth_callback";
+				YOUTRACK_SCOPES = YouTrack;
+			};
+			name = Release;
+		};
 		EB482EB534378E9A0D3483DC /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1007,6 +1242,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		FD10C3111AC22B3C8DF80915 /* Build configuration list for PBXNativeTarget "YouTrekMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CC504D95C8249042A8203347 /* Release */,
+				8111A8E41B36FA70294D9CD2 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -1018,7 +1262,7 @@
 				minimumVersion = 1.7.5;
 			};
 		};
-		82E23A91878F56103FFB6768 /* XCRemoteSwiftPackageReference "SQLite" */ = {
+		82E23A91878F56103FFB6768 /* XCRemoteSwiftPackageReference "SQLite.swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/stephencelis/SQLite.swift";
 			requirement = {
@@ -1029,6 +1273,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		31C7606ABF8EE5886D700A52 /* AppAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6FD98FFEE4686191886A9284 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
+			productName = AppAuth;
+		};
 		79FB59A8C56FB49F29358D40 /* AppAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6FD98FFEE4686191886A9284 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
@@ -1036,7 +1285,12 @@
 		};
 		B83164E55F38E5918B1AC16B /* SQLite */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 82E23A91878F56103FFB6768 /* XCRemoteSwiftPackageReference "SQLite" */;
+			package = 82E23A91878F56103FFB6768 /* XCRemoteSwiftPackageReference "SQLite.swift" */;
+			productName = SQLite;
+		};
+		F143938D9A52504ED5E98C7F /* SQLite */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 82E23A91878F56103FFB6768 /* XCRemoteSwiftPackageReference "SQLite.swift" */;
 			productName = SQLite;
 		};
 /* End XCSwiftPackageProductDependency section */

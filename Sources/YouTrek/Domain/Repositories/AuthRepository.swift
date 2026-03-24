@@ -32,7 +32,7 @@ enum AuthError: Error, LocalizedError {
         case .tokenUnavailable:
             return "Unable to obtain an access token from Hub."
         case .presentationUnavailable:
-            return "No available window to present the sign-in flow."
+            return "No available UI context to present the sign-in flow."
         }
     }
 }
