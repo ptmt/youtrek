@@ -21,8 +21,15 @@ final class YouTrekApp: NSObject, NSApplicationDelegate {
 #endif
 
     static func main() {
+        let launchStart = ProcessInfo.processInfo.systemUptime
+        LoggingService.general.info("Startup: YouTrekApp.main entered.")
         let application = NSApplication.shared
         let delegate = YouTrekApp()
+        let delegateInitDuration = ProcessInfo.processInfo.systemUptime - launchStart
+        let formattedDelegateInitDuration = String(format: "%.2f", delegateInitDuration)
+        LoggingService.general.info(
+            "Startup: app delegate initialized in \(formattedDelegateInitDuration, privacy: .public)s."
+        )
         retainedDelegate = delegate
         application.setActivationPolicy(.regular)
         application.delegate = delegate

@@ -124,18 +124,32 @@ final class AppContainer: ObservableObject {
     }
 
     static let live: AppContainer = {
+        let liveInitStart = ProcessInfo.processInfo.systemUptime
+        func logStartupPhase(_ message: String) {
+            let elapsed = ProcessInfo.processInfo.systemUptime - liveInitStart
+            let formatted = String(format: "%.2f", elapsed)
+            LoggingService.general.info("Startup: \(message, privacy: .public) (+\(formatted, privacy: .public)s)")
+        }
+
+        logStartupPhase("AppContainer.live start")
         let state = AppState()
         let router = WindowRouter()
         let composer = IssueComposer()
         let palette = CommandPaletteCoordinator(router: router, appState: state)
         let configurationStore = AppConfigurationStore()
-        let activeAccountID = configurationStore.activeAccountID()
+        logStartupPhase("Configuration store ready")
+        let activeAccount = configurationStore.cachedActiveAccount()
+        let activeAccountID = activeAccount?.id
         state.setCurrentUserProfile(
-            displayName: configurationStore.loadUserDisplayName(),
-            login: configurationStore.loadUserLogin(),
-            id: configurationStore.loadUserID()
+            displayName: activeAccount?.displayName,
+            login: activeAccount?.login,
+            id: activeAccount?.userID
         )
-        let initialSyncState = configurationStore.loadInitialSyncState()
+        let initialSyncState = (
+            issues: activeAccount?.initialIssueSyncCompleted ?? false,
+            boards: activeAccount?.initialBoardSyncCompleted ?? false,
+            savedSearches: activeAccount?.initialSavedSearchSyncCompleted ?? false
+        )
         print("initialSyncState", initialSyncState)
         state.prefillInitialSyncState(
             issues: initialSyncState.issues,
@@ -144,7 +158,8 @@ final class AppContainer: ObservableObject {
         )
         let draftStore = IssueDraftStore(accountID: activeAccountID)
         let networkMonitor = NetworkRequestMonitor()
-        let initialRequiresSetup = AppContainer.requiresSetupOnLaunch(configurationStore: configurationStore)
+        let initialRequiresSetup = AppContainer.requiresSetupForInitialPresentation(activeAccount: activeAccount)
+        logStartupPhase("Launch configuration snapshot loaded")
         let manualAuth = ManualTokenAuthRepository(configurationStore: configurationStore)
         let authSwitcher = SwitchableAuthRepository(initial: manualAuth)
         let issueSwitcher = SwitchableIssueRepository(initial: EmptyIssueRepository())
@@ -157,6 +172,7 @@ final class AppContainer: ObservableObject {
         let savedQueryStore = SavedQueryLocalStore(accountID: activeAccountID)
         let todoListStore = TodoListMarkdownStore(accountID: activeAccountID)
         let issueLocalStore = IssueLocalStore(accountID: activeAccountID)
+        logStartupPhase("Local stores ready")
         let syncQueue = SyncOperationQueue { [weak state] pendingCount, label in
             await MainActor.run {
                 state?.updateSyncActivity(isSyncing: pendingCount > 0, label: label)
@@ -206,6 +222,7 @@ final class AppContainer: ObservableObject {
         )
         container.requiresSetup = initialRequiresSetup
         Task { await container.configureIfNeeded() }
+        logStartupPhase("AppContainer.live complete")
         return container
     }()
 
@@ -217,7 +234,7 @@ final class AppContainer: ObservableObject {
         let authRepository = PreviewAuthRepository()
         let issueRepository = PreviewIssueRepository()
         let store = AppConfigurationStore()
-        let activeAccountID = store.activeAccountID()
+        let activeAccountID = store.cachedActiveAccount()?.id
         let draftStore = IssueDraftStore(accountID: activeAccountID)
         let networkMonitor = NetworkRequestMonitor()
         let authSwitcher = SwitchableAuthRepository(initial: authRepository)
@@ -2059,13 +2076,27 @@ private extension AppContainer {
         return baseURL.appendingPathComponent("api")
     }
 
-    static func requiresSetupOnLaunch(configurationStore: AppConfigurationStore) -> Bool {
-        if let activeAccount = configurationStore.activeAccount() {
+    static func requiresSetupForInitialPresentation(activeAccount: StoredAccount?) -> Bool {
+        guard let activeAccount else { return true }
+        switch activeAccount.authMethod {
+        case .oauth:
+            return false
+        case .token:
+            return activeAccount.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    static func requiresSetupOnLaunch(
+        configurationStore: AppConfigurationStore,
+        activeAccount: StoredAccount? = nil
+    ) -> Bool {
+        if let activeAccount = activeAccount ?? configurationStore.activeAccount() {
             switch activeAccount.authMethod {
             case .oauth:
                 return !AppAuthRepository.hasSavedAuthState()
             case .token:
-                return configurationStore.loadBaseURL() == nil ||
+                let hasBaseURL = !activeAccount.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                return !hasBaseURL ||
                     (configurationStore.loadToken()?.isEmpty != false)
             }
         }

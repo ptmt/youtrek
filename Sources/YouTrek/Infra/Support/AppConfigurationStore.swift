@@ -36,7 +36,6 @@ struct AppConfigurationStore {
         self.defaults = defaults
         self.keychain = keychain
         migrateLegacyAccountsIfNeeded()
-        refreshSyncedMetadataIfNeeded()
     }
 
     private static func defaultDefaults() -> UserDefaults {
@@ -136,7 +135,15 @@ struct AppConfigurationStore {
 
     func activeAccount() -> StoredAccount? {
         let accounts = loadAccounts()
-        guard let activeID = activeAccountID() else { return nil }
+        guard let activeID = defaults.string(forKey: Keys.activeAccountID).flatMap(UUID.init(uuidString:)) else {
+            return nil
+        }
+        return accounts.first { $0.id == activeID }
+    }
+
+    func cachedActiveAccount() -> StoredAccount? {
+        let accounts = loadStoredAccounts()
+        guard let activeID = cachedActiveAccountID(in: accounts) else { return nil }
         return accounts.first { $0.id == activeID }
     }
 
@@ -580,6 +587,16 @@ struct AppConfigurationStore {
         guard let fallback = sorted.first else { return nil }
         saveActiveAccountID(fallback.id)
         return fallback.id
+    }
+
+    private func cachedActiveAccountID(in accounts: [StoredAccount]) -> UUID? {
+        guard !accounts.isEmpty else { return nil }
+        if let raw = defaults.string(forKey: Keys.activeAccountID),
+           let id = UUID(uuidString: raw),
+           accounts.contains(where: { $0.id == id }) {
+            return id
+        }
+        return accounts.sorted(by: accountSortPredicate).first?.id
     }
 
     private func updateActiveAccount(_ update: (inout StoredAccount) -> Void) {

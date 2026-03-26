@@ -52,6 +52,8 @@ final class MainWindowViewController: NSViewController {
     private func refreshPresentation() {
         let needsSetupPresentation = container.requiresSetup || !container.appState.hasCompletedInitialSync
         let targetController: NSViewController = needsSetupPresentation ? setupController : workspaceController
+        let presentationChanged = activeController !== targetController || isSetup != needsSetupPresentation
+        guard presentationChanged else { return }
 
         if activeController !== targetController {
             if let activeController {
