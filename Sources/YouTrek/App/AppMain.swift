@@ -87,6 +87,7 @@ final class YouTrekApp: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.title = "YouTrek"
+        window.contentMinSize = NSSize(width: 720, height: 560)
         window.contentViewController = contentController
         window.center()
         window.isReleasedWhenClosed = false

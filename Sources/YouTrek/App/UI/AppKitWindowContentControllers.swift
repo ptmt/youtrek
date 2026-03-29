@@ -4,6 +4,12 @@ import SwiftUI
 
 @MainActor
 final class MainWindowViewController: NSViewController {
+    private enum WindowSizing {
+        static let setupContent = NSSize(width: 480, height: 340)
+        static let workspaceDefault = NSSize(width: 1280, height: 800)
+        static let workspaceMinimum = NSSize(width: 720, height: 560)
+    }
+
     private let container: AppContainer
     private let setupController: NSHostingController<AnyView>
     private let workspaceController: WorkspaceViewController
@@ -101,6 +107,7 @@ final class MainWindowViewController: NSViewController {
         #endif
 
         if isSetup {
+            window.contentMinSize = WindowSizing.setupContent
             window.toolbar = nil
             if needsReconfigure {
                 window.styleMask = [.titled, .closable, .fullSizeContentView]
@@ -129,35 +136,39 @@ final class MainWindowViewController: NSViewController {
                 }
             }
             if !hasAppliedSetupPresentation {
-                window.setContentSize(NSSize(width: 480, height: 340))
+                window.setContentSize(WindowSizing.setupContent)
                 window.center()
                 window.makeKeyAndOrderFront(nil)
                 hasAppliedSetupPresentation = true
             }
-        } else if needsReconfigure {
-            window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-            window.titlebarAppearsTransparent = true
-            window.titleVisibility = .hidden
-            window.standardWindowButton(.closeButton)?.isHidden = false
-            window.standardWindowButton(.miniaturizeButton)?.isHidden = false
-            window.standardWindowButton(.zoomButton)?.isHidden = false
-            if #available(macOS 11.0, *) {
-                window.toolbarStyle = .unified
-                window.titlebarSeparatorStyle = .none
-            }
-            window.isMovableByWindowBackground = false
-            window.isOpaque = true
-            window.backgroundColor = .windowBackgroundColor
-            if let contentView = window.contentView, let layer = contentView.layer {
-                layer.cornerRadius = 0
-                if #available(macOS 10.13, *) {
-                    layer.cornerCurve = .continuous
+        } else {
+            window.contentMinSize = WindowSizing.workspaceMinimum
+            if needsReconfigure {
+                window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+                window.titlebarAppearsTransparent = true
+                window.titleVisibility = .hidden
+                window.standardWindowButton(.closeButton)?.isHidden = false
+                window.standardWindowButton(.miniaturizeButton)?.isHidden = false
+                window.standardWindowButton(.zoomButton)?.isHidden = false
+                if #available(macOS 11.0, *) {
+                    window.toolbarStyle = .unified
+                    window.titlebarSeparatorStyle = .none
                 }
-                layer.masksToBounds = false
+                window.isMovableByWindowBackground = false
+                window.isOpaque = true
+                window.backgroundColor = .windowBackgroundColor
+                if let contentView = window.contentView, let layer = contentView.layer {
+                    layer.cornerRadius = 0
+                    if #available(macOS 10.13, *) {
+                        layer.cornerCurve = .continuous
+                    }
+                    layer.masksToBounds = false
+                }
+                window.setContentSize(WindowSizing.workspaceDefault)
+                window.center()
+                hasAppliedSetupPresentation = false
             }
-            window.setContentSize(NSSize(width: 1280, height: 800))
-            window.center()
-            hasAppliedSetupPresentation = false
+            ensureContentSize(atLeast: WindowSizing.workspaceMinimum, for: window)
         }
 
         #if DEBUG
@@ -166,6 +177,16 @@ final class MainWindowViewController: NSViewController {
             "MainWindowViewController: configure end isSetup=\(self.isSetup, privacy: .public) size=\(Double(finalSize.width), privacy: .public)x\(Double(finalSize.height), privacy: .public)"
         )
         #endif
+    }
+
+    private func ensureContentSize(atLeast minimumSize: NSSize, for window: NSWindow) {
+        let currentContentSize = window.contentRect(forFrameRect: window.frame).size
+        let targetSize = NSSize(
+            width: max(currentContentSize.width, minimumSize.width),
+            height: max(currentContentSize.height, minimumSize.height)
+        )
+        guard targetSize != currentContentSize else { return }
+        window.setContentSize(targetSize)
     }
 }
 

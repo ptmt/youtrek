@@ -4,6 +4,39 @@ import XCTest
 @testable import YouTrek
 
 final class YouTrekTests: XCTestCase {
+    func testMarkdownDisplayTextRendererNormalizesWindowsLineEndingsIntoHardBreaks() {
+        let prepared = MarkdownDisplayTextRenderer.preparedMarkdown(
+            for: "First line\r\nSecond line\rThird line"
+        )
+
+        XCTAssertEqual(
+            prepared,
+            """
+            First line  
+            Second line  
+            Third line
+            """
+        )
+    }
+
+    func testMarkdownDisplayTextRendererPreservesCodeFenceLinesWhileNormalizingLineEndings() {
+        let prepared = MarkdownDisplayTextRenderer.preparedMarkdown(
+            for: "Before\r\n```swift\r\nlet value = 1\r\nlet other = 2\r\n```\r\nAfter"
+        )
+
+        XCTAssertEqual(
+            prepared,
+            """
+            Before  
+            ```swift
+            let value = 1
+            let other = 2
+            ```
+            After
+            """
+        )
+    }
+
     @MainActor
     func testRootSplitViewControllerUsesFullHeightLayoutForMainAndInspector() {
         let controller = RootSplitViewController()

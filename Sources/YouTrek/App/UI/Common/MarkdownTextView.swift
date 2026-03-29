@@ -1,79 +1,10 @@
 import AppKit
 import SwiftUI
 
-struct MarkdownTextView: View {
-    let text: String
-    var font: Font = .callout
-    var codeFont: Font = .system(.callout, design: .monospaced)
-    var baseURL: URL?
-    var remoteImageDataLoader: ((URL) async throws -> Data)?
-
-    var body: some View {
-        let segments = Self.segments(from: text)
-        if segments.count == 1, case let .markdown(value) = segments[0] {
-            markdownSegment(value)
-        } else {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(segments.indices, id: \.self) { index in
-                    switch segments[index] {
-                    case .markdown(let value):
-                        if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            markdownSegment(value)
-                        }
-                    case .codeBlock(let code, let language):
-                        MarkdownCodeBlockView(code: code, language: language, font: codeFont)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func markdownSegment(_ value: String) -> some View {
-        let fragments = MarkdownImageMarkdownParser.fragments(in: value)
-        if fragments.count == 1, case let .text(singleText) = fragments[0] {
-            markdownText(singleText)
-        } else {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(fragments.enumerated()), id: \.offset) { _, fragment in
-                    switch fragment {
-                    case .text(let text):
-                        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            markdownText(text)
-                        }
-                    case .image(let match):
-                        MarkdownImageView(
-                            match: match,
-                            baseURL: baseURL,
-                            remoteImageDataLoader: remoteImageDataLoader
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    private func markdownText(_ value: String) -> some View {
-        let renderedText = Self.preprocess(value)
-        if let attributed = try? AttributedString(
-            markdown: renderedText,
-            options: .init(
-                interpretedSyntax: .full,
-                failurePolicy: .returnPartiallyParsedIfPossible
-            )
-        ) {
-            return Text(attributed)
-                .font(font)
-                .textSelection(.enabled)
-        }
-        return Text(renderedText)
-            .font(font)
-            .textSelection(.enabled)
-    }
-
-    private static func segments(from text: String) -> [MarkdownSegment] {
-        let rawLines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        let lines = rawLines.map(String.init)
+enum MarkdownDisplayTextRenderer {
+    static func segments(from text: String) -> [MarkdownSegment] {
+        let normalizedText = normalizeLineEndings(in: text)
+        let lines = normalizedText.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         var segments: [MarkdownSegment] = []
         var markdownLines: [String] = []
         var codeLines: [String] = []
@@ -123,9 +54,9 @@ struct MarkdownTextView: View {
         return segments
     }
 
-    private static func preprocess(_ text: String) -> String {
-        let rawLines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        var lines = rawLines.map(String.init)
+    static func preparedMarkdown(for text: String) -> String {
+        let normalizedText = normalizeLineEndings(in: text)
+        var lines = normalizedText.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         var inCodeBlock = false
         for index in lines.indices {
             let line = lines[index]
@@ -150,6 +81,12 @@ struct MarkdownTextView: View {
             lines[index] = updated
         }
         return lines.joined(separator: "\n")
+    }
+
+    static func normalizeLineEndings(in text: String) -> String {
+        text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
     }
 
     private static func replacingChecklistMarker(in line: String) -> String {
@@ -185,6 +122,77 @@ struct MarkdownTextView: View {
             return "\(prefix)\(symbol) \(rest)"
         }
         return "\(prefix)\(symbol)"
+    }
+}
+
+struct MarkdownTextView: View {
+    let text: String
+    var font: Font = .callout
+    var codeFont: Font = .system(.callout, design: .monospaced)
+    var baseURL: URL?
+    var remoteImageDataLoader: ((URL) async throws -> Data)?
+
+    var body: some View {
+        let segments = MarkdownDisplayTextRenderer.segments(from: text)
+        if segments.count == 1, case let .markdown(value) = segments[0] {
+            markdownSegment(value)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(segments.indices, id: \.self) { index in
+                    switch segments[index] {
+                    case .markdown(let value):
+                        if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            markdownSegment(value)
+                        }
+                    case .codeBlock(let code, let language):
+                        MarkdownCodeBlockView(code: code, language: language, font: codeFont)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func markdownSegment(_ value: String) -> some View {
+        let fragments = MarkdownImageMarkdownParser.fragments(in: value)
+        if fragments.count == 1, case let .text(singleText) = fragments[0] {
+            markdownText(singleText)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(fragments.enumerated()), id: \.offset) { _, fragment in
+                    switch fragment {
+                    case .text(let text):
+                        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            markdownText(text)
+                        }
+                    case .image(let match):
+                        MarkdownImageView(
+                            match: match,
+                            baseURL: baseURL,
+                            remoteImageDataLoader: remoteImageDataLoader
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func markdownText(_ value: String) -> some View {
+        let renderedText = MarkdownDisplayTextRenderer.preparedMarkdown(for: value)
+        if let attributed = try? AttributedString(
+            markdown: renderedText,
+            options: .init(
+                interpretedSyntax: .full,
+                failurePolicy: .returnPartiallyParsedIfPossible
+            )
+        ) {
+            return Text(attributed)
+                .font(font)
+                .textSelection(.enabled)
+        }
+        return Text(renderedText)
+            .font(font)
+            .textSelection(.enabled)
     }
 }
 
@@ -495,7 +503,7 @@ private enum MarkdownRemoteImageLoadState {
     case failed
 }
 
-private enum MarkdownSegment {
+enum MarkdownSegment: Equatable {
     case markdown(String)
     case codeBlock(String, language: String?)
 }
