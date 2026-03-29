@@ -41,7 +41,10 @@ trim() {
 
 read_defaults_base_url() {
   local value=""
-  value="$(/usr/bin/defaults read com.potomushto.youtrek.shared com.potomushto.youtrek.config.base-url 2>/dev/null || true)"
+  value="$(/usr/bin/defaults read com.potomushto.youtrek.macos com.potomushto.youtrek.config.base-url 2>/dev/null || true)"
+  if [[ -z "$value" ]]; then
+    value="$(/usr/bin/defaults read group.com.potomushto.youtrek.shared com.potomushto.youtrek.config.base-url 2>/dev/null || true)"
+  fi
   if [[ -z "$value" ]]; then
     value="$(/usr/bin/defaults read com.potomushto.youtrek com.potomushto.youtrek.config.base-url 2>/dev/null || true)"
   fi

@@ -39,20 +39,41 @@ struct AppConfigurationStore {
     }
 
     private static func defaultDefaults() -> UserDefaults {
-        guard let sharedDefaults = UserDefaults(suiteName: sharedSuiteName) else {
-            return .standard
+        let start = ProcessInfo.processInfo.systemUptime
+        let standardDefaults = UserDefaults.standard
+        if hasStoredAccounts(in: standardDefaults) {
+            logStartupTiming("defaultDefaults using standard domain", start: start)
+            return standardDefaults
         }
-        migrateDefaultsIfNeeded(from: .standard, to: sharedDefaults)
-        for legacySuiteName in legacySharedSuiteNames {
-            if let legacyDefaults = UserDefaults(suiteName: legacySuiteName) {
-                migrateDefaultsIfNeeded(from: legacyDefaults, to: sharedDefaults)
+
+        if let sharedDefaults = UserDefaults(suiteName: sharedSuiteName) {
+            migrateDefaultsIfNeeded(from: sharedDefaults, to: standardDefaults)
+            if hasStoredAccounts(in: standardDefaults) {
+                logStartupTiming("defaultDefaults migrated from shared suite", start: start)
+                return standardDefaults
             }
         }
-        return sharedDefaults
+
+        for legacySuiteName in legacySharedSuiteNames {
+            if let legacyDefaults = UserDefaults(suiteName: legacySuiteName) {
+                migrateDefaultsIfNeeded(from: legacyDefaults, to: standardDefaults)
+                if hasStoredAccounts(in: standardDefaults) {
+                    logStartupTiming("defaultDefaults migrated from legacy suite \(legacySuiteName)", start: start)
+                    return standardDefaults
+                }
+            }
+        }
+
+        logStartupTiming("defaultDefaults using standard fallback", start: start)
+        return standardDefaults
     }
 
     static func sharedDefaultsSuiteName() -> String {
         sharedSuiteName
+    }
+
+    private static func hasStoredAccounts(in defaults: UserDefaults) -> Bool {
+        defaults.data(forKey: Keys.accounts) != nil
     }
 
     static func sharedAccessGroup() -> String? {
@@ -63,9 +84,12 @@ struct AppConfigurationStore {
         service: String,
         prefersDataProtectionKeychain: Bool = false
     ) -> KeychainStorage {
-        KeychainStorage(
+        let start = ProcessInfo.processInfo.systemUptime
+        let accessGroup = sharedAccessGroup()
+        logStartupTiming("defaultKeychain resolved access group for \(service)", start: start)
+        return KeychainStorage(
             service: service,
-            accessGroup: sharedAccessGroup(),
+            accessGroup: accessGroup,
             synchronizable: true,
             prefersDataProtectionKeychain: prefersDataProtectionKeychain
         )
@@ -432,22 +456,52 @@ struct AppConfigurationStore {
     }
 
     private static func resolveAccessGroup() -> String? {
+        let start = ProcessInfo.processInfo.systemUptime
         if let infoPrefix = appIdentifierPrefixFromBundle() {
-            return infoPrefix + sharedKeychainGroupSuffix
+            let group = infoPrefix + sharedKeychainGroupSuffix
+            logStartupTiming("resolveAccessGroup using prefix \(group)", start: start)
+            return group
         }
         let preferredSuffixes = [sharedKeychainGroupSuffix, configKeychainGroupSuffix]
             + legacyKeychainGroupSuffixes
-        if let match = KeychainAccessGroupResolver.resolve(matchingSuffixes: preferredSuffixes) { return match }
+        if let match = KeychainAccessGroupResolver.resolve(matchingSuffixes: preferredSuffixes) {
+            logStartupTiming("resolveAccessGroup matched entitlement \(match)", start: start)
+            return match
+        }
         let availableGroups = KeychainAccessGroupResolver.availableGroups().sorted()
-        return availableGroups.first
+        let group = availableGroups.first
+        logStartupTiming(
+            "resolveAccessGroup fallback available groups count=\(availableGroups.count)",
+            start: start
+        )
+        return group
     }
 
     private static func appIdentifierPrefixFromBundle(bundle: Bundle = .main) -> String? {
+        let start = ProcessInfo.processInfo.systemUptime
         guard let raw = bundle.object(forInfoDictionaryKey: "APP_IDENTIFIER_PREFIX") as? String else {
-            return nil
+            let prefix = KeychainAccessGroupResolver.appIdentifierPrefix()
+            logStartupTiming("appIdentifierPrefixFromBundle resolved via entitlements", start: start)
+            return prefix
         }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        if !trimmed.isEmpty {
+            logStartupTiming("appIdentifierPrefixFromBundle resolved via Info.plist", start: start)
+            return trimmed
+        }
+        let prefix = KeychainAccessGroupResolver.appIdentifierPrefix()
+        logStartupTiming("appIdentifierPrefixFromBundle resolved empty Info.plist fallback", start: start)
+        return prefix
+    }
+
+    private static func logStartupTiming(_ message: String, start: TimeInterval) {
+#if DEBUG
+        let elapsed = ProcessInfo.processInfo.systemUptime - start
+        let formatted = String(format: "%.2f", elapsed)
+        LoggingService.general.info(
+            "Startup detail: AppConfigurationStore \(message, privacy: .public) (+\(formatted, privacy: .public)s)"
+        )
+#endif
     }
 
     private func loadFromAlternateAccessGroups(allowInteraction: Bool) throws -> Data? {

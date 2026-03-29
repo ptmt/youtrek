@@ -33,6 +33,7 @@ final class AppContainer: ObservableObject {
     private var todoListStore: TodoListMarkdownStore
     private var lastLoadedIssueQuery: IssueQuery?
     private var lastLoadedIssueSelection: SidebarItem?
+    private var activeIssueLoadRequestID: UUID?
     private var cachedProjects: [IssueProject] = []
     private var cachedSavedQueries: [SavedQuery] = []
     private var cachedBoards: [IssueBoard] = []
@@ -150,7 +151,6 @@ final class AppContainer: ObservableObject {
             boards: activeAccount?.initialBoardSyncCompleted ?? false,
             savedSearches: activeAccount?.initialSavedSearchSyncCompleted ?? false
         )
-        print("initialSyncState", initialSyncState)
         state.prefillInitialSyncState(
             issues: initialSyncState.issues,
             boards: initialSyncState.boards,
@@ -439,6 +439,7 @@ final class AppContainer: ObservableObject {
         appState.updateInboxFieldUsage(from: [])
         lastLoadedIssueQuery = nil
         lastLoadedIssueSelection = nil
+        activeIssueLoadRequestID = nil
         statusOptionsCache.removeAll()
         priorityOptionsCache.removeAll()
         assigneeOptionsCache.removeAll()
@@ -510,7 +511,6 @@ final class AppContainer: ObservableObject {
                 self.recordIssueListDataEvent(message, listID: listID)
             }
         }
-
         if let queryLabel = query.diagnosticsLabel {
             recordDataEvent("Issue query: \(queryLabel).")
         }
@@ -519,6 +519,8 @@ final class AppContainer: ObservableObject {
             recordDataEvent("Load issues skipped (same query).")
             return
         }
+        let loadRequestID = UUID()
+        activeIssueLoadRequestID = loadRequestID
         recordDataEvent("Load issues started.")
         lastLoadedIssueQuery = query
         appState.setIssuesLoading(true)
@@ -549,6 +551,10 @@ final class AppContainer: ObservableObject {
         let cachedLoadStart = ProcessInfo.processInfo.systemUptime
         let cachedIssues = await syncCoordinator.loadCachedIssues(for: query)
         let cachedLoadDuration = durationText(since: cachedLoadStart)
+        guard isCurrentIssueLoadRequest(loadRequestID, selectionID: selection.id) else {
+            recordDataEvent("Load issues ignored (stale request before cache apply).")
+            return
+        }
         if !cachedIssues.isEmpty {
             LoggingService.syncVerbose(
                 "Local DB: cached issues loaded (\(cachedIssues.count)) in \(cachedLoadDuration) for \(selection.id)."
@@ -575,6 +581,10 @@ final class AppContainer: ObservableObject {
             )
             recordDataEvent("Local DB cached issues empty (\(cachedLoadDuration)).")
         }
+        guard isCurrentIssueLoadRequest(loadRequestID, selectionID: selection.id) else {
+            recordDataEvent("Load issues ignored (stale request before refresh).")
+            return
+        }
 
         let syncStart = ProcessInfo.processInfo.systemUptime
         let syncResult = await syncCoordinator.refreshIssuesWithStatus(
@@ -586,6 +596,10 @@ final class AppContainer: ObservableObject {
         )
         if let remoteIDs = await remoteSprintIssueIDs {
             sprintIssueIDs = remoteIDs
+        }
+        guard isCurrentIssueLoadRequest(loadRequestID, selectionID: selection.id) else {
+            recordDataEvent("Load issues ignored (stale request after refresh).")
+            return
         }
         let syncDuration = durationText(since: syncStart)
         if syncResult.didSyncRemote || !syncResult.issues.isEmpty {
@@ -1110,6 +1124,7 @@ final class AppContainer: ObservableObject {
                 appState.setIssuesLoading(true)
                 self.lastLoadedIssueQuery = nil
                 self.lastLoadedIssueSelection = nil
+                self.activeIssueLoadRequestID = nil
                 self.cachedSavedQueries = []
                 self.cachedBoards = []
                 self.statusOptionsCache.removeAll()
@@ -1369,6 +1384,10 @@ final class AppContainer: ObservableObject {
     private func forceReloadIssues(for selection: SidebarItem) async {
         lastLoadedIssueQuery = nil
         await loadIssues(for: selection)
+    }
+
+    private func isCurrentIssueLoadRequest(_ requestID: UUID, selectionID: String) -> Bool {
+        activeIssueLoadRequestID == requestID && appState.selectedSidebarItem?.id == selectionID
     }
 
     private func presentIssueInInspector(_ issue: IssueSummary) {

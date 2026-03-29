@@ -396,6 +396,30 @@ enum KeychainAccessGroupResolver {
         "com.apple.security.keychain-access-groups"
     ]
 
+    static func appIdentifierPrefix() -> String? {
+        let start = ProcessInfo.processInfo.systemUptime
+        #if os(macOS)
+        if let applicationIdentifier = entitlementString(for: "com.apple.application-identifier") {
+            let trimmed = applicationIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            let components = trimmed.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: true)
+            guard let prefix = components.first, !prefix.isEmpty else { return nil }
+            let resolved = "\(prefix)."
+            logTiming("appIdentifierPrefix application identifier", start: start)
+            return resolved
+        }
+        if let teamIdentifier = entitlementString(for: "com.apple.developer.team-identifier") {
+            let trimmed = teamIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            let resolved = "\(trimmed)."
+            logTiming("appIdentifierPrefix team identifier", start: start)
+            return resolved
+        }
+        #endif
+        logTiming("appIdentifierPrefix unavailable", start: start)
+        return nil
+    }
+
     static func resolve(matchingSuffix suffix: String) -> String? {
         #if os(macOS)
         guard let task = SecTaskCreateFromSelf(nil) else { return nil }
@@ -445,5 +469,27 @@ enum KeychainAccessGroupResolver {
         #else
         return []
         #endif
+    }
+
+    private static func entitlementString(for key: String) -> String? {
+        let start = ProcessInfo.processInfo.systemUptime
+        guard let task = SecTaskCreateFromSelf(nil),
+              let value = SecTaskCopyValueForEntitlement(task, key as CFString, nil)
+        else {
+            logTiming("entitlement \(key) unavailable", start: start)
+            return nil
+        }
+        logTiming("entitlement \(key) loaded", start: start)
+        return value as? String
+    }
+
+    private static func logTiming(_ message: String, start: TimeInterval) {
+#if DEBUG
+        let elapsed = ProcessInfo.processInfo.systemUptime - start
+        let formatted = String(format: "%.2f", elapsed)
+        LoggingService.general.info(
+            "Startup detail: KeychainAccessGroupResolver \(message, privacy: .public) (+\(formatted, privacy: .public)s)"
+        )
+#endif
     }
 }
