@@ -88,6 +88,12 @@ final class MainWindowViewController: NSViewController {
         scheduleWindowConfiguration()
     }
 
+    override func preferredContentSizeDidChange(for viewController: NSViewController) {
+        // Window sizing is managed explicitly here. Hosted SwiftUI content can briefly report a
+        // tiny fitting size during updates, which would otherwise collapse the window height.
+        scheduleWindowConfiguration()
+    }
+
     private func refreshPresentation() {
         let needsSetupPresentation = container.requiresSetup || !container.appState.hasCompletedInitialSync
         let targetController: NSViewController = needsSetupPresentation ? setupController : workspaceController
@@ -313,6 +319,10 @@ final class WorkspaceViewController: NSViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         installToolbarIfNeeded()
+    }
+
+    override func preferredContentSizeDidChange(for viewController: NSViewController) {
+        // Keep child hosting controllers from bubbling transient preferred sizes up to the window.
     }
 
     private func observeState() {
