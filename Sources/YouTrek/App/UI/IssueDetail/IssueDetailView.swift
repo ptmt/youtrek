@@ -950,15 +950,18 @@ struct IssueDetailView: View {
                 }
             }
         } label: {
-            IssueStatusBadge(
-                text: issue.status.displayName,
-                colors: issue.status.badgeColors,
-                textOpacity: isClosed ? 0.62 : 0.86,
-                dotOpacity: isClosed ? 0.6 : 1.0
-            )
-            .font(headerBadgeFont)
+            headerMenuLabel {
+                IssueStatusBadge(
+                    text: issue.status.displayName,
+                    colors: issue.status.badgeColors,
+                    textOpacity: isClosed ? 0.62 : 0.86,
+                    dotOpacity: isClosed ? 0.6 : 1.0
+                )
+                .font(headerBadgeFont)
+            }
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .controlSize(.small)
     }
 
     private var statusMenuOptions: [IssueFieldOption] {
@@ -983,10 +986,23 @@ struct IssueDetailView: View {
                 }
             }
         } label: {
-            IssuePriorityBadge(priority: issue.priority, isMuted: isClosed)
-                .font(headerBadgeFont)
+            headerMenuLabel {
+                IssuePriorityBadge(priority: issue.priority, isMuted: isClosed)
+                    .font(headerBadgeFont)
+            }
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .controlSize(.small)
+    }
+
+    private func headerMenuLabel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 5) {
+            content()
+            Image(systemName: "chevron.down")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 1)
     }
 
     private var headerBadgeFont: Font {
@@ -1199,7 +1215,8 @@ private struct CustomFieldEditorRow: View {
             } label: {
                 rowLabel(showChevron: true)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .popover(isPresented: $isPresented, arrowEdge: .bottom) {
                 CustomFieldEditorPopover(
                     field: field,
@@ -1486,7 +1503,8 @@ struct ProjectEditor: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             ProjectPickerPopover(
                 selection: ProjectSelection(projectID: nil, projectName: issue.projectName),
@@ -1722,7 +1740,8 @@ private struct AssigneeEditor: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             AssigneePickerPopover(issue: issue, isPresented: $isPresented)
                 .environmentObject(container)

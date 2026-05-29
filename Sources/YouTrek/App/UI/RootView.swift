@@ -359,7 +359,11 @@ final class SidebarOutlineContainerView: NSView {
         scrollView.drawsBackground = false
 
         backgroundView.translatesAutoresizingMaskIntoConstraints = false
-        backgroundView.material = .contentBackground
+        if #available(macOS 11.0, *) {
+            backgroundView.material = .sidebar
+        } else {
+            backgroundView.material = .contentBackground
+        }
         backgroundView.blendingMode = .withinWindow
         backgroundView.state = .active
 

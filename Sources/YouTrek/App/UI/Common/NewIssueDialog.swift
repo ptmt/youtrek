@@ -131,19 +131,11 @@ struct NewIssueDialog: View {
             HStack(spacing: 4) {
                 Text(projectChipLabel)
                     .font(.subheadline.weight(.medium))
-                Image(systemName: "chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                chipChevron
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(.separator.opacity(0.5), lineWidth: 1)
-            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
         .popover(isPresented: $isProjectPickerPresented, arrowEdge: .bottom) {
             ProjectPickerPopover(
                 selection: projectSelection,
@@ -230,7 +222,8 @@ struct NewIssueDialog: View {
                 .font(.caption)
             }
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .controlSize(.small)
     }
 
     private var priorityChip: some View {
@@ -271,7 +264,8 @@ struct NewIssueDialog: View {
                 .font(.caption)
             }
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .controlSize(.small)
     }
 
     private var assigneeChip: some View {
@@ -280,10 +274,12 @@ struct NewIssueDialog: View {
         } label: {
             metadataChipLabel(
                 icon: "person",
-                text: state.assigneeOption?.displayName ?? "Assignee"
+                text: state.assigneeOption?.displayName ?? "Assignee",
+                showsChevron: true
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
         .popover(isPresented: $isAssigneePickerPresented, arrowEdge: .bottom) {
             ProjectAssigneePickerPopover(
                 projectID: effectiveProjectID,
@@ -304,10 +300,12 @@ struct NewIssueDialog: View {
         } label: {
             metadataChipLabel(
                 icon: "ellipsis",
-                text: nil
+                text: nil,
+                showsChevron: false
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
         .popover(isPresented: $isMoreOptionsPresented, arrowEdge: .bottom) {
             moreOptionsPopover
         }
@@ -364,7 +362,13 @@ struct NewIssueDialog: View {
         .frame(width: 360)
     }
 
-    private func metadataChipLabel(icon: String, text: String?) -> some View {
+    private var chipChevron: some View {
+        Image(systemName: "chevron.down")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+    }
+
+    private func metadataChipLabel(icon: String, text: String?, showsChevron: Bool) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.caption)
@@ -372,27 +376,20 @@ struct NewIssueDialog: View {
                 Text(text)
                     .font(.caption)
             }
+            if showsChevron {
+                chipChevron
+            }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
-        )
         .foregroundStyle(.secondary)
     }
 
     private func chipContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
-            )
-            .foregroundStyle(.secondary)
+        HStack(spacing: 4) {
+            content()
+            chipChevron
+        }
+        .padding(.vertical, 1)
+        .foregroundStyle(.secondary)
     }
 
     private var statusChipColors: IssueBadgeColors {

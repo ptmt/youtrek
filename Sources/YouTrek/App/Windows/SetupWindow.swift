@@ -74,7 +74,7 @@ struct SetupWindow: View {
                     TextField("https://youtrack.jetbrains.com", text: $baseURLString, prompt: Text("YouTrack base URL"))
                         .textContentType(.URL)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(primaryTextColor)
                         .tint(accentColor)
                         .accessibilityLabel("YouTrack base URL")

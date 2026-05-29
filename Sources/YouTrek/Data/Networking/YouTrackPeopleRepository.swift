@@ -42,7 +42,7 @@ private extension YouTrackPeopleRepository {
             queryItems: [URLQueryItem(name: "fields", value: Self.projectFieldFields)]
         )
         let fields = try decoder.decode([YouTrackProjectCustomField].self, from: data)
-        guard let bundleID = fields.lazy.compactMap(Self.assigneeBundleID(from:)).first else {
+        guard let bundleID = Self.assigneeBundleID(in: fields) else {
             return nil
         }
 
@@ -82,16 +82,28 @@ private extension YouTrackPeopleRepository {
         }
     }
 
-    static func assigneeBundleID(from field: YouTrackProjectCustomField) -> String? {
-        let names = [field.field?.name, field.field?.localizedName]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-        guard names.contains("assignee"),
-              let kind = field.field?.fieldType?.kind?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-              kind == "user" else {
-            return nil
+    static func assigneeBundleID(in fields: [YouTrackProjectCustomField]) -> String? {
+        let candidates = fields.compactMap { field -> AssigneeFieldCandidate? in
+            let kind = IssueFieldKind.from(
+                kind: field.field?.fieldType?.kind,
+                valueType: field.field?.fieldType?.valueType,
+                fieldTypeID: field.field?.fieldType?.id
+            )
+            guard kind.usesPeople else { return nil }
+
+            let bundleID = field.bundle?.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !bundleID.isEmpty else { return nil }
+
+            let names = [field.field?.name, field.field?.localizedName]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            let isMultiValue = field.isMultiValue ?? field.field?.fieldType?.collection ?? false
+            return AssigneeFieldCandidate(bundleID: bundleID, names: names, isMultiValue: isMultiValue)
         }
-        let bundleID = field.bundle?.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return bundleID.isEmpty ? nil : bundleID
+
+        if let assigneeField = candidates.first(where: { $0.names.contains("assignee") && !$0.isMultiValue }) {
+            return assigneeField.bundleID
+        }
+        return candidates.first(where: { $0.names.contains("assignee") })?.bundleID
     }
 
     static func option(from user: YouTrackUser) -> IssueFieldOption? {
@@ -108,8 +120,9 @@ private extension YouTrackPeopleRepository {
     }
 
     static let projectFieldFields = [
+        "isMultiValue",
         "bundle(id)",
-        "field(name,localizedName,fieldType(kind))"
+        "field(name,localizedName,fieldType(id,kind,valueType,collection))"
     ].joined(separator: ",")
 
     static let userBundleFields = [
@@ -126,6 +139,7 @@ private struct YouTrackUser: Decodable {
 }
 
 private struct YouTrackProjectCustomField: Decodable {
+    let isMultiValue: Bool?
     let bundle: YouTrackFieldBundle?
     let field: YouTrackCustomField?
 }
@@ -141,9 +155,18 @@ private struct YouTrackCustomField: Decodable {
 }
 
 private struct YouTrackFieldType: Decodable {
+    let id: String?
     let kind: String?
+    let valueType: String?
+    let collection: Bool?
 }
 
 private struct YouTrackUserBundle: Decodable {
     let values: [YouTrackUser]?
+}
+
+private struct AssigneeFieldCandidate {
+    let bundleID: String
+    let names: [String]
+    let isMultiValue: Bool
 }

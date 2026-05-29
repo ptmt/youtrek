@@ -2,6 +2,39 @@ import AppKit
 import Combine
 import SwiftUI
 
+private enum NativeWindowChrome {
+    static let trafficLightCenterInset: CGFloat = 18
+    static let trafficLightSpacing: CGFloat = 6
+
+    @MainActor
+    static func alignTrafficLights(in window: NSWindow) {
+        let buttons = [
+            window.standardWindowButton(.closeButton),
+            window.standardWindowButton(.miniaturizeButton),
+            window.standardWindowButton(.zoomButton)
+        ]
+        .compactMap { $0 }
+        .filter { !$0.isHidden }
+
+        guard let firstButton = buttons.first,
+              let titlebarView = firstButton.superview else { return }
+
+        let centerY = titlebarView.bounds.height - trafficLightCenterInset
+        var originX = trafficLightCenterInset - (firstButton.frame.width / 2)
+
+        for button in buttons {
+            let originY = centerY - (button.frame.height / 2)
+            button.setFrameOrigin(
+                NSPoint(
+                    x: originX.rounded(.toNearestOrAwayFromZero),
+                    y: originY.rounded(.toNearestOrAwayFromZero)
+                )
+            )
+            originX += button.frame.width + trafficLightSpacing
+        }
+    }
+}
+
 @MainActor
 final class MainWindowViewController: NSViewController {
     private enum WindowSizing {
@@ -140,6 +173,9 @@ final class MainWindowViewController: NSViewController {
                 window.center()
                 window.makeKeyAndOrderFront(nil)
                 hasAppliedSetupPresentation = true
+            }
+            DispatchQueue.main.async {
+                NativeWindowChrome.alignTrafficLights(in: window)
             }
         } else {
             window.contentMinSize = WindowSizing.workspaceMinimum
@@ -339,6 +375,9 @@ final class WorkspaceViewController: NSViewController {
             }
         }
         toolbarController?.refresh()
+        DispatchQueue.main.async {
+            NativeWindowChrome.alignTrafficLights(in: window)
+        }
     }
 
     private func scheduleRender() {
