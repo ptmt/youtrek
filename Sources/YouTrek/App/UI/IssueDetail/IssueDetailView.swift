@@ -190,7 +190,7 @@ struct IssueDetailView: View {
     }
 
     private var metadata: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             AssigneeEditor(issue: issue)
             metadataRow(systemImage: "clock") {
                 Text("Updated \(IssueTimestampFormatter.label(for: issue.updatedAt))")
@@ -212,7 +212,9 @@ struct IssueDetailView: View {
                 Button {
                     showsAllCustomFields.toggle()
                 } label: {
-                    metadataRow(systemImage: showsAllCustomFields ? "chevron.up" : "chevron.down") {
+                    metadataRow(systemImage: "square.grid.2x2", trailing: {
+                        MetadataDisclosureChevron(isExpanded: showsAllCustomFields)
+                    }) {
                         Text(customFieldsToggleLabel)
                     }
                 }
@@ -520,11 +522,30 @@ struct IssueDetailView: View {
         }
     }
 
-    private func metadataRow<Content: View>(systemImage: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: 8) {
-            MetadataIcon(systemName: systemImage, size: IssueDetailMetrics.metadataIconSize)
-            content()
-        }
+    private func metadataRow<Content: View>(
+        systemImage: String,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        MetadataChip(
+            leading: {
+                MetadataIcon(systemName: systemImage, size: IssueDetailMetrics.metadataIconSize)
+            },
+            content: content
+        )
+    }
+
+    private func metadataRow<Content: View, Trailing: View>(
+        systemImage: String,
+        @ViewBuilder trailing: @escaping () -> Trailing,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        MetadataChip(
+            leading: {
+                MetadataIcon(systemName: systemImage, size: IssueDetailMetrics.metadataIconSize)
+            },
+            content: content,
+            trailing: trailing
+        )
     }
 
     private var descriptionSection: some View {
@@ -1174,6 +1195,8 @@ struct IssueDetailView: View {
 
 private enum IssueDetailMetrics {
     static let metadataIconSize: CGFloat = 22
+    static let metadataChipMinHeight: CGFloat = 32
+    static let metadataChipCornerRadius: CGFloat = 8
     static let assigneeOptionAvatarSize: CGFloat = 20
 }
 
@@ -1198,6 +1221,71 @@ private struct MetadataIcon: View {
         Image(systemName: systemName)
             .font(.system(size: size * 0.55, weight: .semibold))
             .frame(width: size, height: size)
+    }
+}
+
+private struct MetadataDisclosureChevron: View {
+    let isExpanded: Bool
+
+    var body: some View {
+        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+    }
+}
+
+private struct MetadataChip<Leading: View, Content: View, Trailing: View>: View {
+    @ViewBuilder let leading: () -> Leading
+    @ViewBuilder let content: () -> Content
+    @ViewBuilder let trailing: () -> Trailing
+
+    init(
+        @ViewBuilder leading: @escaping () -> Leading,
+        @ViewBuilder content: @escaping () -> Content,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) {
+        self.leading = leading
+        self.content = content
+        self.trailing = trailing
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            leading()
+            content()
+                .lineLimit(1)
+                .truncationMode(.tail)
+            trailing()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .frame(minHeight: IssueDetailMetrics.metadataChipMinHeight)
+        .background(
+            .quaternary.opacity(0.55),
+            in: RoundedRectangle(
+                cornerRadius: IssueDetailMetrics.metadataChipCornerRadius,
+                style: .continuous
+            )
+        )
+        .contentShape(
+            RoundedRectangle(
+                cornerRadius: IssueDetailMetrics.metadataChipCornerRadius,
+                style: .continuous
+            )
+        )
+    }
+}
+
+private extension MetadataChip where Trailing == EmptyView {
+    init(
+        @ViewBuilder leading: @escaping () -> Leading,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.init(
+            leading: leading,
+            content: content,
+            trailing: { EmptyView() }
+        )
     }
 }
 
@@ -1234,13 +1322,13 @@ private struct CustomFieldEditorRow: View {
     }
 
     private func rowLabel(showChevron: Bool) -> some View {
-        HStack(spacing: 8) {
+        MetadataChip {
             MetadataIcon(systemName: "square.grid.2x2", size: IssueDetailMetrics.metadataIconSize)
+        } content: {
             Text("\(item.name): \(valueLabel)")
+        } trailing: {
             if showChevron {
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                MetadataDisclosureChevron(isExpanded: false)
             }
         }
     }
@@ -1487,24 +1575,25 @@ struct ProjectEditor: View {
             isPresented.toggle()
         } label: {
             if isLoading && projects.isEmpty {
-                HStack(spacing: 8) {
+                MetadataChip {
                     MetadataIcon(systemName: "folder", size: IssueDetailMetrics.metadataIconSize)
+                } content: {
                     Text("Project: Loading…")
+                } trailing: {
                     ProgressView()
                         .controlSize(.small)
                 }
             } else {
-                HStack(spacing: 8) {
+                MetadataChip {
                     MetadataIcon(systemName: "folder", size: IssueDetailMetrics.metadataIconSize)
+                } content: {
                     Text("Project: \(projectDisplayName)")
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                } trailing: {
+                    MetadataDisclosureChevron(isExpanded: false)
                 }
             }
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+        .buttonStyle(.plain)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             ProjectPickerPopover(
                 selection: ProjectSelection(projectID: nil, projectName: issue.projectName),
@@ -1732,16 +1821,15 @@ private struct AssigneeEditor: View {
         Button {
             isPresented.toggle()
         } label: {
-            HStack(spacing: 8) {
+            MetadataChip {
                 UserAvatarView(person: issue.assignee, size: IssueDetailMetrics.metadataIconSize)
+            } content: {
                 Text("Assignee: \(issue.assigneeDisplayName)")
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            } trailing: {
+                MetadataDisclosureChevron(isExpanded: false)
             }
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+        .buttonStyle(.plain)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             AssigneePickerPopover(issue: issue, isPresented: $isPresented)
                 .environmentObject(container)

@@ -2,6 +2,11 @@ import AppKit
 import SwiftUI
 
 enum MarkdownDisplayTextRenderer {
+    private static let markdownParsingOptions = AttributedString.MarkdownParsingOptions(
+        interpretedSyntax: .full,
+        failurePolicy: .returnPartiallyParsedIfPossible
+    )
+
     static func segments(from text: String) -> [MarkdownSegment] {
         let normalizedText = normalizeLineEndings(in: text)
         let lines = normalizedText.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
@@ -83,10 +88,59 @@ enum MarkdownDisplayTextRenderer {
         return lines.joined(separator: "\n")
     }
 
+    static func attributedMarkdown(for text: String) -> AttributedString? {
+        let prepared = preparedMarkdown(for: text)
+        guard let attributed = try? AttributedString(
+            markdown: prepared,
+            options: markdownParsingOptions
+        ) else {
+            return nil
+        }
+
+        guard renderedLineBreakCount(in: attributed) < sourceLineBreakCount(in: prepared) else {
+            return attributed
+        }
+        return linePreservingAttributedMarkdown(for: prepared) ?? attributed
+    }
+
     static func normalizeLineEndings(in text: String) -> String {
         text
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
+    }
+
+    private static func linePreservingAttributedMarkdown(for preparedMarkdown: String) -> AttributedString? {
+        let lines = normalizeLineEndings(in: preparedMarkdown)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+        guard !lines.isEmpty else { return AttributedString("") }
+
+        var result = AttributedString("")
+        for index in lines.indices {
+            if !lines[index].isEmpty {
+                let line = (try? AttributedString(
+                    markdown: lines[index],
+                    options: markdownParsingOptions
+                )) ?? AttributedString(lines[index])
+                result.append(line)
+            }
+            if index < lines.index(before: lines.endIndex) {
+                result.append(AttributedString("\n"))
+            }
+        }
+        return result
+    }
+
+    private static func sourceLineBreakCount(in text: String) -> Int {
+        text.reduce(0) { count, character in
+            character == "\n" ? count + 1 : count
+        }
+    }
+
+    private static func renderedLineBreakCount(in attributed: AttributedString) -> Int {
+        attributed.characters.reduce(0) { count, character in
+            character == "\n" ? count + 1 : count
+        }
     }
 
     private static func replacingChecklistMarker(in line: String) -> String {
@@ -178,18 +232,12 @@ struct MarkdownTextView: View {
     }
 
     private func markdownText(_ value: String) -> some View {
-        let renderedText = MarkdownDisplayTextRenderer.preparedMarkdown(for: value)
-        if let attributed = try? AttributedString(
-            markdown: renderedText,
-            options: .init(
-                interpretedSyntax: .full,
-                failurePolicy: .returnPartiallyParsedIfPossible
-            )
-        ) {
+        if let attributed = MarkdownDisplayTextRenderer.attributedMarkdown(for: value) {
             return Text(attributed)
                 .font(font)
                 .textSelection(.enabled)
         }
+        let renderedText = MarkdownDisplayTextRenderer.preparedMarkdown(for: value)
         return Text(renderedText)
             .font(font)
             .textSelection(.enabled)

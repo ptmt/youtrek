@@ -37,6 +37,22 @@ final class YouTrekTests: XCTestCase {
         )
     }
 
+    func testMarkdownDisplayTextRendererPreservesSingleLineBreaksAfterParsing() throws {
+        let attributed = try XCTUnwrap(MarkdownDisplayTextRenderer.attributedMarkdown(
+            for: "First line\nSecond line"
+        ))
+
+        XCTAssertEqual(String(attributed.characters), "First line\nSecond line")
+    }
+
+    func testMarkdownDisplayTextRendererPreservesSingleLineBreaksAroundBlockMarkdown() throws {
+        let attributed = try XCTUnwrap(MarkdownDisplayTextRenderer.attributedMarkdown(
+            for: "# Heading\nBody\n- Item"
+        ))
+
+        XCTAssertEqual(String(attributed.characters), "Heading\nBody\nItem")
+    }
+
     @MainActor
     func testRootSplitViewControllerUsesFullHeightLayoutForMainAndInspector() {
         let controller = RootSplitViewController()
