@@ -184,6 +184,7 @@ struct MarkdownTextView: View {
     var font: Font = .callout
     var codeFont: Font = .system(.callout, design: .monospaced)
     var baseURL: URL?
+    var attachments: [IssueAttachment] = []
     var remoteImageDataLoader: ((URL) async throws -> Data)?
 
     var body: some View {
@@ -223,6 +224,7 @@ struct MarkdownTextView: View {
                         MarkdownImageView(
                             match: match,
                             baseURL: baseURL,
+                            attachments: attachments,
                             remoteImageDataLoader: remoteImageDataLoader
                         )
                     }
@@ -252,10 +254,31 @@ enum MarkdownImageFragment: Equatable {
 struct MarkdownImageMatch: Equatable {
     let altText: String
     let source: String
+    let displayOptions: MarkdownImageDisplayOptions
+
+    init(
+        altText: String,
+        source: String,
+        displayOptions: MarkdownImageDisplayOptions = MarkdownImageDisplayOptions()
+    ) {
+        self.altText = altText
+        self.source = source
+        self.displayOptions = displayOptions
+    }
+}
+
+struct MarkdownImageDisplayOptions: Equatable {
+    var width: MarkdownImageDimension?
+    var height: CGFloat?
+}
+
+enum MarkdownImageDimension: Equatable {
+    case percent(CGFloat)
+    case points(CGFloat)
 }
 
 enum MarkdownImageMarkdownParser {
-    private static let imagePattern = #"!\[([^\]\n]*)\]\(([^)\n]+)\)"#
+    private static let imagePattern = #"!\[([^\]\n]*)\]\(([^)\n]+)\)(?:[ \t]*\{([^}\n]+)\})?"#
     private static let regex = try? NSRegularExpression(pattern: imagePattern)
 
     static func fragments(in markdown: String) -> [MarkdownImageFragment] {
@@ -272,6 +295,7 @@ enum MarkdownImageMarkdownParser {
             let wholeRange = match.range(at: 0)
             let altRange = match.range(at: 1)
             let sourceRange = match.range(at: 2)
+            let attributesRange = match.numberOfRanges > 3 ? match.range(at: 3) : NSRange(location: NSNotFound, length: 0)
             guard wholeRange.location != NSNotFound,
                   altRange.location != NSNotFound,
                   sourceRange.location != NSNotFound,
@@ -289,7 +313,18 @@ enum MarkdownImageMarkdownParser {
 
             let alt = nsText.substring(with: altRange)
             let source = nsText.substring(with: sourceRange)
-            fragments.append(.image(MarkdownImageMatch(altText: alt, source: source)))
+            let attributes: String?
+            if attributesRange.location != NSNotFound,
+               NSMaxRange(attributesRange) <= nsText.length {
+                attributes = nsText.substring(with: attributesRange)
+            } else {
+                attributes = nil
+            }
+            fragments.append(.image(MarkdownImageMatch(
+                altText: alt,
+                source: source,
+                displayOptions: displayOptions(from: attributes)
+            )))
 
             cursor = NSMaxRange(wholeRange)
         }
@@ -301,6 +336,54 @@ enum MarkdownImageMarkdownParser {
 
         return fragments.isEmpty ? [.text(markdown)] : fragments
     }
+
+    private static func displayOptions(from attributes: String?) -> MarkdownImageDisplayOptions {
+        guard let attributes else { return MarkdownImageDisplayOptions() }
+        var options = MarkdownImageDisplayOptions()
+        let pairs = attributes
+            .split { character in
+                character == "," || character == ";" || character.isWhitespace
+            }
+            .map(String.init)
+
+        for pair in pairs {
+            let separator = pair.firstIndex(of: "=") ?? pair.firstIndex(of: ":")
+            guard let separator else { continue }
+            let key = pair[..<separator]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            let rawValue = pair[pair.index(after: separator)...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+
+            switch key {
+            case "width":
+                options.width = dimension(from: rawValue)
+            case "height":
+                if case .points(let points) = dimension(from: rawValue) {
+                    options.height = points
+                }
+            default:
+                continue
+            }
+        }
+        return options
+    }
+
+    private static func dimension(from value: String) -> MarkdownImageDimension? {
+        var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.hasSuffix("%") {
+            trimmed.removeLast()
+            guard let percent = Double(trimmed), percent > 0 else { return nil }
+            return .percent(CGFloat(min(percent, 100)) / 100.0)
+        }
+        if trimmed.lowercased().hasSuffix("px") {
+            trimmed.removeLast(2)
+        }
+        guard let points = Double(trimmed), points > 0 else { return nil }
+        return .points(CGFloat(points))
+    }
 }
 
 enum MarkdownImageSource: Equatable {
@@ -311,12 +394,16 @@ enum MarkdownImageSource: Equatable {
 }
 
 enum MarkdownImageSourceResolver {
-    static func resolve(source raw: String, baseURL: URL?) -> MarkdownImageSource {
+    static func resolve(source raw: String, baseURL: URL?, attachments: [IssueAttachment] = []) -> MarkdownImageSource {
         let trimmed = normalizeSource(raw)
         guard !trimmed.isEmpty else { return .unsupported }
 
         if trimmed.lowercased().hasPrefix("data:image/"), let data = decodeDataURL(trimmed) {
             return .inlineData(data)
+        }
+
+        if let attachmentURL = matchingAttachmentURL(for: trimmed, attachments: attachments) {
+            return imageSource(for: attachmentURL)
         }
 
         let candidateBases = candidateURLs(from: baseURL)
@@ -358,6 +445,31 @@ enum MarkdownImageSourceResolver {
         }
 
         return trimmed
+    }
+
+    private static func matchingAttachmentURL(for source: String, attachments: [IssueAttachment]) -> URL? {
+        let normalized = normalizedComparableSource(source)
+        guard !normalized.isEmpty else { return nil }
+        for attachment in attachments where attachment.isImage {
+            guard let url = attachment.url else { continue }
+            let candidates = [
+                attachment.name,
+                url.lastPathComponent,
+                url.deletingPathExtension().lastPathComponent,
+                url.absoluteString
+            ]
+            if candidates.contains(where: { normalizedComparableSource($0) == normalized }) {
+                return url
+            }
+        }
+        return nil
+    }
+
+    private static func normalizedComparableSource(_ value: String) -> String {
+        let decoded = value.removingPercentEncoding ?? value
+        let trimmed = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastPathComponent = trimmed.split(separator: "/").last.map(String.init) ?? trimmed
+        return lastPathComponent.lowercased()
     }
 
     private static func resolveURL(_ value: String, relativeTo baseURL: URL?) -> URL? {
@@ -419,11 +531,12 @@ enum MarkdownImageSourceResolver {
 private struct MarkdownImageView: View {
     let match: MarkdownImageMatch
     let baseURL: URL?
+    let attachments: [IssueAttachment]
     let remoteImageDataLoader: ((URL) async throws -> Data)?
 
     @ViewBuilder
     var body: some View {
-        switch MarkdownImageSourceResolver.resolve(source: match.source, baseURL: baseURL) {
+        switch MarkdownImageSourceResolver.resolve(source: match.source, baseURL: baseURL, attachments: attachments) {
         case .inlineData(let data):
             if let image = NSImage(data: data) {
                 rendered(nsImage: image)
@@ -432,7 +545,11 @@ private struct MarkdownImageView: View {
             }
         case .remote(let url):
             if let remoteImageDataLoader {
-                MarkdownRemoteImageLoaderView(url: url, remoteImageDataLoader: remoteImageDataLoader)
+                MarkdownRemoteImageLoaderView(
+                    url: url,
+                    displayOptions: match.displayOptions,
+                    remoteImageDataLoader: remoteImageDataLoader
+                )
             } else {
                 AsyncImage(url: url) { phase in
                     switch phase {
@@ -446,11 +563,7 @@ private struct MarkdownImageView: View {
                         }
                         .padding(.vertical, 4)
                     case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxHeight: 320)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        MarkdownRenderedImageView(image: image, displayOptions: match.displayOptions)
                     case .failure:
                         placeholder
                     @unknown default:
@@ -470,11 +583,7 @@ private struct MarkdownImageView: View {
     }
 
     private func rendered(nsImage: NSImage) -> some View {
-        Image(nsImage: nsImage)
-            .resizable()
-            .scaledToFit()
-            .frame(maxHeight: 320)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        MarkdownRenderedImageView(image: Image(nsImage: nsImage), displayOptions: match.displayOptions)
     }
 
     private var placeholder: some View {
@@ -493,6 +602,7 @@ private struct MarkdownImageView: View {
 
 private struct MarkdownRemoteImageLoaderView: View {
     let url: URL
+    let displayOptions: MarkdownImageDisplayOptions
     let remoteImageDataLoader: (URL) async throws -> Data
 
     @State private var state: MarkdownRemoteImageLoadState = .loading
@@ -512,11 +622,7 @@ private struct MarkdownRemoteImageLoaderView: View {
                 await loadImage()
             }
         case .loaded(let image):
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(maxHeight: 320)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            MarkdownRenderedImageView(image: Image(nsImage: image), displayOptions: displayOptions)
         case .failed:
             HStack(spacing: 8) {
                 Image(systemName: "photo")
@@ -541,6 +647,39 @@ private struct MarkdownRemoteImageLoaderView: View {
             state = .loaded(image)
         } catch {
             state = .failed
+        }
+    }
+}
+
+private struct MarkdownRenderedImageView: View {
+    let image: Image
+    let displayOptions: MarkdownImageDisplayOptions
+
+    var body: some View {
+        sizedImage
+            .frame(maxHeight: displayOptions.height ?? 320)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var sizedImage: some View {
+        switch displayOptions.width {
+        case .percent(let fraction):
+            image
+                .resizable()
+                .scaledToFit()
+                .containerRelativeFrame(.horizontal) { length, _ in
+                    max(1, length * min(max(fraction, 0), 1))
+                }
+        case .points(let points):
+            image
+                .resizable()
+                .scaledToFit()
+                .frame(width: points)
+        case nil:
+            image
+                .resizable()
+                .scaledToFit()
         }
     }
 }

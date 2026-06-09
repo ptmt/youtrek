@@ -307,6 +307,50 @@ final class YouTrekTests: XCTestCase {
         XCTAssertTrue(trailing.contains("After text"))
     }
 
+    func testMarkdownImageParserConsumesYouTrackImageAttributes() {
+        let markdown = """
+        Before text
+        ![Preview](screenshot.png){width=70%}
+        After text
+        """
+
+        let fragments = MarkdownImageMarkdownParser.fragments(in: markdown)
+        XCTAssertEqual(fragments.count, 3)
+
+        guard case .image(let match) = fragments[1] else {
+            return XCTFail("Expected image fragment")
+        }
+        XCTAssertEqual(match.altText, "Preview")
+        XCTAssertEqual(match.source, "screenshot.png")
+        XCTAssertEqual(match.displayOptions.width, .percent(0.7))
+
+        guard case .text(let trailing) = fragments[2] else {
+            return XCTFail("Expected trailing text fragment")
+        }
+        XCTAssertFalse(trailing.contains("{width=70%}"))
+    }
+
+    func testMarkdownImageSourceResolverMatchesIssueAttachmentByName() {
+        let url = URL(string: "https://example.com/api/files/2-3")!
+        let attachment = IssueAttachment(
+            id: "2-3",
+            name: "screenshot.png",
+            size: nil,
+            mimeType: "image/png",
+            url: url,
+            createdAt: nil,
+            author: nil
+        )
+
+        let resolved = MarkdownImageSourceResolver.resolve(
+            source: "screenshot.png",
+            baseURL: nil,
+            attachments: [attachment]
+        )
+
+        XCTAssertEqual(resolved, .remote(url))
+    }
+
     func testMarkdownImageSourceResolverDecodesInlineDataURL() {
         let resolved = MarkdownImageSourceResolver.resolve(
             source: "data:image/png;base64,AAEC",

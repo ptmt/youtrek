@@ -556,6 +556,7 @@ struct IssueDetailView: View {
                 MarkdownTextView(
                     text: description,
                     baseURL: markdownImageBaseURL,
+                    attachments: detail?.attachments ?? [],
                     remoteImageDataLoader: { url in
                         try await loadMarkdownImageData(from: url)
                     }
@@ -899,6 +900,7 @@ struct IssueDetailView: View {
                 person: detail.reporter,
                 body: nil,
                 markdownBaseURL: markdownImageBaseURL,
+                attachments: detail.attachments,
                 webURL: timelineOpenURL()
             ))
         }
@@ -910,6 +912,7 @@ struct IssueDetailView: View {
                 person: nil,
                 body: nil,
                 markdownBaseURL: markdownImageBaseURL,
+                attachments: detail.attachments,
                 webURL: timelineOpenURL()
             ))
         }
@@ -922,6 +925,7 @@ struct IssueDetailView: View {
                 person: comment.author,
                 body: trimmed.isEmpty ? nil : comment.text,
                 markdownBaseURL: markdownImageBaseURL,
+                attachments: detail.attachments,
                 webURL: timelineOpenURL(for: comment.id)
             ))
         }
@@ -1123,6 +1127,7 @@ struct IssueDetailView: View {
                 MarkdownTextView(
                     text: commentText,
                     baseURL: markdownImageBaseURL,
+                    attachments: detail?.attachments ?? [],
                     remoteImageDataLoader: { url in
                         try await loadMarkdownImageData(from: url)
                     }
@@ -1882,6 +1887,7 @@ private struct TimelineEntry: Identifiable {
     let person: Person?
     let body: String?
     let markdownBaseURL: URL?
+    let attachments: [IssueAttachment]
     let webURL: URL?
 }
 
@@ -1910,6 +1916,7 @@ private struct TimelineRow: View {
                     MarkdownTextView(
                         text: body,
                         baseURL: entry.markdownBaseURL,
+                        attachments: entry.attachments,
                         remoteImageDataLoader: remoteImageDataLoader
                     )
                 }
