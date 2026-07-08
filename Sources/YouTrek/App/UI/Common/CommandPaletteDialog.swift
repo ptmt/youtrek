@@ -12,11 +12,17 @@ struct CommandPaletteDialog: View {
         return formatter
     }()
 
+    // Base items are cached in @State and rebuilt only when the source data
+    // changes; building them sorts all issues and formats relative dates, which
+    // is too expensive to redo on every keystroke.
+    @State private var cachedIssueItems: [CommandPaletteItem] = []
+    @State private var cachedBoardItems: [CommandPaletteItem] = []
+
     private var trimmedQuery: String {
         state.query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var issueItems: [CommandPaletteItem] {
+    private func makeIssueItems() -> [CommandPaletteItem] {
         container.appState.issues
             .sorted { $0.updatedAt > $1.updatedAt }
             .map { issue in
@@ -34,13 +40,13 @@ struct CommandPaletteDialog: View {
                         issue.assignee?.displayName,
                         issue.reporter?.displayName,
                         issueSubmoduleLabel(for: issue)
-                    ].compactMap { $0 },
+                    ].compactMap { $0?.lowercased() },
                     score: 0
                 )
             }
     }
 
-    private var boardItems: [CommandPaletteItem] {
+    private func makeBoardItems() -> [CommandPaletteItem] {
         container.appState.sidebarSections
             .flatMap(\.items)
             .filter { $0.isBoard }
@@ -60,7 +66,7 @@ struct CommandPaletteDialog: View {
                         item.title,
                         board?.name,
                         board?.projectNames.joined(separator: " ")
-                    ].compactMap { $0 },
+                    ].compactMap { $0?.lowercased() },
                     score: 0
                 )
             }
@@ -104,14 +110,18 @@ struct CommandPaletteDialog: View {
                 subtitle: action.subtitle,
                 iconName: action.iconName,
                 kind: .action(action),
-                searchTokens: [action.title, action.subtitle],
+                searchTokens: [action.title.lowercased(), action.subtitle.lowercased()],
                 score: 0
             )
         }
     }
 
-    private var sections: [CommandPaletteSection] {
+    private func filteredSections() -> [CommandPaletteSection] {
         let query = trimmedQuery
+        // Fall back to building in place until the .task populates the cache,
+        // so the first frame doesn't flash the empty state.
+        let issueItems = cachedIssueItems.isEmpty ? makeIssueItems() : cachedIssueItems
+        let boardItems = cachedBoardItems.isEmpty ? makeBoardItems() : cachedBoardItems
         let issues = filter(items: issueItems, query: query)
         let boards = filter(items: boardItems, query: query)
         let actions = filter(items: actionItems, query: query)
@@ -122,19 +132,19 @@ struct CommandPaletteDialog: View {
         ].filter { !$0.items.isEmpty }
     }
 
-    private var flattenedItems: [CommandPaletteItem] {
-        sections.flatMap(\.items)
-    }
-
     var body: some View {
+        // Sections are derived once per render; the footer and list previously
+        // recomputed the full sort + fuzzy filter independently.
+        let sections = filteredSections()
+        let flattened = sections.flatMap(\.items)
         VStack(alignment: .leading, spacing: 0) {
             dialogHeader
             Divider()
             searchField
             Divider()
-            resultsList
+            resultsList(sections: sections)
             Divider()
-            dialogFooter
+            dialogFooter(resultCount: flattened.count)
         }
         .frame(minWidth: 520, idealWidth: 600, maxWidth: 720)
         .frame(minHeight: 400, idealHeight: 480)
@@ -159,11 +169,19 @@ struct CommandPaletteDialog: View {
             )
         )
         .task {
+            cachedIssueItems = makeIssueItems()
+            cachedBoardItems = makeBoardItems()
             isSearchFocused = true
-            selectionID = flattenedItems.first?.id
+            selectionID = flattened.first?.id
         }
         .onChange(of: trimmedQuery) { _, _ in
-            selectionID = flattenedItems.first?.id
+            selectionID = filteredSections().flatMap(\.items).first?.id
+        }
+        .onChange(of: container.appState.issues) { _, _ in
+            cachedIssueItems = makeIssueItems()
+        }
+        .onChange(of: container.appState.sidebarSections) { _, _ in
+            cachedBoardItems = makeBoardItems()
         }
     }
 
@@ -212,7 +230,7 @@ struct CommandPaletteDialog: View {
         .accessibilityLabel("Command palette search")
     }
 
-    private var resultsList: some View {
+    private func resultsList(sections: [CommandPaletteSection]) -> some View {
         Group {
             if sections.isEmpty {
                 ContentUnavailableView(
@@ -245,12 +263,12 @@ struct CommandPaletteDialog: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var dialogFooter: some View {
+    private func dialogFooter(resultCount: Int) -> some View {
         HStack(spacing: 12) {
             Text("Enter to open")
             Text("Esc to close")
             Spacer()
-            Text("\(flattenedItems.count) results")
+            Text("\(resultCount) results")
                 .foregroundStyle(.secondary)
         }
         .font(.caption)
@@ -261,7 +279,7 @@ struct CommandPaletteDialog: View {
     private func filter(items: [CommandPaletteItem], query: String) -> [CommandPaletteItem] {
         guard !query.isEmpty else { return items }
         return items.compactMap { item in
-            guard let score = FuzzyMatcher.score(query: query, candidates: item.searchTokens) else { return nil }
+            guard let score = FuzzyMatcher.score(query: query.lowercased(), candidates: item.searchTokens) else { return nil }
             return item.scored(score)
         }
         .sorted { lhs, rhs in
@@ -273,12 +291,13 @@ struct CommandPaletteDialog: View {
     }
 
     private func openSelection() {
+        let flattened = filteredSections().flatMap(\.items)
         if let selectionID,
-           let selected = flattenedItems.first(where: { $0.id == selectionID }) {
+           let selected = flattened.first(where: { $0.id == selectionID }) {
             handleSelection(selected)
             return
         }
-        if let first = flattenedItems.first {
+        if let first = flattened.first {
             handleSelection(first)
         }
     }
@@ -301,7 +320,7 @@ struct CommandPaletteDialog: View {
     }
 
     private func moveSelection(offset: Int) {
-        let items = flattenedItems
+        let items = filteredSections().flatMap(\.items)
         guard !items.isEmpty else {
             selectionID = nil
             return
@@ -483,6 +502,8 @@ private final class KeyEventView: NSView {
 }
 
 private enum FuzzyMatcher {
+    // Expects query and candidates already lowercased; callers pre-lowercase
+    // tokens once at item-build time instead of per match call.
     static func score(query: String, candidates: [String]) -> Int? {
         let terms = query
             .split(whereSeparator: { $0.isWhitespace })
@@ -503,8 +524,6 @@ private enum FuzzyMatcher {
     }
 
     private static func score(_ query: String, in candidate: String) -> Int? {
-        let query = query.lowercased()
-        let candidate = candidate.lowercased()
         guard !query.isEmpty else { return 0 }
 
         var score = 0

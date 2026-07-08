@@ -10,7 +10,7 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 - [x] 3. Issue list
 - [x] 4. Issue detail panel
 - [x] 5. Issue board view
-- [ ] 6. Settings window + command palette
+- [x] 6. Settings window + command palette
 - [ ] 7. Sync coordinator / AppState invalidation churn
 - [ ] 8. Final verification pass
 
@@ -200,6 +200,34 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 2. Header row and lanes are pure display views over the precomputed layout.
 3. Collapse-all/diagnostics helpers take the computed groups/layout instead of
    recomputing them.
+
+### Verification
+
+- `swift build` clean, `swift test`: 69/69 passed.
+
+## Iteration 6 — Settings window + command palette (2026-07-08)
+
+### Findings
+
+1. **Palette base items rebuilt per render.** `issueItems` sorted all issues
+   and formatted a `RelativeDateTimeFormatter` label per issue on every body
+   evaluation — and the palette re-renders per keystroke plus on every
+   AppState tick while open.
+2. **Sections computed twice per render.** `resultsList` used `sections`
+   while the footer used `flattenedItems` (which recomputed `sections`),
+   doubling the sort + fuzzy-filter work.
+3. **Fuzzy matcher lowercased query and candidate per (term × token) call.**
+4. Settings window (`SettingsWindowViewController`) is a small static AppKit
+   form — reviewed, no issues found.
+
+### Fixes (`Sources/YouTrek/App/UI/Common/CommandPaletteDialog.swift`)
+
+1. Issue/board items are cached in `@State`, built once when the palette opens
+   and rebuilt only when `appState.issues` / `sidebarSections` change (with an
+   in-place fallback so the first frame doesn't flash the empty state).
+2. Sections are derived once per body pass and passed to the list and footer.
+3. Search tokens are lowercased once at item-build time; the matcher no longer
+   lowercases per call.
 
 ### Verification
 
