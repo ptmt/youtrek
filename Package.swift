@@ -36,12 +36,16 @@ let package = Package(
                 .product(name: "SQLite", package: "SQLite.swift", condition: .when(platforms: [.macOS]))
             ],
             path: "Sources/YouTrek",
+            exclude: [
+                // Parked SwiftUI shell kept for reference during the AppKit transition;
+                // nothing references it, so keep it out of the build.
+                "App/unused_swiftui"
+            ],
             resources: [
                 .process("Assets.xcassets")
             ],
             swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency"),
-                .enableUpcomingFeature("DisableOutwardActorInference")
+                .enableExperimentalFeature("StrictConcurrency")
             ]
         ),
         .testTarget(

@@ -49,7 +49,7 @@ actor SavedQueryLocalStore {
             }
             try db.run("COMMIT")
         } catch {
-            try? db.run("ROLLBACK")
+            _ = try? db.run("ROLLBACK")
             print("SavedQueryLocalStore failed to save saved queries: \(error.localizedDescription)")
         }
     }

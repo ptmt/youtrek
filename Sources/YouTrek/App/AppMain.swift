@@ -53,7 +53,6 @@ final class YouTrekApp: NSObject, NSApplicationDelegate {
     private func bootstrap() async {
         if CLIEntrypoint.shouldRun(arguments: CommandLine.arguments) {
             await CLIEntrypoint.runAndExit(arguments: CommandLine.arguments)
-            return
         }
         installMenus()
         openMainWindow()

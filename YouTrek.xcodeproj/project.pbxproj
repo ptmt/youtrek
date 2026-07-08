@@ -73,7 +73,6 @@
 		9ABF8CA24DA93B1795EDF5E7 /* ProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22474C986C8B156AE420F86D /* ProjectRepository.swift */; };
 		9BD6E38CB0F148EE071F5ED7 /* AuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2BB972C688C970A43F8706 /* AuthRepository.swift */; };
 		9DB8D80B206C40708C943193 /* TodoChecklistParsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408D4303547C4927B7B39CC9 /* TodoChecklistParsing.swift */; };
-		9FDEA781B9E8312D675F21C4 /* AppMenus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5127E6BFCB6228BCCACF3248 /* AppMenus.swift */; };
 		A1B2C3D4E5F60718293A4B6D /* TodoListEditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B6C /* TodoListEditorViewModel.swift */; };
 		A1B2C3D4E5F60718293A4B6F /* TodoListContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B6E /* TodoListContentView.swift */; };
 		A1B2C3D4E5F60718293A4B72 /* TodoListEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B71 /* TodoListEditorTests.swift */; };
@@ -92,12 +91,6 @@
 		B5876614E6E7D392F24AB00E /* YouTrackAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */; };
 		B5E95DA444F525E699F17F2F /* AppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 79FB59A8C56FB49F29358D40 /* AppAuth */; };
 		B6F7001D7CF24BDB9EF0D0A7 /* MarkdownTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E827C5F39D5E4DFEA06C2463 /* MarkdownTextView.swift */; };
-		B7C4D3E25F6A7890CD1E2F31 /* RootContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B3D2E14F5A6789BC0D1E21 /* RootContentView.swift */; };
-		B7C4D3E25F6A7890CD1E2F32 /* RootContentView+Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B3D2E14F5A6789BC0D1E22 /* RootContentView+Layout.swift */; };
-		B7C4D3E25F6A7890CD1E2F33 /* RootContentView+Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B3D2E14F5A6789BC0D1E23 /* RootContentView+Sidebar.swift */; };
-		B7C4D3E25F6A7890CD1E2F34 /* RootContentView+Main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B3D2E14F5A6789BC0D1E24 /* RootContentView+Main.swift */; };
-		B7C4D3E25F6A7890CD1E2F35 /* RootContentView+Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B3D2E14F5A6789BC0D1E25 /* RootContentView+Inspector.swift */; };
-		B7C4D3E25F6A7890CD1E2F36 /* RootContentView+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B3D2E14F5A6789BC0D1E26 /* RootContentView+Helpers.swift */; };
 		B8AB6665E8494092BAD781CD /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E4FEE5B968D4FFFBC1197E1 /* AppTheme.swift */; };
 		B9C0A1D2E3F4A5B6C7D8E9F1 /* SavedQueryLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C0A1D2E3F4A5B6C7D8E9F1 /* SavedQueryLocalStore.swift */; };
 		BB9383DD8D6501FAF39C122F /* IssueDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F4883822D7B393D38B7D0BD /* IssueDetailView.swift */; };
@@ -117,7 +110,6 @@
 		E5F40BB5A38E6E23094C871B /* LoggingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E846A3202CA8FD93450D72F /* LoggingService.swift */; };
 		E830DA0BDF2A88981E76A320 /* YouTrackAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BD79F1B118CDA555E3FDC0 /* YouTrackAPIClient.swift */; };
 		E9C4B2243C4A344ED73BAE55 /* AppAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71AE2BCD07827D3738BDD3D /* AppAuthRepository.swift */; };
-		EA94D7A93E3499BBFB64C3CE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96D7F507180F29C1DBEBFD1A /* SettingsView.swift */; };
 		EC7712F0B7C46B5847549B9E /* IssueLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA656EE8697E8D9E35288508 /* IssueLocalStore.swift */; };
 		EE1E07C0A405D6A416EB6A4D /* IssueListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF004390F090F845328D6B /* IssueListView.swift */; };
 		EE1E07C1A405D6A416EB6A4E /* IssueProgressListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF004490F090F845328D6C /* IssueProgressListView.swift */; };
@@ -820,7 +812,6 @@
 				A9B8C7D6E5F40123456789AC /* NetworkRequestMonitor.swift in Sources */,
 				C8D69D755B9F5965999415BA /* AppMain.swift in Sources */,
 				B8AB6665E8494092BAD781CD /* AppTheme.swift in Sources */,
-				9FDEA781B9E8312D675F21C4 /* AppMenus.swift in Sources */,
 				08C5D4B53937B5F198D5F1A4 /* AppState.swift in Sources */,
 				9BD6E38CB0F148EE071F5ED7 /* AuthRepository.swift in Sources */,
 				2C2E2C2E2C2E2C2E2C2E2C2E /* CLIEntrypoint.swift in Sources */,
@@ -866,13 +857,6 @@
 				A1B2C3D4E5F60718293A4B6F /* TodoListContentView.swift in Sources */,
 				F1A2B3C4D5E6F708192A3B4C /* AppKitWindowContentControllers.swift in Sources */,
 				ACB37911A7D5C715F95EA95D /* RootView.swift in Sources */,
-				B7C4D3E25F6A7890CD1E2F31 /* RootContentView.swift in Sources */,
-				B7C4D3E25F6A7890CD1E2F32 /* RootContentView+Layout.swift in Sources */,
-				B7C4D3E25F6A7890CD1E2F33 /* RootContentView+Sidebar.swift in Sources */,
-				B7C4D3E25F6A7890CD1E2F34 /* RootContentView+Main.swift in Sources */,
-				B7C4D3E25F6A7890CD1E2F35 /* RootContentView+Inspector.swift in Sources */,
-				B7C4D3E25F6A7890CD1E2F36 /* RootContentView+Helpers.swift in Sources */,
-				EA94D7A93E3499BBFB64C3CE /* SettingsView.swift in Sources */,
 				2A3B4C5D6E7F8091A2B3C4D5 /* SavedQuery.swift in Sources */,
 				2A3B4C5D6E7F8091A2B3C4D6 /* SavedQueryRepository.swift in Sources */,
 				67267D8D7D4B0FE29F5DEB44 /* SidebarItem.swift in Sources */,
@@ -972,14 +956,18 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 49PJNAT2WC;
+				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.potomushto.youtrek.macos.tests;
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/YouTrek.app/Contents/MacOS/YouTrek";
 			};
@@ -1129,14 +1117,18 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 49PJNAT2WC;
+				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.potomushto.youtrek.macos.tests;
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/YouTrek.app/Contents/MacOS/YouTrek";
 			};

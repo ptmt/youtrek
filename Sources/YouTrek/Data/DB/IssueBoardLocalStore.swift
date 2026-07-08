@@ -82,7 +82,7 @@ actor IssueBoardLocalStore {
             }
             try db.run("COMMIT")
         } catch {
-            try? db.run("ROLLBACK")
+            _ = try? db.run("ROLLBACK")
             print("IssueBoardLocalStore failed to save remote boards: \(error.localizedDescription)")
         }
     }

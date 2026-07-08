@@ -174,7 +174,7 @@ actor IssueLocalStore {
             }
             try db.run("COMMIT")
         } catch {
-            try? db.run("ROLLBACK")
+            _ = try? db.run("ROLLBACK")
         }
     }
 
@@ -269,7 +269,7 @@ actor IssueLocalStore {
 
             try db.run("COMMIT")
         } catch {
-            try? db.run("ROLLBACK")
+            _ = try? db.run("ROLLBACK")
             print("IssueLocalStore failed to save remote issues: \(error.localizedDescription)")
         }
     }
@@ -284,7 +284,7 @@ actor IssueLocalStore {
             try db.run(issueDetails.delete())
             try db.run("COMMIT")
         } catch {
-            try? db.run("ROLLBACK")
+            _ = try? db.run("ROLLBACK")
             print("IssueLocalStore failed to clear cache: \(error.localizedDescription)")
         }
     }
@@ -324,7 +324,7 @@ actor IssueLocalStore {
             }
             try db.run("COMMIT")
         } catch {
-            try? db.run("ROLLBACK")
+            _ = try? db.run("ROLLBACK")
         }
     }
 
