@@ -448,16 +448,20 @@ enum IssueListReloadPlanner {
     static func action(previous: IssueListRenderSnapshot?, next: IssueListRenderSnapshot) -> Action {
         guard let previous else { return .full }
         if previous.showAssigneeColumn != next.showAssigneeColumn { return .full }
-        if previous.issues != next.issues { return .full }
-        if previous.unreadFlags != next.unreadFlags {
-            guard previous.unreadFlags.count == next.unreadFlags.count else { return .full }
-            var changed = IndexSet()
-            for (index, flag) in next.unreadFlags.enumerated() where previous.unreadFlags[index] != flag {
-                changed.insert(index)
-            }
-            return changed.isEmpty ? .none : .rows(changed)
+        guard previous.issues.count == next.issues.count,
+              previous.unreadFlags.count == previous.issues.count,
+              next.unreadFlags.count == next.issues.count,
+              previous.issues.elementsEqual(next.issues, by: { $0.id == $1.id })
+        else { return .full }
+
+        // Same rows in the same order: reload only rows whose content or unread
+        // state changed, so in-place updates don't flush scroll and row views.
+        var changed = IndexSet()
+        for index in next.issues.indices
+        where previous.issues[index] != next.issues[index] || previous.unreadFlags[index] != next.unreadFlags[index] {
+            changed.insert(index)
         }
-        return .none
+        return changed.isEmpty ? .none : .rows(changed)
     }
 }
 
@@ -858,23 +862,36 @@ private final class IssueAvatarView: NSView {
         }
 
         loadTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                guard !Task.isCancelled, let image = NSImage(data: data) else { return }
-                await MainActor.run {
-                    guard self.currentURL == url else { return }
-                    Self.imageCache.setObject(image, forKey: url as NSURL)
-                    self.showImage(image)
-                    self.loadTask = nil
-                }
-            } catch {
-                await MainActor.run {
-                    guard self.currentURL == url else { return }
-                    self.loadTask = nil
-                }
-            }
+            let image = await Self.sharedImage(for: url)
+            guard let self, !Task.isCancelled, let image else { return }
+            guard self.currentURL == url else { return }
+            self.showImage(image)
+            self.loadTask = nil
         }
+    }
+
+    private static var inFlightLoads: [URL: Task<NSImage?, Never>] = [:]
+
+    // Rows sharing an assignee reuse a single download instead of firing one
+    // URLSession task per visible cell before the cache is populated.
+    private static func sharedImage(for url: URL) async -> NSImage? {
+        if let cached = imageCache.object(forKey: url as NSURL) {
+            return cached
+        }
+        if let existing = inFlightLoads[url] {
+            return await existing.value
+        }
+        let task = Task<NSImage?, Never> {
+            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+            return NSImage(data: data)
+        }
+        inFlightLoads[url] = task
+        let image = await task.value
+        inFlightLoads[url] = nil
+        if let image {
+            imageCache.setObject(image, forKey: url as NSURL)
+        }
+        return image
     }
 
     private func showPlaceholder(initials: String?) {

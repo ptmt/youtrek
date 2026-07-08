@@ -63,6 +63,32 @@ final class AppState: ObservableObject {
         if selectedIssue?.isDraft == true {
             return
         }
+
+        // Keep the user's selection stable across list refreshes (e.g. a remote
+        // sync landing after the cached load); only fall back to the first row
+        // when the previous selection is no longer in the list.
+        let newIDs = Set(newIssues.map(\.id))
+        if let current = selectedIssue, newIDs.contains(current.id) {
+            if let updated = newIssues.first(where: { $0.id == current.id }), updated != current {
+                selectedIssue = updated
+            }
+            let retained = selectedIssueIDs.intersection(newIDs)
+            let resolved = retained.isEmpty ? [current.id] : retained
+            if selectedIssueIDs != resolved {
+                selectedIssueIDs = resolved
+            }
+            return
+        }
+        if selectedIssue == nil, !selectedIssueIDs.isEmpty {
+            let retained = selectedIssueIDs.intersection(newIDs)
+            if !retained.isEmpty {
+                if selectedIssueIDs != retained {
+                    selectedIssueIDs = retained
+                }
+                return
+            }
+        }
+
         if let first = newIssues.first {
             selectedIssue = first
             selectedIssueIDs = [first.id]

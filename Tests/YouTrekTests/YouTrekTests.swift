@@ -592,9 +592,19 @@ final class IssueListReloadPlannerTests: XCTestCase {
         XCTAssertEqual(IssueListReloadPlanner.action(previous: previous, next: next), .none)
     }
 
-    func testIssueContentChangeRequiresFullReload() {
+    func testIssueContentChangeReloadsOnlyChangedRows() {
         let previous = makeSnapshot(titles: ["A", "B"], unread: [false, false])
         let next = makeSnapshot(titles: ["A", "C"], unread: [false, false])
+
+        XCTAssertEqual(
+            IssueListReloadPlanner.action(previous: previous, next: next),
+            .rows(IndexSet([1]))
+        )
+    }
+
+    func testRowCountChangeRequiresFullReload() {
+        let previous = makeSnapshot(titles: ["A", "B"], unread: [false, false])
+        let next = makeSnapshot(titles: ["A", "B", "C"], unread: [false, false, false])
 
         XCTAssertEqual(IssueListReloadPlanner.action(previous: previous, next: next), .full)
     }

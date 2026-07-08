@@ -7,7 +7,7 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 
 - [x] 1. App startup / initial load path
 - [x] 2. Sidebar + workspace switching
-- [ ] 3. Issue list
+- [x] 3. Issue list
 - [ ] 4. Issue detail panel
 - [ ] 5. Issue board view
 - [ ] 6. Settings window + command palette
@@ -95,6 +95,47 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 ### Verification
 
 - `swift build` clean, `swift test`: 68/68 passed.
+
+## Iteration 3 — Issue list (2026-07-08)
+
+### Findings
+
+1. **Any content change forced a full `reloadData()`.**
+   `IssueListReloadPlanner` returned `.full` whenever the issues array differed
+   at all — a single edited row (optimistic update, comment timestamp bump)
+   flushed every row view and its avatar. Row-level reload existed only for
+   unread-flag changes.
+2. **Selection stolen on every list refresh.** `AppState.replaceIssues`
+   unconditionally re-selected the first row whenever the list content changed.
+   When the remote sync landed 1–2s after the cached load, the user's current
+   selection (and the open detail panel) jumped back to row 1 — a major
+   perceived-stability bug.
+3. **Duplicate avatar downloads.** Each visible row with the same assignee
+   started its own `URLSession` download until the first one populated the
+   cache (N parallel fetches of the same URL on first paint).
+
+### Fixes
+
+1. Planner now diffs per-row when the row ID sequence is unchanged and reloads
+   only changed rows; full reload reserved for count/order/column changes.
+   Updated/extended planner unit tests.
+   (`Sources/YouTrek/App/UI/IssueList/IssueListView.swift`)
+2. `replaceIssues` preserves the current single- and multi-selection when the
+   selected issues still exist in the new list (refreshing the stored
+   `IssueSummary` in place); falls back to first-row selection only when the
+   selection is gone. (`Sources/YouTrek/Domain/ViewModels/AppState.swift`)
+3. Avatar loads go through a shared in-flight task table keyed by URL.
+
+### Notes
+
+- The backlog item "serial `hasSeenUpdates` actor hop in loadIssues" was
+  examined and dropped: it is a LIMIT-1-style store lookup (~1ms) and moving it
+  would subtly change first-run read-seeding semantics. Not worth the risk.
+
+### Verification
+
+- `swift build` clean, `swift test`: all suites pass (planner tests updated,
+  +1 new test).
 
 ## Backlog (spotted, not yet fixed — assigned to later iterations)
 
