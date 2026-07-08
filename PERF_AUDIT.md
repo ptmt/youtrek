@@ -6,7 +6,7 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 ## Checklist
 
 - [x] 1. App startup / initial load path
-- [ ] 2. Sidebar + workspace switching
+- [x] 2. Sidebar + workspace switching
 - [ ] 3. Issue list
 - [ ] 4. Issue detail panel
 - [ ] 5. Issue board view
@@ -56,6 +56,45 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 - Startup phases are already os_log-instrumented ("Startup:" /
   "Startup detail:" in LoggingService.general); before/after wall-clock can be
   compared from Console logs on a real launch.
+
+## Iteration 2 — Sidebar + workspace switching (2026-07-08)
+
+### Findings
+
+1. **All three panes re-rooted on every AppState change.**
+   `WorkspaceViewController.render()` fired on every `appState.objectWillChange`
+   (any of ~30 @Published properties, incl. sync bookkeeping, detail caches,
+   board timestamps) and reassigned `hostingController.rootView` for sidebar,
+   main, AND inspector each time — allocating fresh AnyViews, closures, and
+   recomputing `visibleIssues` (sort + filter) per tick. During sync bursts or
+   a selection click this re-rooted three SwiftUI hierarchies several times per
+   second — the main source of workspace jumps.
+2. **Toolbar + traffic-light work on the render hot path.**
+   Every render called `toolbarController.refresh()` twice and scheduled an
+   async `NativeWindowChrome.alignTrafficLights` pass.
+3. **UserDefaults.didChangeNotification → full re-render.** Account metadata
+   saves (`lastUsedAt` on every sync completion) write UserDefaults, which
+   triggered a full three-pane re-root.
+4. `SplitViewFullHeightLayoutEnabler` / `ToolbarSidebarToggleHider` in
+   RootView.swift scan the entire window view hierarchy per update, but have
+   zero usages (dead code from the SwiftUI-shell era) — no runtime cost; left
+   for a cleanup pass.
+
+### Fixes (all in `Sources/YouTrek/App/UI/AppKitWindowContentControllers.swift`)
+
+1. Pane roots are now installed **once** as self-observing SwiftUI views
+   (`WorkspaceSidebarPaneRoot`, `WorkspaceMainPaneRoot`,
+   `WorkspaceInspectorPaneRoot`, each `@ObservedObject`-ing AppState); SwiftUI's
+   own dependency tracking replaces controller-driven re-rooting. Search query /
+   progress mode / assignee column moved into an observable `WorkspaceUIState`.
+2. Toolbar refresh is a separate coalesced subscription (cheap string/icon
+   updates only); traffic lights realign only at toolbar install.
+3. UserDefaults changes now update only the affected `WorkspaceUIState` flags
+   (with distinct-checks) instead of re-rendering everything.
+
+### Verification
+
+- `swift build` clean, `swift test`: 68/68 passed.
 
 ## Backlog (spotted, not yet fixed — assigned to later iterations)
 

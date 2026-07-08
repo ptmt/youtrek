@@ -266,12 +266,9 @@ final class WorkspaceViewController: NSViewController {
     private var toolbarController: WorkspaceToolbarController?
     private var cancellables: Set<AnyCancellable> = []
     private var previousSidebarSelection: SidebarItem?
-    private var searchQuery: String = ""
-    private var isProgressReportingMode: Bool = false
+    private let uiState: WorkspaceUIState
 
-    private var isRendering = false
-    private var needsRender = false
-    private var isRenderScheduled = false
+    private var isToolbarRefreshScheduled = false
     private var issueDetailLoadTask: Task<Void, Never>?
     private var lastOverlayShowsNetworkFooter: Bool?
 
@@ -279,6 +276,9 @@ final class WorkspaceViewController: NSViewController {
         self.container = container
         self.appState = container.appState
         self.previousSidebarSelection = container.appState.selectedSidebarItem
+        self.uiState = WorkspaceUIState(
+            showAssigneeColumn: UserDefaults.standard.bool(forKey: DefaultsKey.showAssigneeColumn)
+        )
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -319,7 +319,7 @@ final class WorkspaceViewController: NSViewController {
         ])
 
         observeState()
-        render()
+        configurePanes()
     }
 
     override func viewDidAppear() {
@@ -332,9 +332,17 @@ final class WorkspaceViewController: NSViewController {
     }
 
     private func observeState() {
+        // Pane root views observe AppState themselves; the controller only needs
+        // to keep the (cheap) toolbar state in sync.
         appState.objectWillChange
             .sink { [weak self] in
-                self?.scheduleRender()
+                self?.scheduleToolbarRefresh()
+            }
+            .store(in: &cancellables)
+
+        uiState.objectWillChange
+            .sink { [weak self] in
+                self?.scheduleToolbarRefresh()
             }
             .store(in: &cancellables)
 
@@ -375,9 +383,25 @@ final class WorkspaceViewController: NSViewController {
         )
         .receive(on: DispatchQueue.main)
         .sink { [weak self] _ in
-            self?.scheduleRender()
+            self?.applyUserDefaultsChanges()
         }
         .store(in: &cancellables)
+    }
+
+    private func applyUserDefaultsChanges() {
+        let showAssignee = UserDefaults.standard.bool(forKey: DefaultsKey.showAssigneeColumn)
+        if uiState.showAssigneeColumn != showAssignee {
+            uiState.showAssigneeColumn = showAssignee
+        }
+        #if DEBUG
+        if uiState.showBoardDiagnostics != AppDebugSettings.showBoardDiagnostics {
+            uiState.showBoardDiagnostics = AppDebugSettings.showBoardDiagnostics
+        }
+        if uiState.showIssueListDiagnostics != AppDebugSettings.showIssueListDiagnostics {
+            uiState.showIssueListDiagnostics = AppDebugSettings.showIssueListDiagnostics
+        }
+        #endif
+        updateOverlayContent()
     }
 
     private func installToolbarIfNeeded() {
@@ -389,46 +413,101 @@ final class WorkspaceViewController: NSViewController {
             if #available(macOS 11.0, *) {
                 window.toolbarStyle = .unified
             }
+            DispatchQueue.main.async {
+                NativeWindowChrome.alignTrafficLights(in: window)
+            }
         }
         toolbarController?.refresh()
-        DispatchQueue.main.async {
-            NativeWindowChrome.alignTrafficLights(in: window)
-        }
     }
 
-    private func scheduleRender() {
-        guard !isRenderScheduled else { return }
-        isRenderScheduled = true
+    private func scheduleToolbarRefresh() {
+        guard !isToolbarRefreshScheduled else { return }
+        isToolbarRefreshScheduled = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.isRenderScheduled = false
-            if self.isRendering {
-                self.needsRender = true
-                return
-            }
-            self.render()
+            self.isToolbarRefreshScheduled = false
+            self.toolbarController?.refresh()
         }
     }
 
-    private func render() {
-        isRendering = true
-        defer {
-            isRendering = false
-            if needsRender {
-                needsRender = false
-                render()
-            }
-        }
-
+    // Pane root views are installed once and observe AppState/WorkspaceUIState
+    // themselves; reassigning rootView on every state change forces SwiftUI to
+    // re-root all three hierarchies and is the main source of UI churn.
+    private func configurePanes() {
         splitController.configure(
-            sidebar: makeSidebarContent(),
-            main: makeMainContent(),
-            inspector: makeInspectorContent()
+            sidebar: AnyView(
+                WorkspaceSidebarPaneRoot(appState: appState, actions: makeSidebarActions())
+            ),
+            main: AnyView(
+                WorkspaceMainPaneRoot(
+                    appState: appState,
+                    uiState: uiState,
+                    container: container
+                )
+                .environmentObject(container)
+            ),
+            inspector: AnyView(
+                WorkspaceInspectorPaneRoot(appState: appState)
+                    .environmentObject(container)
+            )
         )
         applySplitState()
         updateOverlayContent()
-        installToolbarIfNeeded()
-        toolbarController?.refresh()
+    }
+
+    private func makeSidebarActions() -> WorkspaceSidebarActions {
+        WorkspaceSidebarActions(
+            deleteSavedSearch: { [weak self] savedQueryID in
+                guard let self else { return }
+                Task {
+                    await self.container.deleteSavedSearch(id: savedQueryID)
+                }
+            },
+            refreshBoard: { [weak self] item in
+                guard let self else { return }
+                Task {
+                    await self.container.refreshBoardIssues(for: item)
+                }
+            },
+            openBoardInWeb: { [weak self] item in
+                self?.container.openBoardInWeb(item)
+            },
+            boardSyncStatus: { [weak self] item in
+                self?.appState.boardSyncStatus(for: item)
+            },
+            createTodoList: { [weak self] in
+                guard let self else { return }
+                let suggestedName = "Todo List"
+                guard let resolvedName = self.promptForTodoListName(
+                    title: "New Todo List",
+                    message: "Name your new todo list.",
+                    defaultValue: suggestedName
+                ) else { return }
+                Task {
+                    await self.container.createTodoList(named: resolvedName)
+                }
+            },
+            renameTodoList: { [weak self] item in
+                guard let self,
+                      let listID = item.todoListID else { return }
+                guard let resolvedName = self.promptForTodoListName(
+                    title: "Rename Todo List",
+                    message: "Set a new name for this todo list.",
+                    defaultValue: item.title
+                ) else { return }
+                Task {
+                    await self.container.renameTodoList(id: listID, name: resolvedName)
+                }
+            },
+            deleteTodoList: { [weak self] item in
+                guard let self,
+                      let listID = item.todoListID else { return }
+                guard self.confirmDeleteTodoList(named: item.title) else { return }
+                Task {
+                    await self.container.deleteTodoList(id: listID)
+                }
+            }
+        )
     }
 
     private func applySplitState() {
@@ -458,271 +537,8 @@ final class WorkspaceViewController: NSViewController {
         overlayController.rootView = AnyView(overlay.environmentObject(container))
     }
 
-    private var selectedIssueBinding: Binding<IssueSummary?> {
-        Binding(
-            get: { self.appState.selectedIssue },
-            set: { self.appState.selectedIssue = $0 }
-        )
-    }
-
-    private var selectedIssueIDsBinding: Binding<Set<IssueSummary.ID>> {
-        Binding(
-            get: { self.appState.selectedIssueIDs },
-            set: { self.appState.selectedIssueIDs = $0 }
-        )
-    }
-
-    private var selectedSidebarBinding: Binding<SidebarItem?> {
-        Binding(
-            get: { self.appState.selectedSidebarItem },
-            set: { self.appState.selectedSidebarItem = $0 }
-        )
-    }
-
-    private var visibleIssues: [IssueSummary] {
-        WorkspaceIssueListComposer.visibleIssues(
-            appState: appState,
-            selection: appState.selectedSidebarItem,
-            searchQuery: searchQuery
-        )
-    }
-
-    private var selectedIssues: [IssueSummary] {
-        appState.issues.filter { appState.selectedIssueIDs.contains($0.id) }
-    }
-
     private var hasUnreadIssues: Bool {
         appState.issues.contains { appState.isIssueUnread($0) }
-    }
-
-    private var showAssigneeColumn: Bool {
-        UserDefaults.standard.bool(forKey: DefaultsKey.showAssigneeColumn)
-    }
-
-    #if DEBUG
-    private var showBoardDiagnostics: Bool {
-        AppDebugSettings.showBoardDiagnostics
-    }
-
-    private var showIssueListDiagnostics: Bool {
-        AppDebugSettings.showIssueListDiagnostics
-    }
-    #else
-    private let showBoardDiagnostics = false
-    private let showIssueListDiagnostics = false
-    #endif
-
-    private func makeSidebarContent() -> AnyView {
-        AnyView(
-            AppKitSidebarPane(
-                sections: appState.sidebarSections,
-                selection: selectedSidebarBinding,
-                onDeleteSavedSearch: { [weak self] savedQueryID in
-                    guard let self else { return }
-                    Task {
-                        await self.container.deleteSavedSearch(id: savedQueryID)
-                    }
-                },
-                onRefreshBoard: { [weak self] item in
-                    guard let self else { return }
-                    Task {
-                        await self.container.refreshBoardIssues(for: item)
-                    }
-                },
-                onOpenBoardInWeb: { [weak self] item in
-                    self?.container.openBoardInWeb(item)
-                },
-                boardSyncStatus: { [weak self] item in
-                    self?.appState.boardSyncStatus(for: item)
-                },
-                onCreateTodoList: { [weak self] in
-                    guard let self else { return }
-                    let suggestedName = "Todo List"
-                    guard let resolvedName = self.promptForTodoListName(
-                        title: "New Todo List",
-                        message: "Name your new todo list.",
-                        defaultValue: suggestedName
-                    ) else { return }
-                    Task {
-                        await self.container.createTodoList(named: resolvedName)
-                    }
-                },
-                onRenameTodoList: { [weak self] item in
-                    guard let self,
-                          let listID = item.todoListID else { return }
-                    guard let resolvedName = self.promptForTodoListName(
-                        title: "Rename Todo List",
-                        message: "Set a new name for this todo list.",
-                        defaultValue: item.title
-                    ) else { return }
-                    Task {
-                        await self.container.renameTodoList(id: listID, name: resolvedName)
-                    }
-                },
-                onDeleteTodoList: { [weak self] item in
-                    guard let self,
-                          let listID = item.todoListID else { return }
-                    guard self.confirmDeleteTodoList(named: item.title) else { return }
-                    Task {
-                        await self.container.deleteTodoList(id: listID)
-                    }
-                }
-            )
-            .ignoresSafeArea(.all)
-            .frame(minWidth: 220, maxHeight: .infinity)
-            .overlay(alignment: .bottomLeading) {
-                if appState.isSyncing {
-                    SyncStatusIndicator(label: appState.syncStatusMessage)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                        .padding(.leading, 8)
-                        .padding(.bottom, 6)
-                        .accessibilityLabel("Sync status")
-                } else if appState.showSyncComplete {
-                    SyncCompleteIndicator()
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                        .padding(.leading, 8)
-                        .padding(.bottom, 6)
-                        .accessibilityLabel("Syncing complete")
-                        .transition(.opacity)
-                        .animation(.easeInOut, value: appState.showSyncComplete)
-                }
-            }
-        )
-    }
-
-    private func makeMainContent() -> AnyView {
-        guard let selection = appState.selectedSidebarItem else {
-            if appState.sidebarSections.isEmpty {
-                return AnyView(Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity))
-            }
-            return AnyView(
-                ContentUnavailableView(
-                    "Select a section",
-                    systemImage: "sidebar.left",
-                    description: Text("Pick an item from the sidebar to continue.")
-                )
-            )
-        }
-
-        if selection.isBoard {
-            return AnyView(
-                BoardContentView(
-                    appState: appState,
-                    selection: selection,
-                    searchQuery: searchQuery,
-                    showDiagnostics: showBoardDiagnostics
-                )
-                .environmentObject(container)
-            )
-        }
-
-        if selection.isTodoList, let todoListID = selection.todoListID {
-            return AnyView(
-                TodoListContentView(
-                    listID: todoListID,
-                    title: selection.title,
-                    markdownStore: container,
-                    issueLinkHandler: container,
-                    todoListManager: container
-                )
-                .id(todoListID)
-                .environmentObject(container)
-            )
-        }
-
-        if isProgressReportingMode {
-            return AnyView(
-                IssueProgressListView(
-                    issues: visibleIssues,
-                    selection: selectedIssueBinding,
-                    selectedIDs: selectedIssueIDsBinding,
-                    isIssueUnread: { [weak self] issue in
-                        self?.appState.isIssueUnread(issue) ?? false
-                    }
-                )
-                .environmentObject(container)
-            )
-        }
-
-        let listID = selection.id
-        let diagnosticEvents = appState.issueListDataSourceEvents(for: listID)
-        let diagnosticsQuery = selection.query.diagnosticsLabel
-        return AnyView(
-            IssueListView(
-                issues: visibleIssues,
-                selection: selectedIssueBinding,
-                selectedIDs: selectedIssueIDsBinding,
-                showAssigneeColumn: showAssigneeColumn,
-                isLoading: appState.isLoadingIssues,
-                hasCompletedSync: appState.hasCompletedIssueSync,
-                showDiagnostics: showIssueListDiagnostics,
-                diagnosticEvents: diagnosticEvents,
-                diagnosticsTitle: selection.title,
-                diagnosticsID: selection.id,
-                diagnosticsQuery: diagnosticsQuery,
-                diagnosticsSearch: searchQuery,
-                isIssueUnread: { [weak self] issue in
-                    self?.appState.isIssueUnread(issue) ?? false
-                },
-                onIssuesRendered: { [weak self] count in
-                    self?.appState.recordIssueListRendered(issueCount: count)
-                },
-                onDeleteDraft: { [weak self] draftID in
-                    self?.container.discardDraft(recordID: draftID)
-                }
-            )
-        )
-    }
-
-    private func makeInspectorContent() -> AnyView {
-        let content: AnyView
-
-        if let draftID = appState.selectedDraftID,
-           let record = appState.draftRecord(id: draftID) {
-            content = AnyView(DraftIssueDetailView(record: record).environmentObject(container))
-        } else if appState.selectedDraftID != nil {
-            content = AnyView(
-                ContentUnavailableView(
-                    "Draft not found",
-                    systemImage: "square.and.pencil",
-                    description: Text("The selected draft is no longer available.")
-                )
-            )
-        } else if selectedIssues.count > 1 {
-            content = AnyView(
-                MultiIssueSelectionView(issues: selectedIssues)
-                    .environmentObject(container)
-            )
-        } else if let issue = appState.selectedIssue ?? selectedIssues.first {
-            content = AnyView(
-                IssueDetailView(
-                    issue: issue,
-                    detail: appState.issueDetail(for: issue),
-                    isLoadingDetail: appState.isIssueDetailLoading(issue.id)
-                )
-                .environmentObject(container)
-            )
-        } else if appState.sidebarSections.isEmpty || (appState.isLoadingIssues && appState.issues.isEmpty) {
-            content = AnyView(Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity))
-        } else {
-            content = AnyView(
-                ContentUnavailableView(
-                    "Select an issue",
-                    systemImage: "square.stack.3d.up",
-                    description: Text("Choose an issue from the middle column to inspect details.")
-                )
-            )
-        }
-
-        return AnyView(
-            content
-                .inspectorColumnWidth(min: 320, ideal: 400, max: 500)
-                .background(.ultraThinMaterial)
-        )
     }
 
     private func handleSelectedIssueChange(_ issue: IssueSummary?) {
@@ -827,23 +643,21 @@ final class WorkspaceViewController: NSViewController {
     }
 
     fileprivate func setSearchQuery(_ query: String) {
-        guard searchQuery != query else { return }
-        searchQuery = query
+        guard uiState.searchQuery != query else { return }
+        uiState.searchQuery = query
         appState.updateSearch(query: query)
-        scheduleRender()
     }
 
     fileprivate var currentSearchQuery: String {
-        searchQuery
+        uiState.searchQuery
     }
 
     fileprivate func toggleProgressReportingMode() {
-        isProgressReportingMode.toggle()
-        scheduleRender()
+        uiState.isProgressReportingMode.toggle()
     }
 
     fileprivate var isProgressReportingModeEnabled: Bool {
-        isProgressReportingMode
+        uiState.isProgressReportingMode
     }
 
     fileprivate var hasUnreadIssuesInSelection: Bool {
@@ -1057,6 +871,239 @@ private final class WorkspaceToolbarController: NSObject, NSToolbarDelegate {
 
     @objc private func toggleInspector() {
         owner?.toggleInspector()
+    }
+}
+
+// Controller-owned UI state that pane root views observe directly, so search
+// and mode changes update panes without re-rooting their hosting controllers.
+@MainActor
+final class WorkspaceUIState: ObservableObject {
+    @Published var searchQuery: String = ""
+    @Published var isProgressReportingMode: Bool = false
+    @Published var showAssigneeColumn: Bool
+    #if DEBUG
+    @Published var showBoardDiagnostics: Bool = AppDebugSettings.showBoardDiagnostics
+    @Published var showIssueListDiagnostics: Bool = AppDebugSettings.showIssueListDiagnostics
+    #endif
+
+    init(showAssigneeColumn: Bool) {
+        self.showAssigneeColumn = showAssigneeColumn
+    }
+}
+
+struct WorkspaceSidebarActions {
+    let deleteSavedSearch: (String) -> Void
+    let refreshBoard: (SidebarItem) -> Void
+    let openBoardInWeb: (SidebarItem) -> Void
+    let boardSyncStatus: (SidebarItem) -> String?
+    let createTodoList: () -> Void
+    let renameTodoList: (SidebarItem) -> Void
+    let deleteTodoList: (SidebarItem) -> Void
+}
+
+private struct WorkspaceSidebarPaneRoot: View {
+    @ObservedObject var appState: AppState
+    let actions: WorkspaceSidebarActions
+
+    var body: some View {
+        AppKitSidebarPane(
+            sections: appState.sidebarSections,
+            selection: Binding(
+                get: { appState.selectedSidebarItem },
+                set: { appState.selectedSidebarItem = $0 }
+            ),
+            onDeleteSavedSearch: actions.deleteSavedSearch,
+            onRefreshBoard: actions.refreshBoard,
+            onOpenBoardInWeb: actions.openBoardInWeb,
+            boardSyncStatus: actions.boardSyncStatus,
+            onCreateTodoList: actions.createTodoList,
+            onRenameTodoList: actions.renameTodoList,
+            onDeleteTodoList: actions.deleteTodoList
+        )
+        .ignoresSafeArea(.all)
+        .frame(minWidth: 220, maxHeight: .infinity)
+        .overlay(alignment: .bottomLeading) {
+            if appState.isSyncing {
+                SyncStatusIndicator(label: appState.syncStatusMessage)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.leading, 8)
+                    .padding(.bottom, 6)
+                    .accessibilityLabel("Sync status")
+            } else if appState.showSyncComplete {
+                SyncCompleteIndicator()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.leading, 8)
+                    .padding(.bottom, 6)
+                    .accessibilityLabel("Syncing complete")
+                    .transition(.opacity)
+                    .animation(.easeInOut, value: appState.showSyncComplete)
+            }
+        }
+    }
+}
+
+private struct WorkspaceMainPaneRoot: View {
+    @ObservedObject var appState: AppState
+    @ObservedObject var uiState: WorkspaceUIState
+    let container: AppContainer
+
+    var body: some View {
+        if let selection = appState.selectedSidebarItem {
+            mainContent(for: selection)
+        } else if appState.sidebarSections.isEmpty {
+            Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ContentUnavailableView(
+                "Select a section",
+                systemImage: "sidebar.left",
+                description: Text("Pick an item from the sidebar to continue.")
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func mainContent(for selection: SidebarItem) -> some View {
+        if selection.isBoard {
+            BoardContentView(
+                appState: appState,
+                selection: selection,
+                searchQuery: uiState.searchQuery,
+                showDiagnostics: showBoardDiagnostics
+            )
+        } else if selection.isTodoList, let todoListID = selection.todoListID {
+            TodoListContentView(
+                listID: todoListID,
+                title: selection.title,
+                markdownStore: container,
+                issueLinkHandler: container,
+                todoListManager: container
+            )
+            .id(todoListID)
+        } else if uiState.isProgressReportingMode {
+            IssueProgressListView(
+                issues: visibleIssues(for: selection),
+                selection: selectedIssueBinding,
+                selectedIDs: selectedIssueIDsBinding,
+                isIssueUnread: { [appState] issue in
+                    appState.isIssueUnread(issue)
+                }
+            )
+        } else {
+            issueList(for: selection)
+        }
+    }
+
+    private func issueList(for selection: SidebarItem) -> some View {
+        IssueListView(
+            issues: visibleIssues(for: selection),
+            selection: selectedIssueBinding,
+            selectedIDs: selectedIssueIDsBinding,
+            showAssigneeColumn: uiState.showAssigneeColumn,
+            isLoading: appState.isLoadingIssues,
+            hasCompletedSync: appState.hasCompletedIssueSync,
+            showDiagnostics: showIssueListDiagnostics,
+            diagnosticEvents: appState.issueListDataSourceEvents(for: selection.id),
+            diagnosticsTitle: selection.title,
+            diagnosticsID: selection.id,
+            diagnosticsQuery: selection.query.diagnosticsLabel,
+            diagnosticsSearch: uiState.searchQuery,
+            isIssueUnread: { [appState] issue in
+                appState.isIssueUnread(issue)
+            },
+            onIssuesRendered: { [appState] count in
+                appState.recordIssueListRendered(issueCount: count)
+            },
+            onDeleteDraft: { [container] draftID in
+                container.discardDraft(recordID: draftID)
+            }
+        )
+    }
+
+    private func visibleIssues(for selection: SidebarItem) -> [IssueSummary] {
+        WorkspaceIssueListComposer.visibleIssues(
+            appState: appState,
+            selection: selection,
+            searchQuery: uiState.searchQuery
+        )
+    }
+
+    private var selectedIssueBinding: Binding<IssueSummary?> {
+        Binding(
+            get: { appState.selectedIssue },
+            set: { appState.selectedIssue = $0 }
+        )
+    }
+
+    private var selectedIssueIDsBinding: Binding<Set<IssueSummary.ID>> {
+        Binding(
+            get: { appState.selectedIssueIDs },
+            set: { appState.selectedIssueIDs = $0 }
+        )
+    }
+
+    private var showBoardDiagnostics: Bool {
+        #if DEBUG
+        uiState.showBoardDiagnostics
+        #else
+        false
+        #endif
+    }
+
+    private var showIssueListDiagnostics: Bool {
+        #if DEBUG
+        uiState.showIssueListDiagnostics
+        #else
+        false
+        #endif
+    }
+}
+
+private struct WorkspaceInspectorPaneRoot: View {
+    @ObservedObject var appState: AppState
+
+    var body: some View {
+        content
+            .inspectorColumnWidth(min: 320, ideal: 400, max: 500)
+            .background(.ultraThinMaterial)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let draftID = appState.selectedDraftID {
+            if let record = appState.draftRecord(id: draftID) {
+                DraftIssueDetailView(record: record)
+            } else {
+                ContentUnavailableView(
+                    "Draft not found",
+                    systemImage: "square.and.pencil",
+                    description: Text("The selected draft is no longer available.")
+                )
+            }
+        } else if selectedIssues.count > 1 {
+            MultiIssueSelectionView(issues: selectedIssues)
+        } else if let issue = appState.selectedIssue ?? selectedIssues.first {
+            IssueDetailView(
+                issue: issue,
+                detail: appState.issueDetail(for: issue),
+                isLoadingDetail: appState.isIssueDetailLoading(issue.id)
+            )
+        } else if appState.sidebarSections.isEmpty || (appState.isLoadingIssues && appState.issues.isEmpty) {
+            Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ContentUnavailableView(
+                "Select an issue",
+                systemImage: "square.stack.3d.up",
+                description: Text("Choose an issue from the middle column to inspect details.")
+            )
+        }
+    }
+
+    private var selectedIssues: [IssueSummary] {
+        appState.issues.filter { appState.selectedIssueIDs.contains($0.id) }
     }
 }
 
