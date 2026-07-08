@@ -9,7 +9,7 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 - [x] 2. Sidebar + workspace switching
 - [x] 3. Issue list
 - [x] 4. Issue detail panel
-- [ ] 5. Issue board view
+- [x] 5. Issue board view
 - [ ] 6. Settings window + command palette
 - [ ] 7. Sync coordinator / AppState invalidation churn
 - [ ] 8. Final verification pass
@@ -167,6 +167,39 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
    unreachable "No custom fields." branch.
 3. Projects/status/priority options load concurrently via `async let`.
    (`Sources/YouTrek/App/UI/IssueDetail/IssueDetailView.swift`)
+
+### Verification
+
+- `swift build` clean, `swift test`: 69/69 passed.
+
+## Iteration 5 — Issue board view (2026-07-08)
+
+### Findings
+
+1. **Per-(issue × column) string allocation in match closures.** Every column
+   match call re-ran `issue.fieldValues(named:).map { $0.lowercased() }` — for
+   a 200-issue board with 6 columns that is thousands of lowercase/array
+   allocations per render, and `BoardContentView` observes AppState so the
+   board re-renders on every AppState tick.
+2. **Derived collections recomputed repeatedly per render.** `groupModels`
+   (O(n) swimlane bucketing) was computed ~3× per body evaluation (content,
+   header emptiness check, collapse-all state) and `columnDescriptors` ~4×
+   (content ×2, width, diagnostics), each with sorts and full-issue scans.
+   The diagnostics "Unmatched" column recomputed `baseColumnDescriptors`
+   inside its match closure — per issue.
+3. Header counts and lane contents were re-filtered inside child views
+   (`issues.filter(column.match)` per column per render).
+
+### Fixes (all in `Sources/YouTrek/App/UI/IssueBoard/IssueBoardView.swift`)
+
+1. Board rendering now derives a single `BoardLayout` per body evaluation:
+   matchers are value-sets (field mode) or status enums (status mode, exact
+   equality preserved), each issue's lowercased field values are computed once,
+   and one pass produces column counts, matched/unmatched totals, and
+   per-(group, column) issue buckets.
+2. Header row and lanes are pure display views over the precomputed layout.
+3. Collapse-all/diagnostics helpers take the computed groups/layout instead of
+   recomputing them.
 
 ### Verification
 

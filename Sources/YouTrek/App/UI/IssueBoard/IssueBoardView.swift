@@ -20,8 +20,12 @@ struct IssueBoardView: View {
     private let loadingIndicatorDelayNanoseconds: UInt64 = 250_000_000
 
     var body: some View {
+        // Columns, groups, and per-cell issue buckets are derived in one pass;
+        // header/lane child views only display precomputed data instead of
+        // re-filtering all issues per column on every render.
+        let layout = makeBoardLayout()
         VStack(spacing: 0) {
-            boardHeader
+            boardHeader(layout: layout)
             Divider()
             Group {
                 if showsLoadingView && issues.isEmpty {
@@ -39,13 +43,13 @@ struct IssueBoardView: View {
                         description: "Sync or adjust your filters to pull the latest cards."
                     )
                 } else {
-                    boardContent
+                    boardContent(layout: layout)
                 }
             }
         }
         .overlay(alignment: .topTrailing) {
             if showDiagnostics {
-                diagnosticsOverlay
+                diagnosticsOverlay(layout: layout)
             }
         }
         .onAppear {
@@ -77,20 +81,19 @@ struct IssueBoardView: View {
         }
     }
 
-    private var boardContent: some View {
+    private func boardContent(layout: BoardLayout) -> some View {
         ScrollView([.horizontal, .vertical]) {
             LazyVStack(alignment: .leading, spacing: 16) {
                 IssueBoardColumnHeaderRow(
-                    columns: columnDescriptors,
-                    issues: issues,
+                    columns: layout.columns,
                     columnWidth: columnWidth,
                     spacing: columnSpacing
                 )
-                ForEach(groupModels) { group in
+                ForEach(layout.groups) { group in
                     DisclosureGroup(isExpanded: binding(for: group.id)) {
                         IssueBoardLane(
-                            group: group,
-                            columns: columnDescriptors,
+                            columns: layout.columns,
+                            issuesByColumn: layout.cells[group.id] ?? [:],
                             columnWidth: columnWidth,
                             spacing: columnSpacing,
                             onSelect: { selection = $0 }
@@ -100,7 +103,7 @@ struct IssueBoardView: View {
                     }
                 }
             }
-            .frame(minWidth: boardContentWidth, alignment: .leading)
+            .frame(minWidth: boardContentWidth(layout: layout), alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.top, 12)
             .padding(.bottom, 16)
@@ -108,14 +111,14 @@ struct IssueBoardView: View {
         .scrollIndicators(.visible)
     }
 
-    private var boardContentWidth: CGFloat {
-        let count = max(columnDescriptors.count, 1)
+    private func boardContentWidth(layout: BoardLayout) -> CGFloat {
+        let count = max(layout.columns.count, 1)
         let columnsWidth = CGFloat(count) * columnWidth
         let spacingWidth = CGFloat(max(0, count - 1)) * columnSpacing
         return columnsWidth + spacingWidth
     }
 
-    private var boardHeader: some View {
+    private func boardHeader(layout: BoardLayout) -> some View {
         HStack(spacing: 8) {
             Text("Agile boards")
                 .font(.subheadline)
@@ -128,12 +131,15 @@ struct IssueBoardView: View {
             if showsSprintControls {
                 sprintControls
             }
-            if !groupModels.isEmpty {
+            if !layout.groups.isEmpty {
                 Button {
-                    toggleCollapseAll()
+                    toggleCollapseAll(groups: layout.groups)
                 } label: {
-                    Label(isAllCollapsed ? "Expand all" : "Collapse all", systemImage: "rectangle.compress.vertical")
-                        .labelStyle(.titleAndIcon)
+                    Label(
+                        isAllCollapsed(groups: layout.groups) ? "Expand all" : "Collapse all",
+                        systemImage: "rectangle.compress.vertical"
+                    )
+                    .labelStyle(.titleAndIcon)
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)
@@ -184,23 +190,26 @@ struct IssueBoardView: View {
         .font(.caption)
     }
 
-    private var columnDescriptors: [IssueBoardColumnDescriptor] {
-        var columns = baseColumnDescriptors
-        if showDiagnostics {
-            columns.append(
-                IssueBoardColumnDescriptor(
-                    id: "diagnostics-unmatched",
-                    title: "Unmatched",
-                    match: { issue in
-                        !baseColumnDescriptors.contains { $0.match(issue) }
-                    }
-                )
-            )
-        }
-        return columns
+    private static let unmatchedColumnID = "diagnostics-unmatched"
+
+    private enum BoardColumnRule {
+        case fieldValues(Set<String>)
+        case status(IssueStatus)
     }
 
-    private var baseColumnDescriptors: [IssueBoardColumnDescriptor] {
+    private struct BoardColumnMatcher {
+        let id: String
+        let title: String
+        let rule: BoardColumnRule
+    }
+
+    private struct BoardColumnMatching {
+        let matchers: [BoardColumnMatcher]
+        let fieldName: String?
+        let useStatusFallback: Bool
+    }
+
+    private func makeColumnMatching() -> BoardColumnMatching {
         if let fieldName = board.columnFieldName, !board.columns.isEmpty {
             let normalizedField = fieldName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let useStatusFallback = shouldUseStatusForColumns(
@@ -214,36 +223,111 @@ struct IssueBoardView: View {
                 if leftOrdinal != rightOrdinal { return leftOrdinal < rightOrdinal }
                 return left.title.localizedCaseInsensitiveCompare(right.title) == .orderedAscending
             }
-            return columns.map { column in
-                let matchValues = column.valueNames.map { $0.lowercased() }
-                return IssueBoardColumnDescriptor(
-                    id: column.id,
-                    title: column.title,
-                    match: { issue in
-                        var values = issue.fieldValues(named: normalizedField).map { $0.lowercased() }
-                        if useStatusFallback, values.isEmpty {
-                            let statusName = issue.status.displayName.lowercased()
-                            values = [statusName, issue.status.rawValue.lowercased()]
-                        }
-                        if matchValues.isEmpty {
-                            let title = column.title.lowercased()
-                            return values.contains(title)
-                        }
-                        return values.contains(where: { matchValues.contains($0) })
-                    }
-                )
+            let matchers = columns.map { column in
+                let matchValues = column.valueNames.isEmpty
+                    ? Set([column.title.lowercased()])
+                    : Set(column.valueNames.map { $0.lowercased() })
+                return BoardColumnMatcher(id: column.id, title: column.title, rule: .fieldValues(matchValues))
             }
+            return BoardColumnMatching(matchers: matchers, fieldName: normalizedField, useStatusFallback: useStatusFallback)
         }
 
         let resolved = IssueStatus.sortedUnique(issues.map(\.status))
         let fallback = resolved.isEmpty ? IssueStatus.fallbackCases : resolved
-        return fallback.map { status in
-            IssueBoardColumnDescriptor(
-                id: status.rawValue,
-                title: status.displayName,
-                match: { issue in issue.status == status }
-            )
+        let matchers = fallback.map { status in
+            BoardColumnMatcher(id: status.rawValue, title: status.displayName, rule: .status(status))
         }
+        return BoardColumnMatching(matchers: matchers, fieldName: nil, useStatusFallback: false)
+    }
+
+    fileprivate struct BoardLayout {
+        struct Column: Identifiable {
+            let id: String
+            let title: String
+            let count: Int
+        }
+
+        let columns: [Column]
+        let groups: [IssueBoardGroup]
+        let cells: [String: [String: [IssueSummary]]]
+        let matchedIssueCount: Int
+        let baseColumnCount: Int
+    }
+
+    private func makeBoardLayout() -> BoardLayout {
+        let matching = makeColumnMatching()
+        let groups = groupModels
+
+        // Field values are lowercased once per issue instead of once per
+        // (issue, column) match closure call.
+        func matchedColumnIDs(for issue: IssueSummary) -> [String] {
+            var fieldValues: Set<String>?
+            if let fieldName = matching.fieldName {
+                var values = issue.fieldValues(named: fieldName).map { $0.lowercased() }
+                if matching.useStatusFallback, values.isEmpty {
+                    values = [issue.status.displayName.lowercased(), issue.status.rawValue.lowercased()]
+                }
+                fieldValues = Set(values)
+            }
+            var ids: [String] = []
+            for matcher in matching.matchers {
+                switch matcher.rule {
+                case .fieldValues(let targets):
+                    if let fieldValues, !fieldValues.isDisjoint(with: targets) {
+                        ids.append(matcher.id)
+                    }
+                case .status(let status):
+                    if issue.status == status {
+                        ids.append(matcher.id)
+                    }
+                }
+            }
+            return ids
+        }
+
+        var counts: [String: Int] = [:]
+        var matchedIssueCount = 0
+        var unmatchedCount = 0
+        for issue in issues {
+            let ids = matchedColumnIDs(for: issue)
+            if ids.isEmpty {
+                unmatchedCount += 1
+            } else {
+                matchedIssueCount += 1
+            }
+            for id in ids {
+                counts[id, default: 0] += 1
+            }
+        }
+
+        var cells: [String: [String: [IssueSummary]]] = [:]
+        for group in groups {
+            var byColumn: [String: [IssueSummary]] = [:]
+            for issue in group.issues {
+                let ids = matchedColumnIDs(for: issue)
+                for id in ids {
+                    byColumn[id, default: []].append(issue)
+                }
+                if showDiagnostics, ids.isEmpty {
+                    byColumn[Self.unmatchedColumnID, default: []].append(issue)
+                }
+            }
+            cells[group.id] = byColumn
+        }
+
+        var columns = matching.matchers.map { matcher in
+            BoardLayout.Column(id: matcher.id, title: matcher.title, count: counts[matcher.id] ?? 0)
+        }
+        if showDiagnostics {
+            columns.append(BoardLayout.Column(id: Self.unmatchedColumnID, title: "Unmatched", count: unmatchedCount))
+        }
+        return BoardLayout(
+            columns: columns,
+            groups: groups,
+            cells: cells,
+            matchedIssueCount: matchedIssueCount,
+            baseColumnCount: matching.matchers.count
+        )
     }
 
     private func shouldUseStatusForColumns(
@@ -278,8 +362,8 @@ struct IssueBoardView: View {
         return !statusNames.isDisjoint(with: columnSet)
     }
 
-    private var diagnosticsOverlay: some View {
-        let matched = matchedIssueCount
+    private func diagnosticsOverlay(layout: BoardLayout) -> some View {
+        let matched = layout.matchedIssueCount
         let unmatched = max(0, issues.count - matched)
         let fieldName = board.columnFieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "—"
         let swimlaneField = board.swimlaneSettings.fieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "—"
@@ -305,7 +389,7 @@ struct IssueBoardView: View {
             Text("Issues: \(issues.count)  Matched: \(matched)  Unmatched: \(unmatched)")
             Text("Column field: \(fieldName)")
             Text("Issues w/ column values: \(issuesWithColumnValues)")
-            Text("Columns: \(baseColumnDescriptors.count)  Swimlanes: \(swimlaneField)")
+            Text("Columns: \(layout.baseColumnCount)  Swimlanes: \(swimlaneField)")
             if events.isEmpty {
                 Text("Data source events: none")
             } else {
@@ -352,7 +436,8 @@ struct IssueBoardView: View {
     }
 
     private func diagnosticsCopyText() -> String {
-        let matched = matchedIssueCount
+        let layout = makeBoardLayout()
+        let matched = layout.matchedIssueCount
         let unmatched = max(0, issues.count - matched)
         let fieldName = board.columnFieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "—"
         let swimlaneField = board.swimlaneSettings.fieldName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "—"
@@ -362,7 +447,7 @@ struct IssueBoardView: View {
         lines.append("Issues: \(issues.count)  Matched: \(matched)  Unmatched: \(unmatched)")
         lines.append("Column field: \(fieldName)")
         lines.append("Issues w/ column values: \(issuesWithColumnValues)")
-        lines.append("Columns: \(baseColumnDescriptors.count)  Swimlanes: \(swimlaneField)")
+        lines.append("Columns: \(layout.baseColumnCount)  Swimlanes: \(swimlaneField)")
         if diagnosticEvents.isEmpty {
             lines.append("Data source events: none")
         } else {
@@ -379,12 +464,6 @@ struct IssueBoardView: View {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(diagnosticsCopyText(), forType: .string)
-    }
-
-    private var matchedIssueCount: Int {
-        issues.filter { issue in
-            baseColumnDescriptors.contains { $0.match(issue) }
-        }.count
     }
 
     private var issuesWithColumnFieldValues: Int {
@@ -522,14 +601,14 @@ struct IssueBoardView: View {
         )
     }
 
-    private var isAllCollapsed: Bool {
-        let groupIDs = Set(groupModels.map(\.id))
+    private func isAllCollapsed(groups: [IssueBoardGroup]) -> Bool {
+        let groupIDs = Set(groups.map(\.id))
         guard !groupIDs.isEmpty else { return false }
         return groupIDs.isSubset(of: collapsedGroups)
     }
 
-    private func toggleCollapseAll() {
-        let groupIDs = Set(groupModels.map(\.id))
+    private func toggleCollapseAll(groups: [IssueBoardGroup]) {
+        let groupIDs = Set(groups.map(\.id))
         guard !groupIDs.isEmpty else { return }
         if groupIDs.isSubset(of: collapsedGroups) {
             collapsedGroups.subtract(groupIDs)
@@ -597,12 +676,6 @@ private struct EmptyStateView: View {
     }
 }
 
-private struct IssueBoardColumnDescriptor: Identifiable {
-    let id: String
-    let title: String
-    let match: (IssueSummary) -> Bool
-}
-
 private struct IssueBoardGroup: Identifiable {
     let id: String
     let title: String
@@ -632,8 +705,7 @@ private struct IssueBoardGroupHeader: View {
 }
 
 private struct IssueBoardColumnHeaderRow: View {
-    let columns: [IssueBoardColumnDescriptor]
-    let issues: [IssueSummary]
+    let columns: [IssueBoardView.BoardLayout.Column]
     let columnWidth: CGFloat
     let spacing: CGFloat
 
@@ -642,7 +714,7 @@ private struct IssueBoardColumnHeaderRow: View {
             ForEach(columns) { column in
                 IssueBoardColumnHeader(
                     title: column.title,
-                    count: issues.filter(column.match).count
+                    count: column.count
                 )
                 .frame(width: columnWidth, alignment: .leading)
             }
@@ -672,8 +744,8 @@ private struct IssueBoardColumnHeader: View {
 }
 
 private struct IssueBoardLane: View {
-    let group: IssueBoardGroup
-    let columns: [IssueBoardColumnDescriptor]
+    let columns: [IssueBoardView.BoardLayout.Column]
+    let issuesByColumn: [String: [IssueSummary]]
     let columnWidth: CGFloat
     let spacing: CGFloat
     let onSelect: (IssueSummary) -> Void
@@ -682,7 +754,7 @@ private struct IssueBoardLane: View {
         HStack(alignment: .top, spacing: spacing) {
             ForEach(columns) { column in
                 IssueBoardColumnView(
-                    issues: group.issues.filter(column.match),
+                    issues: issuesByColumn[column.id] ?? [],
                     columnWidth: columnWidth,
                     onSelect: onSelect
                 )
