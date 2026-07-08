@@ -519,6 +519,40 @@ final class YouTrekTests: XCTestCase {
         XCTAssertTrue(WorkspaceIssueListComposer.selectionShowsDrafts(item))
     }
 
+    func testCLIInstallerUsesHomebrewFallbackBeforeUserLevelFallbacks() {
+        XCTAssertEqual(
+            CLIInstaller.preferredFallbackInstallPaths + CLIInstaller.fallbackInstallPaths,
+            [
+                "/opt/homebrew/bin/youtrek",
+                "~/.local/bin/youtrek",
+                "~/bin/youtrek"
+            ]
+        )
+    }
+
+    func testCLIInstallerOmitsPathNoteWhenInstallDirectoryIsOnPath() {
+        let message = CLIInstaller.appendPathNoteIfNeeded(
+            to: "Installed CLI alias",
+            directory: "/opt/homebrew/bin",
+            environment: ["PATH": "/usr/bin:/opt/homebrew/bin:/bin"]
+        )
+
+        XCTAssertEqual(message, "Installed CLI alias")
+    }
+
+    func testCLIInstallerAddsPathNoteWhenInstallDirectoryIsNotOnPath() {
+        let message = CLIInstaller.appendPathNoteIfNeeded(
+            to: "Installed CLI alias",
+            directory: "/Users/example/.local/bin",
+            environment: ["PATH": "/usr/local/bin:/usr/bin:/bin"]
+        )
+
+        XCTAssertEqual(
+            message,
+            "Installed CLI alias\nNote: ensure /Users/example/.local/bin is on your PATH."
+        )
+    }
+
     private func makeIssue(readableID: String, title: String) -> IssueSummary {
         IssueSummary(
             readableID: readableID,

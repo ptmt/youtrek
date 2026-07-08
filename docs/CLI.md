@@ -48,6 +48,7 @@ Suggested layers:
 To run `youtrek` without the full app path, install a **symlink** or **wrapper script** that points to the app executable:
 
 - Preferred (non-sandboxed): `/usr/local/bin/youtrek`
+- Preferred fallback on Apple Silicon Homebrew systems: `/opt/homebrew/bin/youtrek`
 - User-level (no privileges needed): `~/.local/bin/youtrek` or `~/bin/youtrek`
 
 Provide an in-app action or command to install the alias:

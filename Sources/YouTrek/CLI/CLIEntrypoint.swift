@@ -823,6 +823,9 @@ private struct CLIOutput {
             Default path:
               /usr/local/bin/youtrek
 
+            Preferred fallback:
+              /opt/homebrew/bin/youtrek
+
             User-level paths:
               ~/.local/bin/youtrek
               ~/bin/youtrek

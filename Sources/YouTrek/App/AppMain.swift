@@ -579,6 +579,8 @@ final class YouTrekApp: NSObject, NSApplicationDelegate {
 
         sudo ln -s \"\(executablePath)\" /usr/local/bin/youtrek
 
+        ln -s \"\(executablePath)\" /opt/homebrew/bin/youtrek
+
         mkdir -p ~/.local/bin
         ln -s \"\(executablePath)\" ~/.local/bin/youtrek
 

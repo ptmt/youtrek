@@ -2,6 +2,9 @@ import Foundation
 
 enum CLIInstaller {
     static let defaultInstallPath = "/usr/local/bin/youtrek"
+    static let preferredFallbackInstallPaths = [
+        "/opt/homebrew/bin/youtrek"
+    ]
     static let fallbackInstallPaths = [
         "~/.local/bin/youtrek",
         "~/bin/youtrek"
@@ -57,12 +60,15 @@ enum CLIInstaller {
 
     private static func installFallback(force: Bool) throws -> String {
         var lastError: Error?
-        for fallback in fallbackInstallPaths {
+        for fallback in preferredFallbackInstallPaths + fallbackInstallPaths {
             do {
                 let url = resolveInstallURL(fallback)
+                if !shouldAttemptFallbackInstall(at: url) {
+                    continue
+                }
                 let message = try installSymlink(at: url, force: force)
                 let directory = url.deletingLastPathComponent().path
-                return "\(message)\nNote: ensure \(directory) is on your PATH."
+                return appendPathNoteIfNeeded(to: message, directory: directory)
             } catch {
                 lastError = error
             }
@@ -76,6 +82,40 @@ enum CLIInstaller {
             return CLIInstallerError.permissionDenied(path)
         }
         return error
+    }
+
+    private static func shouldAttemptFallbackInstall(at url: URL) -> Bool {
+        let directory = url.deletingLastPathComponent().path
+        if fallbackInstallPaths
+            .map({ resolveInstallURL($0).deletingLastPathComponent().path })
+            .contains(directory) {
+            return true
+        }
+
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: directory, isDirectory: &isDirectory) && isDirectory.boolValue
+    }
+
+    static func appendPathNoteIfNeeded(
+        to message: String,
+        directory: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String {
+        if pathContains(directory, environment: environment) {
+            return message
+        }
+        return "\(message)\nNote: ensure \(directory) is on your PATH."
+    }
+
+    static func pathContains(
+        _ directory: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        let resolvedDirectory = resolveInstallURL(directory).standardizedFileURL.path
+        return (environment["PATH"] ?? "")
+            .split(separator: ":")
+            .map { resolveInstallURL(String($0)).standardizedFileURL.path }
+            .contains(resolvedDirectory)
     }
 
     private static func isPermissionDenied(_ error: Error) -> Bool {
@@ -107,7 +147,7 @@ enum CLIInstallerError: LocalizedError {
         case .pathExists(let path):
             return "\(path) already exists. Re-run with --force to replace it."
         case .permissionDenied(let path):
-            return "Not allowed to write to \(path).\nTry: youtrek install-cli --path ~/.local/bin/youtrek"
+            return "Not allowed to write to \(path).\nTry: youtrek install-cli --path /opt/homebrew/bin/youtrek"
         }
     }
 }
