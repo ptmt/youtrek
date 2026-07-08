@@ -12,7 +12,7 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 - [x] 5. Issue board view
 - [x] 6. Settings window + command palette
 - [x] 7. Sync coordinator / AppState invalidation churn
-- [ ] 8. Final verification pass
+- [x] 8. Final verification pass
 
 ## Iteration 1 — Startup / initial load (2026-07-08)
 
@@ -280,6 +280,41 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 ### Verification
 
 - `swift build` clean, `swift test`: 69/69 passed.
+
+## Iteration 8 — Final verification pass (2026-07-08)
+
+An adversarial review of the combined diff (7 commits) confirmed four
+regressions introduced by the earlier iterations; all fixed in this pass:
+
+1. **`SidebarItem.==` is id-only**, so iteration 7's `updateSidebar` guards
+   suppressed payload updates (renames, query/board changes never republished).
+   → Added `hasSameContent(as:)` to `SidebarItem`/`SidebarSection` and used it
+   in the guards.
+2. **Reinstall-with-keychain-intact no longer restored the account** —
+   `configureIfNeeded` read only the (empty) defaults cache and showed setup.
+   → When the cached snapshot has no account, the keychain-backed
+   `loadAccounts()` restore now runs (off-main) before deciding on setup.
+3. **Queued keychain mirror writes could be dropped at quit**, letting a stale
+   mirror overwrite local accounts on next launch. → `applicationWillTerminate`
+   drains the mirror-write queue (`drainPendingSyncedMetadataWrites`).
+4. **The legacy-DB copy raced** when stores opened lazily in parallel (the
+   exists-check + copy on the shared `YouTrek.sqlite` is not atomic).
+   → Consolidated the three duplicated path/migration helpers into
+   `LocalStoreDatabase` with the copy serialized behind a lock.
+
+Also fixed during verification: `TodoListEditorTests.
+testViewModelSavesAndLoadsIssueStylesAfterMarkdownChange` raced the view
+model's internal 250ms style-refresh debounce with a fixed 350ms sleep
+(~100ms margin); the schedule shift from the new planner tests pushed it over
+the edge under xcodebuild. The test now polls with a 2s deadline. Verified the
+base commit passes and HEAD failed deterministically before the fix.
+
+### Final verification results
+
+- `swift build`: clean (no warnings in project sources).
+- `swift test`: 69/69 passed.
+- `xcodebuild test -scheme YouTrek -destination platform=macOS`: passed twice
+  consecutively (69/69).
 
 ## Backlog
 

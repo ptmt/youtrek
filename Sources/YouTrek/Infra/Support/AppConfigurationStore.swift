@@ -742,6 +742,13 @@ struct AppConfigurationStore: @unchecked Sendable {
         qos: .utility
     )
 
+    // Blocks until queued keychain mirror writes finish; call at app
+    // termination so quitting can't drop the latest accounts payload (a stale
+    // mirror would overwrite local defaults on the next launch).
+    static func drainPendingSyncedMetadataWrites() {
+        syncedMetadataQueue.sync {}
+    }
+
     private func saveStoredAccountsData(_ data: Data) {
         defaults.set(data, forKey: Keys.accounts)
         saveSyncedAccountsData(data)

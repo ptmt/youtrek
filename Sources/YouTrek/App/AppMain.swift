@@ -48,6 +48,7 @@ final class YouTrekApp: NSObject, NSApplicationDelegate {
         if let themeObserver {
             NotificationCenter.default.removeObserver(themeObserver)
         }
+        AppConfigurationStore.drainPendingSyncedMetadataWrites()
     }
 
     private func bootstrap() async {

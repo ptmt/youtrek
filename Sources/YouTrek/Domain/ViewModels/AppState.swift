@@ -232,15 +232,18 @@ final class AppState: ObservableObject {
     ) {
         // Sidebar data refreshes on every sync cycle; republishing unchanged
         // sections or selection cascades into selection handlers and pane
-        // re-renders, so only publish real changes.
-        if sidebarSections != sections {
+        // re-renders, so only publish real changes. SidebarItem's == is
+        // id-only, so compare content explicitly.
+        let sectionsChanged = sidebarSections.count != sections.count
+            || !zip(sidebarSections, sections).allSatisfy { $0.hasSameContent(as: $1) }
+        if sectionsChanged {
             sidebarSections = sections
         }
         let items = sections.flatMap(\.items)
 
         if let current = selectedSidebarItem,
            let updated = items.first(where: { $0.id == current.id }) {
-            if current != updated {
+            if !current.hasSameContent(as: updated) {
                 selectedSidebarItem = updated
             }
             return

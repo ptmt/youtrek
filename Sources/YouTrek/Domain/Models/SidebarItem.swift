@@ -68,6 +68,17 @@ extension SidebarItem {
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
+
+    // `==` compares only `id` (selection identity); use this when deciding
+    // whether a payload change (rename, query, board metadata) must republish.
+    func hasSameContent(as other: SidebarItem) -> Bool {
+        id == other.id
+            && kind == other.kind
+            && title == other.title
+            && iconName == other.iconName
+            && query == other.query
+            && board == other.board
+    }
 }
 
 struct SidebarSection: Identifiable, Hashable, Sendable {
@@ -81,6 +92,14 @@ struct SidebarSection: Identifiable, Hashable, Sendable {
         self.title = title
         self.items = items
         self.emptyMessage = emptyMessage
+    }
+
+    func hasSameContent(as other: SidebarSection) -> Bool {
+        id == other.id
+            && title == other.title
+            && emptyMessage == other.emptyMessage
+            && items.count == other.items.count
+            && zip(items, other.items).allSatisfy { $0.hasSameContent(as: $1) }
     }
 }
 

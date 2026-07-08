@@ -1974,7 +1974,18 @@ final class AppContainer: ObservableObject {
         // Runs on the launch path: use the UserDefaults-cached account snapshot;
         // keychain-synced metadata reconciles in the background task from init.
         refreshAccountsFromCache()
-        let activeAccount = configurationStore.cachedActiveAccount()
+        var activeAccount = configurationStore.cachedActiveAccount()
+        if activeAccount == nil {
+            // Reinstall path: local defaults are empty but the keychain mirror
+            // may still hold accounts; restore it (off-main) before concluding
+            // that setup is required.
+            let store = configurationStore
+            _ = await Task.detached(priority: .userInitiated) {
+                store.loadAccounts()
+            }.value
+            refreshAccountsFromCache()
+            activeAccount = configurationStore.cachedActiveAccount()
+        }
         let oauthConfiguration = try? YouTrackOAuthConfiguration.load()
         let hasOAuthState = oauthConfiguration != nil && AppAuthRepository.hasSavedAuthState()
         supportsBrowserAuth = oauthConfiguration != nil

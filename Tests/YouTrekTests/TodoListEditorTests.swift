@@ -226,7 +226,13 @@ final class TodoListEditorTests: XCTestCase {
         let updated = "# Sprint\n\nYT-323 done"
         viewModel.markdown = updated
         viewModel.handleMarkdownChange(updated)
-        try? await Task.sleep(nanoseconds: 350_000_000)
+
+        // The style refresh debounces 250ms internally; poll for the result
+        // instead of racing it with a single fixed sleep.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while ContinuousClock.now < deadline, viewModel.issueStyles["YT-323"]?.status != .done {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
 
         XCTAssertEqual(store.savedEntries.last?.markdown, updated)
         XCTAssertEqual(issues.requestedIDs.last, Set(["YT-323"]))

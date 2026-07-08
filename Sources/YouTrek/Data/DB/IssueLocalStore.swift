@@ -1,6 +1,58 @@
 import Foundation
 import SQLite
 
+enum LocalStoreDatabase {
+    private static let legacyMigrationLock = NSLock()
+
+    static func databaseURL(accountID: UUID?) throws -> URL {
+        let baseURL = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let legacyDirectoryURL = baseURL.appendingPathComponent("YouTrek", isDirectory: true)
+        if let accountID {
+            let accountDirectory = legacyDirectoryURL
+                .appendingPathComponent("Accounts", isDirectory: true)
+                .appendingPathComponent(accountID.uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: accountDirectory, withIntermediateDirectories: true, attributes: nil)
+            let targetURL = accountDirectory.appendingPathComponent("YouTrek.sqlite")
+            migrateLegacyDatabaseIfNeeded(from: legacyDirectoryURL.appendingPathComponent("YouTrek.sqlite"), to: targetURL)
+            return targetURL
+        }
+        try FileManager.default.createDirectory(at: legacyDirectoryURL, withIntermediateDirectories: true, attributes: nil)
+        return legacyDirectoryURL.appendingPathComponent("YouTrek.sqlite")
+    }
+
+    // The stores open lazily and concurrently, all against the same file; the
+    // exists-check + copy is not atomic, so serialize it across actors.
+    private static func migrateLegacyDatabaseIfNeeded(from legacyURL: URL, to targetURL: URL) {
+        legacyMigrationLock.lock()
+        defer { legacyMigrationLock.unlock() }
+
+        let fileManager = FileManager.default
+        guard !fileManager.fileExists(atPath: targetURL.path),
+              fileManager.fileExists(atPath: legacyURL.path)
+        else { return }
+
+        do {
+            try fileManager.copyItem(at: legacyURL, to: targetURL)
+        } catch {
+            return
+        }
+
+        for suffix in ["-wal", "-shm"] {
+            let legacySidecar = URL(fileURLWithPath: legacyURL.path + suffix)
+            let targetSidecar = URL(fileURLWithPath: targetURL.path + suffix)
+            if fileManager.fileExists(atPath: legacySidecar.path),
+               !fileManager.fileExists(atPath: targetSidecar.path) {
+                try? fileManager.copyItem(at: legacySidecar, to: targetSidecar)
+            }
+        }
+    }
+}
+
 actor IssueLocalStore {
     private let accountID: UUID?
     private var connection: Connection?
@@ -70,7 +122,7 @@ actor IssueLocalStore {
         if hasOpenedConnection { return connection }
         hasOpenedConnection = true
         do {
-            let dbURL = try Self.databaseURL(accountID: accountID)
+            let dbURL = try LocalStoreDatabase.databaseURL(accountID: accountID)
             let db = try Connection(dbURL.path)
             db.busyTimeout = 5
             try Self.migrateIfNeeded(db)
@@ -768,48 +820,7 @@ actor IssueLocalStore {
         return chunks
     }
 
-    private static func databaseURL(accountID: UUID?) throws -> URL {
-        let baseURL = try FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        let legacyDirectoryURL = baseURL.appendingPathComponent("YouTrek", isDirectory: true)
-        if let accountID {
-            let accountDirectory = legacyDirectoryURL
-                .appendingPathComponent("Accounts", isDirectory: true)
-                .appendingPathComponent(accountID.uuidString, isDirectory: true)
-            try FileManager.default.createDirectory(at: accountDirectory, withIntermediateDirectories: true, attributes: nil)
-            let targetURL = accountDirectory.appendingPathComponent("YouTrek.sqlite")
-            migrateLegacyDatabaseIfNeeded(from: legacyDirectoryURL.appendingPathComponent("YouTrek.sqlite"), to: targetURL)
-            return targetURL
-        }
-        try FileManager.default.createDirectory(at: legacyDirectoryURL, withIntermediateDirectories: true, attributes: nil)
-        return legacyDirectoryURL.appendingPathComponent("YouTrek.sqlite")
-    }
 
-    private static func migrateLegacyDatabaseIfNeeded(from legacyURL: URL, to targetURL: URL) {
-        let fileManager = FileManager.default
-        guard !fileManager.fileExists(atPath: targetURL.path),
-              fileManager.fileExists(atPath: legacyURL.path)
-        else { return }
-
-        do {
-            try fileManager.copyItem(at: legacyURL, to: targetURL)
-        } catch {
-            return
-        }
-
-        for suffix in ["-wal", "-shm"] {
-            let legacySidecar = URL(fileURLWithPath: legacyURL.path + suffix)
-            let targetSidecar = URL(fileURLWithPath: targetURL.path + suffix)
-            if fileManager.fileExists(atPath: legacySidecar.path),
-               !fileManager.fileExists(atPath: targetSidecar.path) {
-                try? fileManager.copyItem(at: legacySidecar, to: targetSidecar)
-            }
-        }
-    }
 
     private static func migrateIfNeeded(_ db: Connection) throws {
         let issuesTable = Table("issues")
