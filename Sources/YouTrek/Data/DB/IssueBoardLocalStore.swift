@@ -2,7 +2,9 @@ import Foundation
 import SQLite
 
 actor IssueBoardLocalStore {
-    private let db: Connection?
+    private let accountID: UUID?
+    private var connection: Connection?
+    private var hasOpenedConnection = false
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -22,20 +24,28 @@ actor IssueBoardLocalStore {
     private let updatedAt = Expression<Double?>("updated_at")
 
     init(accountID: UUID? = nil) {
+        self.accountID = accountID
+    }
+
+    // Opened lazily on the actor executor so app launch never pays for
+    // SQLite setup and migrations on the main thread.
+    private func database() -> Connection? {
+        if hasOpenedConnection { return connection }
+        hasOpenedConnection = true
         do {
             let dbURL = try Self.databaseURL(accountID: accountID)
             let db = try Connection(dbURL.path)
             db.busyTimeout = 5
             try Self.migrateIfNeeded(db)
-            self.db = db
+            connection = db
         } catch {
             print("IssueBoardLocalStore failed to open database: \(error.localizedDescription)")
-            self.db = nil
         }
+        return connection
     }
 
     func loadBoards() async -> [IssueBoard] {
-        guard let db else { return [] }
+        guard let db = database() else { return [] }
         do {
             return try db.prepare(boards.order(name.asc)).compactMap { row in
                 boardFromRow(row)
@@ -46,7 +56,7 @@ actor IssueBoardLocalStore {
     }
 
     func loadFavoriteBoards() async -> [IssueBoard] {
-        guard let db else { return [] }
+        guard let db = database() else { return [] }
         do {
             return try db.prepare(boards.filter(isFavorite == true).order(name.asc)).compactMap { row in
                 boardFromRow(row)
@@ -57,7 +67,7 @@ actor IssueBoardLocalStore {
     }
 
     func saveRemoteBoards(_ remoteBoards: [IssueBoard]) async {
-        guard let db else { return }
+        guard let db = database() else { return }
         do {
             try db.run("BEGIN IMMEDIATE TRANSACTION")
             try db.run(boards.delete())
@@ -88,7 +98,7 @@ actor IssueBoardLocalStore {
     }
 
     func saveBoard(_ board: IssueBoard) async {
-        guard let db else { return }
+        guard let db = database() else { return }
         do {
             let now = Date().timeIntervalSince1970
             let insert = boards.insert(
@@ -114,7 +124,7 @@ actor IssueBoardLocalStore {
     }
 
     func clearCache() async {
-        guard let db else { return }
+        guard let db = database() else { return }
         do {
             try db.run(boards.delete())
         } catch {

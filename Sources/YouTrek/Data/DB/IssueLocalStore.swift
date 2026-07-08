@@ -2,7 +2,9 @@ import Foundation
 import SQLite
 
 actor IssueLocalStore {
-    private let db: Connection?
+    private let accountID: UUID?
+    private var connection: Connection?
+    private var hasOpenedConnection = false
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -59,20 +61,28 @@ actor IssueLocalStore {
     private let issueDetailFetchedAt = Expression<Double>("fetched_at")
 
     init(accountID: UUID? = nil) {
+        self.accountID = accountID
+    }
+
+    // Opened lazily on the actor executor so app launch never pays for
+    // SQLite setup and migrations on the main thread.
+    private func database() -> Connection? {
+        if hasOpenedConnection { return connection }
+        hasOpenedConnection = true
         do {
             let dbURL = try Self.databaseURL(accountID: accountID)
             let db = try Connection(dbURL.path)
             db.busyTimeout = 5
             try Self.migrateIfNeeded(db)
-            self.db = db
+            connection = db
         } catch {
             print("IssueLocalStore failed to open database: \(error.localizedDescription)")
-            self.db = nil
         }
+        return connection
     }
 
     func loadIssues(for query: IssueQuery) async -> [IssueSummary] {
-        guard let db else { return [] }
+        guard let db = database() else { return [] }
         let key = queryKey(for: query)
         let joined = issues.join(issueQueries, on: issues[issueID] == issueQueries[issueQueryIssueID])
             .filter(issueQueries[queryKey] == key)
@@ -90,7 +100,7 @@ actor IssueLocalStore {
     }
 
     func loadIssues(readableIDs: [String]) async -> [IssueSummary] {
-        guard let db else { return [] }
+        guard let db = database() else { return [] }
         let normalized = readableIDs
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -114,7 +124,7 @@ actor IssueLocalStore {
     }
 
     func loadIssueDetail(for issueID: IssueSummary.ID) async -> IssueDetail? {
-        guard let db else { return nil }
+        guard let db = database() else { return nil }
         let query = issueDetails.filter(issueDetailIssueID == issueID.uuidString)
         do {
             guard let row = try db.pluck(query) else { return nil }
@@ -127,7 +137,7 @@ actor IssueLocalStore {
     }
 
     func loadIssueDetailUpdatedAt(for issueIDs: [IssueSummary.ID]) async -> [IssueSummary.ID: Date] {
-        guard let db else { return [:] }
+        guard let db = database() else { return [:] }
         let normalized = issueIDs
             .map(\.uuidString)
             .filter { !$0.isEmpty }
@@ -156,7 +166,7 @@ actor IssueLocalStore {
     }
 
     func saveIssueDetails(_ details: [IssueDetail]) async {
-        guard let db else { return }
+        guard let db = database() else { return }
         guard !details.isEmpty else { return }
         let fetchedAt = Date().timeIntervalSince1970
         do {
@@ -179,7 +189,7 @@ actor IssueLocalStore {
     }
 
     func loadSprintIssueIDs(agileID: String, sprintID: String) async -> [String]? {
-        guard let db else { return nil }
+        guard let db = database() else { return nil }
         let trimmedAgile = agileID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSprint = sprintID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedAgile.isEmpty, !trimmedSprint.isEmpty else { return nil }
@@ -196,7 +206,7 @@ actor IssueLocalStore {
     }
 
     func saveSprintIssueIDs(agileID: String, sprintID: String, issueIDs: [String]) async {
-        guard let db else { return }
+        guard let db = database() else { return }
         let trimmedAgile = agileID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSprint = sprintID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedAgile.isEmpty, !trimmedSprint.isEmpty else { return }
@@ -226,7 +236,7 @@ actor IssueLocalStore {
         currentUserLogin: String?,
         currentUserDisplayName: String?
     ) async {
-        guard let db else { return }
+        guard let db = database() else { return }
         let key = queryKey(for: query)
         do {
             try db.run("BEGIN IMMEDIATE TRANSACTION")
@@ -275,7 +285,7 @@ actor IssueLocalStore {
     }
 
     func clearCache() async {
-        guard let db else { return }
+        guard let db = database() else { return }
         do {
             try db.run("BEGIN IMMEDIATE TRANSACTION")
             try db.run(issueQueries.delete())
@@ -290,7 +300,7 @@ actor IssueLocalStore {
     }
 
     func loadIssueSeenUpdates(for issueIDs: [IssueSummary.ID]) async -> [IssueSummary.ID: Date] {
-        guard let db else { return [:] }
+        guard let db = database() else { return [:] }
         var results: [IssueSummary.ID: Date] = [:]
         for id in Set(issueIDs) {
             guard let row = try? db.pluck(issues.filter(issueID == id.uuidString)),
@@ -302,7 +312,7 @@ actor IssueLocalStore {
     }
 
     func markIssueSeen(_ issue: IssueSummary) async {
-        guard let db else { return }
+        guard let db = database() else { return }
         do {
             let seenAt = issue.updatedAt.timeIntervalSince1970
             let row = issues.filter(issueID == issue.id.uuidString)
@@ -313,7 +323,7 @@ actor IssueLocalStore {
     }
 
     func markIssuesSeen(_ seenIssues: [IssueSummary]) async {
-        guard let db else { return }
+        guard let db = database() else { return }
         guard !seenIssues.isEmpty else { return }
         do {
             try db.run("BEGIN IMMEDIATE TRANSACTION")
@@ -329,7 +339,7 @@ actor IssueLocalStore {
     }
 
     func hasSeenUpdates() async -> Bool {
-        guard let db else { return false }
+        guard let db = database() else { return false }
         do {
             let row = try db.pluck(issues.filter(lastSeenUpdatedAt != nil))
             return row != nil
@@ -339,7 +349,7 @@ actor IssueLocalStore {
     }
 
     func applyPatch(id: IssueSummary.ID, patch: IssuePatch) async -> IssueSummary? {
-        guard let db else { return nil }
+        guard let db = database() else { return nil }
         do {
             guard let row = try db.pluck(issues.filter(issueID == id.uuidString)) else {
                 return nil
@@ -358,7 +368,7 @@ actor IssueLocalStore {
     }
 
     func enqueueUpdate(issueID: IssueSummary.ID, patch: IssuePatch) async -> PendingIssueMutation? {
-        guard let db else { return nil }
+        guard let db = database() else { return nil }
         let mutation = PendingIssueMutation(
             id: UUID(),
             issueID: issueID,
@@ -388,7 +398,7 @@ actor IssueLocalStore {
     }
 
     func pendingMutations() async -> [PendingIssueMutation] {
-        guard let db else { return [] }
+        guard let db = database() else { return [] }
         do {
             return try db.prepare(mutations.order(mutationCreatedAt.asc)).compactMap { row in
                 mutationFromRow(row)
@@ -399,7 +409,7 @@ actor IssueLocalStore {
     }
 
     func markMutationAttempted(id: UUID, errorDescription: String?) async {
-        guard let db else { return }
+        guard let db = database() else { return }
         do {
             let row = mutations.filter(mutationID == id.uuidString)
             let updatedRetry = (try db.pluck(row))?[mutationRetryCount].advanced(by: 1) ?? 1
@@ -414,7 +424,7 @@ actor IssueLocalStore {
     }
 
     func markMutationApplied(_ mutation: PendingIssueMutation, updatedIssue: IssueSummary?) async {
-        guard let db else { return }
+        guard let db = database() else { return }
         do {
             if let updatedIssue {
                 try upsert(issue: updatedIssue, db: db, markDirty: false)

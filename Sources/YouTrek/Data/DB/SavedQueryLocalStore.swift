@@ -2,7 +2,9 @@ import Foundation
 import SQLite
 
 actor SavedQueryLocalStore {
-    private let db: Connection?
+    private let accountID: UUID?
+    private var connection: Connection?
+    private var hasOpenedConnection = false
 
     private let savedQueries = Table("saved_queries")
     private let queryID = Expression<String>("id")
@@ -11,20 +13,28 @@ actor SavedQueryLocalStore {
     private let updatedAt = Expression<Double?>("updated_at")
 
     init(accountID: UUID? = nil) {
+        self.accountID = accountID
+    }
+
+    // Opened lazily on the actor executor so app launch never pays for
+    // SQLite setup and migrations on the main thread.
+    private func database() -> Connection? {
+        if hasOpenedConnection { return connection }
+        hasOpenedConnection = true
         do {
             let dbURL = try Self.databaseURL(accountID: accountID)
             let db = try Connection(dbURL.path)
             db.busyTimeout = 5
             try Self.migrateIfNeeded(db)
-            self.db = db
+            connection = db
         } catch {
             print("SavedQueryLocalStore failed to open database: \(error.localizedDescription)")
-            self.db = nil
         }
+        return connection
     }
 
     func loadSavedQueries() async -> [SavedQuery] {
-        guard let db else { return [] }
+        guard let db = database() else { return [] }
         do {
             return try db.prepare(savedQueries.order(name.asc)).map(savedQueryFromRow(_:))
         } catch {
@@ -33,7 +43,7 @@ actor SavedQueryLocalStore {
     }
 
     func saveRemoteSavedQueries(_ remoteQueries: [SavedQuery]) async {
-        guard let db else { return }
+        guard let db = database() else { return }
         do {
             try db.run("BEGIN IMMEDIATE TRANSACTION")
             try db.run(savedQueries.delete())
@@ -55,7 +65,7 @@ actor SavedQueryLocalStore {
     }
 
     func clearCache() async {
-        guard let db else { return }
+        guard let db = database() else { return }
         do {
             try db.run(savedQueries.delete())
         } catch {

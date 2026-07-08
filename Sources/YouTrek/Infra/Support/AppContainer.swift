@@ -121,7 +121,8 @@ final class AppContainer: ObservableObject {
                 self?.objectWillChange.send()
             }
         }
-        refreshAccounts()
+        refreshAccountsFromCache()
+        scheduleAccountKeychainReconcile()
     }
 
     static let live: AppContainer = {
@@ -299,13 +300,19 @@ final class AppContainer: ObservableObject {
 
     func bootstrap() async {
         LoggingService.sync.info("Bootstrap start.")
-        let drafts = await issueDraftStore.loadDraftRecords(statuses: [.pending, .failed])
-        await MainActor.run {
-            appState.setDrafts(drafts)
-        }
-        let cachedBoards = await boardLocalStore.loadBoards()
-        let cachedSavedQueries = await savedQueryLocalStore.loadSavedQueries()
-        let cachedTodoLists = (try? await todoListStore.listDocuments()) ?? []
+        let draftStore = issueDraftStore
+        let boardStore = boardLocalStore
+        let savedQueryStore = savedQueryLocalStore
+        let todoStore = todoListStore
+        async let draftsLoad = draftStore.loadDraftRecords(statuses: [.pending, .failed])
+        async let boardsLoad = boardStore.loadBoards()
+        async let savedQueriesLoad = savedQueryStore.loadSavedQueries()
+        async let todoListsLoad = todoStore.listDocuments()
+        let drafts = await draftsLoad
+        appState.setDrafts(drafts)
+        let cachedBoards = await boardsLoad
+        let cachedSavedQueries = await savedQueriesLoad
+        let cachedTodoLists = (try? await todoListsLoad) ?? []
         self.cachedBoards = cachedBoards
         self.cachedSavedQueries = cachedSavedQueries
         self.cachedTodoLists = cachedTodoLists
@@ -384,6 +391,31 @@ final class AppContainer: ObservableObject {
         let sorted = loaded.sorted(by: sortAccounts)
         accounts = sorted
         activeAccountID = configurationStore.activeAccountID()
+    }
+
+    private func refreshAccountsFromCache() {
+        accounts = configurationStore.cachedAccounts().sorted(by: sortAccounts)
+        activeAccountID = configurationStore.cachedActiveAccountID()
+    }
+
+    // loadAccounts() performs synchronous keychain reads, which are too slow
+    // for the launch path; reconcile keychain-synced metadata off the main thread.
+    private func scheduleAccountKeychainReconcile() {
+        Task.detached(priority: .utility) { [weak self, configurationStore] in
+            let loaded = configurationStore.loadAccounts()
+            let activeID = configurationStore.activeAccountID()
+            await self?.applyReconciledAccounts(loaded, activeID: activeID)
+        }
+    }
+
+    private func applyReconciledAccounts(_ loaded: [StoredAccount], activeID: UUID?) {
+        let sorted = loaded.sorted(by: sortAccounts)
+        if accounts != sorted {
+            accounts = sorted
+        }
+        if activeAccountID != activeID {
+            activeAccountID = activeID
+        }
     }
 
     private func sortAccounts(_ lhs: StoredAccount, _ rhs: StoredAccount) -> Bool {

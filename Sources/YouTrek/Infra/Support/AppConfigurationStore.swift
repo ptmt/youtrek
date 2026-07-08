@@ -1,6 +1,8 @@
 import Foundation
 
-struct AppConfigurationStore {
+// @unchecked: UserDefaults is documented thread-safe but not Sendable-annotated
+// in the current SDK; all other stored state is immutable value types.
+struct AppConfigurationStore: @unchecked Sendable {
     private enum Keys {
         static let accounts = "com.potomushto.youtrek.config.accounts"
         static let activeAccountID = "com.potomushto.youtrek.config.active-account-id"
@@ -169,6 +171,16 @@ struct AppConfigurationStore {
         let accounts = loadStoredAccounts()
         guard let activeID = cachedActiveAccountID(in: accounts) else { return nil }
         return accounts.first { $0.id == activeID }
+    }
+
+    // Cached variants read UserDefaults only, skipping the keychain-synced
+    // metadata refresh; use on launch-critical paths.
+    func cachedAccounts() -> [StoredAccount] {
+        loadStoredAccounts()
+    }
+
+    func cachedActiveAccountID() -> UUID? {
+        cachedActiveAccountID(in: loadStoredAccounts())
     }
 
     @discardableResult

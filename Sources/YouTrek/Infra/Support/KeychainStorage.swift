@@ -2,7 +2,7 @@ import Foundation
 import LocalAuthentication
 import Security
 
-struct KeychainStorage {
+struct KeychainStorage: Sendable {
     let service: String
     let accessGroup: String?
     let synchronizable: Bool
