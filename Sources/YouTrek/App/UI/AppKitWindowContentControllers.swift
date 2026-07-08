@@ -272,6 +272,8 @@ final class WorkspaceViewController: NSViewController {
     private var isRendering = false
     private var needsRender = false
     private var isRenderScheduled = false
+    private var issueDetailLoadTask: Task<Void, Never>?
+    private var lastOverlayShowsNetworkFooter: Bool?
 
     init(container: AppContainer) {
         self.container = container
@@ -283,6 +285,10 @@ final class WorkspaceViewController: NSViewController {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
+    }
+
+    deinit {
+        issueDetailLoadTask?.cancel()
     }
 
     override func loadView() {
@@ -433,13 +439,20 @@ final class WorkspaceViewController: NSViewController {
     }
 
     private func updateOverlayContent() {
+        // The overlay observes AppState itself; only reassign the root view when its
+        // non-observed inputs change instead of on every render pass.
         #if DEBUG
+        let showNetworkFooter = AppDebugSettings.showNetworkFooter
+        guard lastOverlayShowsNetworkFooter != showNetworkFooter else { return }
+        lastOverlayShowsNetworkFooter = showNetworkFooter
         let overlay = WorkspaceOverlayHostView(
             appState: appState,
             container: container,
-            showNetworkFooter: AppDebugSettings.showNetworkFooter
+            showNetworkFooter: showNetworkFooter
         )
         #else
+        guard lastOverlayShowsNetworkFooter == nil else { return }
+        lastOverlayShowsNetworkFooter = false
         let overlay = WorkspaceOverlayHostView(appState: appState, container: container)
         #endif
         overlayController.rootView = AnyView(overlay.environmentObject(container))
@@ -713,6 +726,10 @@ final class WorkspaceViewController: NSViewController {
     }
 
     private func handleSelectedIssueChange(_ issue: IssueSummary?) {
+        // Rapid selection changes should not stack overlapping detail fetches;
+        // cancel the previous in-flight load before starting the next one.
+        issueDetailLoadTask?.cancel()
+        issueDetailLoadTask = nil
         guard let issue else {
             appState.selectedDraftID = nil
             return
@@ -732,7 +749,7 @@ final class WorkspaceViewController: NSViewController {
         }
         appState.selectedDraftID = nil
         container.markIssueSeen(issue)
-        Task { [weak self] in
+        issueDetailLoadTask = Task { [weak self] in
             guard let self else { return }
             await self.container.loadIssueDetail(for: issue)
         }

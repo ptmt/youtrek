@@ -116,10 +116,15 @@ final class AppState: ObservableObject {
     }
 
     func updateIssueSeenUpdates(_ updates: [IssueSummary.ID: Date]) {
-        issueSeenUpdates.merge(updates) { _, new in new }
+        guard !updates.isEmpty else { return }
+        let merged = issueSeenUpdates.merging(updates) { _, new in new }
+        // Avoid publishing (and re-rendering every observer) when nothing changed.
+        guard merged != issueSeenUpdates else { return }
+        issueSeenUpdates = merged
     }
 
     func markIssueSeen(_ issue: IssueSummary) {
+        guard issueSeenUpdates[issue.id] != issue.updatedAt else { return }
         issueSeenUpdates[issue.id] = issue.updatedAt
     }
 
@@ -129,7 +134,7 @@ final class AppState: ObservableObject {
         for issue in issues {
             updates[issue.id] = issue.updatedAt
         }
-        issueSeenUpdates.merge(updates) { _, new in new }
+        updateIssueSeenUpdates(updates)
     }
 
     func resetIssueSeenUpdates() {

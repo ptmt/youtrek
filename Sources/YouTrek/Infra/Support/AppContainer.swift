@@ -2401,12 +2401,14 @@ private extension AppContainer {
     }
 
     private func recordBoardDataEvent(_ message: String, boardID: String?) {
-        guard let boardID else { return }
+        // Recording mutates @Published state on AppState; skip entirely unless the
+        // diagnostics overlay is enabled so routine loads don't invalidate every observer.
+        guard AppDebugSettings.showBoardDiagnostics, let boardID else { return }
         appState.recordBoardDataSourceEvent(boardID: boardID, message: message)
     }
 
     private func recordIssueListDataEvent(_ message: String, listID: String?) {
-        guard let listID else { return }
+        guard AppDebugSettings.showIssueListDiagnostics, let listID else { return }
         appState.recordIssueListDataSourceEvent(listID: listID, message: message)
     }
 

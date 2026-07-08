@@ -52,6 +52,7 @@ struct IssueListView: NSViewRepresentable {
         private var hasAppliedSelectionState = false
         private var lastSelectionID: IssueSummary.ID?
         private var lastSelectedIDs: Set<IssueSummary.ID>?
+        private var lastRenderSnapshot: IssueListRenderSnapshot?
 
         private struct LoadingInput: Equatable {
             let isLoading: Bool
@@ -94,8 +95,24 @@ struct IssueListView: NSViewRepresentable {
             lastSelectionID = parent.selection?.id
             lastSelectedIDs = parent.selectedIDs
 
-            rebuildColumns(on: containerView.tableView)
-            containerView.tableView.reloadData()
+            // `apply` runs on every SwiftUI invalidation of the hosting view; only touch
+            // the table when the rendered content actually changed.
+            let snapshot = IssueListRenderSnapshot(
+                issues: parent.issues,
+                unreadFlags: parent.issues.map(parent.isIssueUnread),
+                showAssigneeColumn: parent.showAssigneeColumn
+            )
+            switch IssueListReloadPlanner.action(previous: lastRenderSnapshot, next: snapshot) {
+            case .none:
+                break
+            case .full:
+                rebuildColumns(on: containerView.tableView)
+                containerView.tableView.reloadData()
+            case .rows(let rows):
+                let columns = IndexSet(integersIn: 0..<containerView.tableView.tableColumns.count)
+                containerView.tableView.reloadData(forRowIndexes: rows, columnIndexes: columns)
+            }
+            lastRenderSnapshot = snapshot
             syncSelection(with: containerView.tableView)
 
             updateLoadingVisibilityIfNeeded()
@@ -409,6 +426,38 @@ struct IssueListView: NSViewRepresentable {
             guard let draftID = sender.representedObject as? UUID else { return }
             parent.onDeleteDraft?(draftID)
         }
+    }
+}
+
+/// Inputs that affect what the issue table renders. Selection is applied separately
+/// via `selectRowIndexes` and intentionally not part of the snapshot.
+struct IssueListRenderSnapshot: Equatable {
+    let issues: [IssueSummary]
+    let unreadFlags: [Bool]
+    let showAssigneeColumn: Bool
+}
+
+/// Decides how much of the table needs reloading between two renders.
+enum IssueListReloadPlanner {
+    enum Action: Equatable {
+        case none
+        case full
+        case rows(IndexSet)
+    }
+
+    static func action(previous: IssueListRenderSnapshot?, next: IssueListRenderSnapshot) -> Action {
+        guard let previous else { return .full }
+        if previous.showAssigneeColumn != next.showAssigneeColumn { return .full }
+        if previous.issues != next.issues { return .full }
+        if previous.unreadFlags != next.unreadFlags {
+            guard previous.unreadFlags.count == next.unreadFlags.count else { return .full }
+            var changed = IndexSet()
+            for (index, flag) in next.unreadFlags.enumerated() where previous.unreadFlags[index] != flag {
+                changed.insert(index)
+            }
+            return changed.isEmpty ? .none : .rows(changed)
+        }
+        return .none
     }
 }
 

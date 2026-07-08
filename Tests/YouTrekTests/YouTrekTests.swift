@@ -577,3 +577,63 @@ final class YouTrekTests: XCTestCase {
         )
     }
 }
+
+final class IssueListReloadPlannerTests: XCTestCase {
+    func testFirstRenderRequiresFullReload() {
+        let next = makeSnapshot(titles: ["A", "B"], unread: [true, false])
+
+        XCTAssertEqual(IssueListReloadPlanner.action(previous: nil, next: next), .full)
+    }
+
+    func testUnchangedSnapshotSkipsReload() {
+        let previous = makeSnapshot(titles: ["A", "B"], unread: [true, false])
+        let next = makeSnapshot(titles: ["A", "B"], unread: [true, false])
+
+        XCTAssertEqual(IssueListReloadPlanner.action(previous: previous, next: next), .none)
+    }
+
+    func testIssueContentChangeRequiresFullReload() {
+        let previous = makeSnapshot(titles: ["A", "B"], unread: [false, false])
+        let next = makeSnapshot(titles: ["A", "C"], unread: [false, false])
+
+        XCTAssertEqual(IssueListReloadPlanner.action(previous: previous, next: next), .full)
+    }
+
+    func testColumnConfigurationChangeRequiresFullReload() {
+        let previous = makeSnapshot(titles: ["A"], unread: [false], showAssigneeColumn: false)
+        let next = makeSnapshot(titles: ["A"], unread: [false], showAssigneeColumn: true)
+
+        XCTAssertEqual(IssueListReloadPlanner.action(previous: previous, next: next), .full)
+    }
+
+    func testUnreadFlagChangeReloadsOnlyChangedRows() {
+        let previous = makeSnapshot(titles: ["A", "B", "C"], unread: [true, true, false])
+        let next = makeSnapshot(titles: ["A", "B", "C"], unread: [false, true, true])
+
+        XCTAssertEqual(
+            IssueListReloadPlanner.action(previous: previous, next: next),
+            .rows(IndexSet([0, 2]))
+        )
+    }
+
+    private func makeSnapshot(
+        titles: [String],
+        unread: [Bool],
+        showAssigneeColumn: Bool = false
+    ) -> IssueListRenderSnapshot {
+        let issues = titles.enumerated().map { index, title in
+            IssueSummary(
+                id: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index))!,
+                readableID: "YT-\(index)",
+                title: title,
+                projectName: "YouTrek",
+                updatedAt: Date(timeIntervalSince1970: 100)
+            )
+        }
+        return IssueListRenderSnapshot(
+            issues: issues,
+            unreadFlags: unread,
+            showAssigneeColumn: showAssigneeColumn
+        )
+    }
+}
