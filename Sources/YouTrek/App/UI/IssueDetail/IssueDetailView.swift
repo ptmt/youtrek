@@ -93,9 +93,12 @@ struct IssueDetailView: View {
             showsAllCustomFields = false
             isLoadingProjects = true
             defer { isLoadingProjects = false }
-            projectOptions = await container.loadProjects()
-            statusOptions = await container.loadStatusOptions(for: issue)
-            priorityOptions = await container.loadPriorityOptions(for: issue)
+            async let projectsLoad = container.loadProjects()
+            async let statusLoad = container.loadStatusOptions(for: issue)
+            async let priorityLoad = container.loadPriorityOptions(for: issue)
+            projectOptions = await projectsLoad
+            statusOptions = await statusLoad
+            priorityOptions = await priorityLoad
             isLoadingCustomFields = true
             customFields = await loadCustomFields()
             isLoadingCustomFields = false
@@ -190,7 +193,10 @@ struct IssueDetailView: View {
     }
 
     private var metadata: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // Computed once per render; customFieldItems sorts and merges field
+        // metadata, and this section previously derived it three times.
+        let displayItems = customFieldItems.filter { !$0.values.isEmpty }
+        return VStack(alignment: .leading, spacing: 8) {
             AssigneeEditor(issue: issue)
             metadataRow(systemImage: "clock") {
                 Text("Updated \(IssueTimestampFormatter.label(for: issue.updatedAt))")
@@ -208,14 +214,14 @@ struct IssueDetailView: View {
                         .truncationMode(.tail)
                 }
             }
-            if hasCustomFields {
+            if !displayItems.isEmpty {
                 Button {
                     showsAllCustomFields.toggle()
                 } label: {
                     metadataRow(systemImage: "square.grid.2x2", trailing: {
                         MetadataDisclosureChevron(isExpanded: showsAllCustomFields)
                     }) {
-                        Text(customFieldsToggleLabel)
+                        Text(showsAllCustomFields ? "Hide custom fields" : "Custom fields (\(displayItems.count))")
                     }
                 }
                 .buttonStyle(.plain)
@@ -225,19 +231,12 @@ struct IssueDetailView: View {
                             Text("Loading custom fields…")
                         }
                     }
-                    let displayItems = customFieldItems.filter { !$0.values.isEmpty }
-                    if displayItems.isEmpty, !isLoadingCustomFields {
-                        metadataRow(systemImage: "square.grid.2x2") {
-                            Text("No custom fields.")
-                        }
-                    } else {
-                        ForEach(displayItems) { item in
-                            CustomFieldEditorRow(
-                                item: item,
-                                initialValue: item.field.map { draftValue(for: $0, values: item.values) } ?? .none,
-                                onUpdate: updateCustomField
-                            )
-                        }
+                    ForEach(displayItems) { item in
+                        CustomFieldEditorRow(
+                            item: item,
+                            initialValue: item.field.map { draftValue(for: $0, values: item.values) } ?? .none,
+                            onUpdate: updateCustomField
+                        )
                     }
                 }
             }
@@ -289,18 +288,6 @@ struct IssueDetailView: View {
             items.append(CustomFieldDisplayItem(id: row.id, name: row.name, values: row.values, field: nil))
         }
         return items
-    }
-
-    private var hasCustomFields: Bool {
-        customFieldItems.contains { !$0.values.isEmpty }
-    }
-
-    private var customFieldsToggleLabel: String {
-        if showsAllCustomFields {
-            return "Hide custom fields"
-        }
-        let count = customFieldItems.filter { !$0.values.isEmpty }.count
-        return "Custom fields (\(count))"
     }
 
     private func customFieldDisplayName(for key: String) -> String {

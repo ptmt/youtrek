@@ -88,7 +88,31 @@ enum MarkdownDisplayTextRenderer {
         return lines.joined(separator: "\n")
     }
 
+    private final class CachedAttributedMarkdown {
+        let value: AttributedString?
+        init(value: AttributedString?) { self.value = value }
+    }
+
+    // Parsing is deterministic per input and expensive (worst case one
+    // AttributedString(markdown:) call per line); SwiftUI re-evaluates the
+    // detail panel on every AppState change, so cache by source text.
+    nonisolated(unsafe) private static let attributedMarkdownCache: NSCache<NSString, CachedAttributedMarkdown> = {
+        let cache = NSCache<NSString, CachedAttributedMarkdown>()
+        cache.countLimit = 256
+        return cache
+    }()
+
     static func attributedMarkdown(for text: String) -> AttributedString? {
+        let key = text as NSString
+        if let cached = attributedMarkdownCache.object(forKey: key) {
+            return cached.value
+        }
+        let parsed = parseAttributedMarkdown(for: text)
+        attributedMarkdownCache.setObject(CachedAttributedMarkdown(value: parsed), forKey: key)
+        return parsed
+    }
+
+    private static func parseAttributedMarkdown(for text: String) -> AttributedString? {
         let prepared = preparedMarkdown(for: text)
         guard let attributed = try? AttributedString(
             markdown: prepared,

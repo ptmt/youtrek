@@ -8,7 +8,7 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 - [x] 1. App startup / initial load path
 - [x] 2. Sidebar + workspace switching
 - [x] 3. Issue list
-- [ ] 4. Issue detail panel
+- [x] 4. Issue detail panel
 - [ ] 5. Issue board view
 - [ ] 6. Settings window + command palette
 - [ ] 7. Sync coordinator / AppState invalidation churn
@@ -136,6 +136,41 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 
 - `swift build` clean, `swift test`: all suites pass (planner tests updated,
   +1 new test).
+
+## Iteration 4 — Issue detail panel (2026-07-08)
+
+### Findings
+
+1. **Uncached markdown parsing on every render.** `IssueDetailView` re-renders
+   on every AppState change (it observes the container via
+   `@EnvironmentObject`, which forwards `appState.objectWillChange`). Each
+   render re-ran `MarkdownDisplayTextRenderer.attributedMarkdown(for:)` for the
+   description AND every timeline comment — a full
+   `AttributedString(markdown:)` parse, with a worst-case per-line re-parse in
+   `linePreservingAttributedMarkdown`. N+1 markdown parses per AppState tick
+   while the panel is open; the dominant detail-panel cost and a freeze source
+   for long descriptions.
+2. **`customFieldItems` derived three times per render** in the metadata
+   section (`hasCustomFields`, toggle label, display rows) — each derivation
+   sorts and merges field metadata.
+3. **Sequential option loading on selection change.** The `.task` awaited
+   projects → status options → priority options one after another before the
+   menus became functional.
+
+### Fixes
+
+1. `attributedMarkdown(for:)` results are memoized in an `NSCache`
+   (countLimit 256) keyed by source text — parsing is deterministic per input.
+   (`Sources/YouTrek/App/UI/Common/MarkdownTextView.swift`)
+2. Metadata section computes the display items once per render; removed the
+   now-dead `hasCustomFields` / `customFieldsToggleLabel` helpers and an
+   unreachable "No custom fields." branch.
+3. Projects/status/priority options load concurrently via `async let`.
+   (`Sources/YouTrek/App/UI/IssueDetail/IssueDetailView.swift`)
+
+### Verification
+
+- `swift build` clean, `swift test`: 69/69 passed.
 
 ## Backlog (spotted, not yet fixed — assigned to later iterations)
 
