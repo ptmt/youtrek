@@ -433,6 +433,11 @@ private final class IssueProgressListContainerView: NSView {
 private final class IssueProgressRowCell: NSTableCellView, NSTextFieldDelegate {
     static let identifier = NSUserInterfaceItemIdentifier("issue-progress-row-cell")
     private static let avatarSize: CGFloat = 24
+    private static let readableIDWidth: CGFloat = 112
+    private static let statusMenuWidth: CGFloat = 148
+    private static let priorityWidth: CGFloat = 78
+    private static let submitButtonWidth: CGFloat = 30
+    private static let submitButtonHeight: CGFloat = 26
 
     private let avatarView = IssueProgressAvatarView(size: avatarSize)
     private let readableIDLabel = NSTextField(labelWithString: "")
@@ -560,11 +565,15 @@ private final class IssueProgressRowCell: NSTableCellView, NSTextFieldDelegate {
         readableIDLabel.font = .systemFont(ofSize: 11, weight: .regular)
         readableIDLabel.textColor = .secondaryLabelColor
         readableIDLabel.lineBreakMode = .byTruncatingTail
+        readableIDLabel.setContentHuggingPriority(.required, for: .horizontal)
+        readableIDLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = .systemFont(ofSize: 13, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.maximumNumberOfLines = 1
+        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         statusPopUp.translatesAutoresizingMaskIntoConstraints = false
         statusPopUp.controlSize = .small
@@ -577,6 +586,7 @@ private final class IssueProgressRowCell: NSTableCellView, NSTextFieldDelegate {
         priorityLabel.translatesAutoresizingMaskIntoConstraints = false
         priorityLabel.font = .systemFont(ofSize: 11, weight: .regular)
         priorityLabel.lineBreakMode = .byTruncatingTail
+        priorityLabel.alignment = .right
         priorityLabel.setContentHuggingPriority(.required, for: .horizontal)
         priorityLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
@@ -632,7 +642,12 @@ private final class IssueProgressRowCell: NSTableCellView, NSTextFieldDelegate {
         submitErrorLabel.lineBreakMode = .byTruncatingTail
         submitErrorLabel.isHidden = true
 
-        let topRow = NSStackView(views: [readableIDLabel, titleLabel, NSView(), statusPopUp, priorityLabel])
+        let headerSpacer = NSView(frame: .zero)
+        headerSpacer.translatesAutoresizingMaskIntoConstraints = false
+        headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        headerSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let topRow = NSStackView(views: [readableIDLabel, titleLabel, headerSpacer, priorityLabel, statusPopUp])
         topRow.translatesAutoresizingMaskIntoConstraints = false
         topRow.orientation = .horizontal
         topRow.alignment = .centerY
@@ -651,13 +666,12 @@ private final class IssueProgressRowCell: NSTableCellView, NSTextFieldDelegate {
         latestCommentStack.addArrangedSubview(latestCommentIcon)
         latestCommentStack.addArrangedSubview(latestCommentTextStack)
 
-        let inputTrailing = NSStackView(views: [submittingIndicator, submitButton])
-        inputTrailing.translatesAutoresizingMaskIntoConstraints = false
-        inputTrailing.orientation = .horizontal
-        inputTrailing.alignment = .centerY
-        inputTrailing.spacing = 6
+        let submitActionContainer = NSView(frame: .zero)
+        submitActionContainer.translatesAutoresizingMaskIntoConstraints = false
+        submitActionContainer.addSubview(submitButton)
+        submitActionContainer.addSubview(submittingIndicator)
 
-        let inputRow = NSStackView(views: [commentInput, inputTrailing])
+        let inputRow = NSStackView(views: [commentInput, submitActionContainer])
         inputRow.translatesAutoresizingMaskIntoConstraints = false
         inputRow.orientation = .horizontal
         inputRow.alignment = .centerY
@@ -688,6 +702,10 @@ private final class IssueProgressRowCell: NSTableCellView, NSTextFieldDelegate {
             latestCommentStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             inputRow.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
 
+            readableIDLabel.widthAnchor.constraint(equalToConstant: Self.readableIDWidth),
+            statusPopUp.widthAnchor.constraint(equalToConstant: Self.statusMenuWidth),
+            priorityLabel.widthAnchor.constraint(equalToConstant: Self.priorityWidth),
+
             avatarView.widthAnchor.constraint(equalToConstant: Self.avatarSize),
             avatarView.heightAnchor.constraint(equalToConstant: Self.avatarSize),
 
@@ -695,7 +713,16 @@ private final class IssueProgressRowCell: NSTableCellView, NSTextFieldDelegate {
             latestCommentIcon.heightAnchor.constraint(equalToConstant: 12),
             latestCommentTextStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 80),
 
-            commentInput.heightAnchor.constraint(greaterThanOrEqualToConstant: 24)
+            commentInput.heightAnchor.constraint(greaterThanOrEqualToConstant: 24),
+
+            submitActionContainer.widthAnchor.constraint(equalToConstant: Self.submitButtonWidth),
+            submitActionContainer.heightAnchor.constraint(equalToConstant: Self.submitButtonHeight),
+            submitButton.centerXAnchor.constraint(equalTo: submitActionContainer.centerXAnchor),
+            submitButton.centerYAnchor.constraint(equalTo: submitActionContainer.centerYAnchor),
+            submitButton.widthAnchor.constraint(equalToConstant: Self.submitButtonWidth),
+            submitButton.heightAnchor.constraint(equalToConstant: Self.submitButtonHeight),
+            submittingIndicator.centerXAnchor.constraint(equalTo: submitActionContainer.centerXAnchor),
+            submittingIndicator.centerYAnchor.constraint(equalTo: submitActionContainer.centerYAnchor)
         ])
     }
 
