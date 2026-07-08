@@ -43,6 +43,7 @@ final class AppContainer: ObservableObject {
     private var assigneeOptionsCache: [String: [IssueFieldOption]] = [:]
     private var hasStartedBoardPrefetch = false
     private var appStateCancellable: AnyCancellable?
+    private var isForwardingObjectWillChange = false
     private var draftSaveTask: Task<Void, Never>?
     private var todoUncommittedQueue: [TodoUncommittedQueueEntry] = []
     @Published private(set) var supportsBrowserAuth: Bool = false
@@ -115,10 +116,16 @@ final class AppContainer: ObservableObject {
         self.boardLocalStore = boardLocalStore
         self.savedQueryLocalStore = savedQueryLocalStore
         self.todoListStore = todoListStore
+        // Forward AppState invalidations once per runloop turn instead of once
+        // per mutation; sync bursts mutate several @Published properties in a
+        // single turn and each forward re-invalidates every container observer.
         self.appStateCancellable = appState.objectWillChange.sink { [weak self] in
+            guard let self, !self.isForwardingObjectWillChange else { return }
+            self.isForwardingObjectWillChange = true
             Task { @MainActor in
                 await Task.yield()
-                self?.objectWillChange.send()
+                self.isForwardingObjectWillChange = false
+                self.objectWillChange.send()
             }
         }
         refreshAccountsFromCache()
@@ -1881,6 +1888,10 @@ final class AppContainer: ObservableObject {
     }
 
     func recordSidebarSelection(_ selection: SidebarItem) {
+        // Saving rewrites the accounts payload (JSON + keychain mirror); skip
+        // when the selection is already persisted — sidebar refreshes republish
+        // the same selection routinely.
+        guard configurationStore.cachedActiveAccount()?.lastSidebarSelectionID != selection.id else { return }
         configurationStore.saveLastSidebarSelectionID(selection.id)
     }
 
@@ -1960,8 +1971,10 @@ final class AppContainer: ObservableObject {
     }
 
     private func configureIfNeeded() async {
-        refreshAccounts()
-        let activeAccount = configurationStore.activeAccount()
+        // Runs on the launch path: use the UserDefaults-cached account snapshot;
+        // keychain-synced metadata reconciles in the background task from init.
+        refreshAccountsFromCache()
+        let activeAccount = configurationStore.cachedActiveAccount()
         let oauthConfiguration = try? YouTrackOAuthConfiguration.load()
         let hasOAuthState = oauthConfiguration != nil && AppAuthRepository.hasSavedAuthState()
         supportsBrowserAuth = oauthConfiguration != nil
@@ -1985,13 +1998,17 @@ final class AppContainer: ObservableObject {
                     return
                 }
             case .token:
-                let baseURL = configurationStore.loadBaseURL()
-                let token = configurationStore.loadToken()
+                let baseURL = activeAccount.baseURL.isEmpty ? nil : URL(string: activeAccount.baseURL)
+                // The token read must hit the keychain; do it off the main thread.
+                let store = configurationStore
+                let token = await Task.detached(priority: .userInitiated) {
+                    store.loadToken()
+                }.value
 
                 if let baseURL, let token, !token.isEmpty {
-                    let needsProfile = configurationStore.loadUserDisplayName() == nil
-                        || configurationStore.loadUserLogin() == nil
-                        || configurationStore.loadUserID() == nil
+                    let needsProfile = activeAccount.displayName == nil
+                        || activeAccount.login == nil
+                        || activeAccount.userID == nil
                     let userProfile: YouTrackTokenValidationUser?
                     if needsProfile {
                         LoggingService.sync.info("Configuration: stored token found, validating user profile.")

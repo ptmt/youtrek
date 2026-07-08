@@ -733,23 +733,41 @@ struct AppConfigurationStore: @unchecked Sendable {
         }
     }
 
+    // Keychain mirror writes are frequent (accounts payload rewrites on every
+    // lastUsedAt/sync-flag update) and slow enough to micro-hang the main
+    // thread; run them on a serial queue. Reads go through the same queue
+    // synchronously so they observe queued writes in order.
+    private static let syncedMetadataQueue = DispatchQueue(
+        label: "com.potomushto.youtrek.config.synced-metadata",
+        qos: .utility
+    )
+
     private func saveStoredAccountsData(_ data: Data) {
         defaults.set(data, forKey: Keys.accounts)
         saveSyncedAccountsData(data)
     }
 
     private func saveSyncedAccountsData(_ data: Data) {
-        try? keychain.save(data: data, account: Keys.syncedAccounts)
+        let keychain = self.keychain
+        Self.syncedMetadataQueue.async {
+            try? keychain.save(data: data, account: Keys.syncedAccounts)
+        }
     }
 
     private func loadSyncedAccounts() -> Data? {
-        try? keychain.load(account: Keys.syncedAccounts, allowInteraction: false)
+        let keychain = self.keychain
+        return Self.syncedMetadataQueue.sync {
+            try? keychain.load(account: Keys.syncedAccounts, allowInteraction: false)
+        }
     }
 
     private func saveActiveAccountID(_ id: UUID?) {
         guard let id else {
             defaults.removeObject(forKey: Keys.activeAccountID)
-            try? keychain.delete(account: Keys.syncedActiveAccountID)
+            let keychain = self.keychain
+            Self.syncedMetadataQueue.async {
+                try? keychain.delete(account: Keys.syncedActiveAccountID)
+            }
             return
         }
         defaults.set(id.uuidString, forKey: Keys.activeAccountID)
@@ -757,13 +775,18 @@ struct AppConfigurationStore: @unchecked Sendable {
     }
 
     private func saveSyncedActiveAccountID(_ id: UUID) {
-        try? keychain.save(data: Data(id.uuidString.utf8), account: Keys.syncedActiveAccountID)
+        let keychain = self.keychain
+        Self.syncedMetadataQueue.async {
+            try? keychain.save(data: Data(id.uuidString.utf8), account: Keys.syncedActiveAccountID)
+        }
     }
 
     private func loadSyncedActiveAccountID() -> UUID? {
-        guard let data = try? keychain.load(account: Keys.syncedActiveAccountID, allowInteraction: false),
-              let raw = String(data: data, encoding: .utf8)
-        else {
+        let keychain = self.keychain
+        let data = Self.syncedMetadataQueue.sync {
+            try? keychain.load(account: Keys.syncedActiveAccountID, allowInteraction: false)
+        }
+        guard let data, let raw = String(data: data, encoding: .utf8) else {
             return nil
         }
         return UUID(uuidString: raw)

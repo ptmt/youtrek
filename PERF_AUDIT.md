@@ -11,7 +11,7 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 - [x] 4. Issue detail panel
 - [x] 5. Issue board view
 - [x] 6. Settings window + command palette
-- [ ] 7. Sync coordinator / AppState invalidation churn
+- [x] 7. Sync coordinator / AppState invalidation churn
 - [ ] 8. Final verification pass
 
 ## Iteration 1 — Startup / initial load (2026-07-08)
@@ -233,16 +233,55 @@ faster switching between UI states, fewer layout jumps and main-thread freezes.
 
 - `swift build` clean, `swift test`: 69/69 passed.
 
-## Backlog (spotted, not yet fixed — assigned to later iterations)
+## Iteration 7 — Sync coordinator / AppState invalidation churn (2026-07-08)
 
-- `configureIfNeeded()` calls `loadTokenResult` (sync keychain) from a
-  MainActor task — post-window main-thread block. → iteration 7.
-- `updateActiveAccount(...)` (e.g. `saveInitialIssueSyncCompleted`) performs
-  keychain saves synchronously on the MainActor during sync completion —
-  micro-hang source. → iteration 7.
-- `loadIssues(for:)` awaits `syncCoordinator.hasSeenUpdates()` before the
-  cached-issue load — serial actor hop on the selection-switch path.
-  → iteration 3.
-- `AppContainer` re-broadcasts every `appState.objectWillChange` to its own
-  `objectWillChange` (after a yield) — container-wide invalidation on every
-  AppState change. → iteration 7.
+### Findings
+
+1. **Redundant @Published re-publishes during sync.** `updateSyncActivity`
+   reassigned `isSyncing`/`syncStatusMessage` per queue operation even when
+   unchanged; `setIssuesLoading` likewise; `updateSidebar` republished the
+   sections array AND `selectedSidebarItem` on every sidebar refresh even when
+   identical — and each `selectedSidebarItem` publish cascades into the
+   workspace selection handler.
+2. **Keychain + accounts-JSON rewrite on every selection republish.**
+   `recordSidebarSelection` rewrote the full accounts payload (JSON encode,
+   UserDefaults, keychain mirror) synchronously on the MainActor even when the
+   persisted selection was unchanged.
+3. **Keychain mirror writes on the MainActor.** Every `updateActiveAccount`
+   (lastUsedAt bumps, initial-sync flags on each sync completion) saved the
+   accounts payload to the keychain synchronously — recurring micro-hangs.
+4. **~6 synchronous keychain round-trips in `configureIfNeeded()`** right after
+   launch (refreshAccounts + activeAccount + loadBaseURL + loadToken +
+   3× profile-field loads).
+5. **Container re-broadcast per mutation.** Every `appState.objectWillChange`
+   spawned a Task and re-fired `container.objectWillChange`; sync bursts mutate
+   several properties per runloop turn → several container-wide invalidations.
+
+### Fixes
+
+1. Distinct-guards in `updateSyncActivity`, `setIssuesLoading`,
+   `updateSidebar` (sections + selection). (`AppState.swift`)
+2. `recordSidebarSelection` skips persistence when unchanged
+   (cached-account check, no keychain). (`AppContainer.swift`)
+3. Keychain mirror IO (`saveSyncedAccountsData`, `saveSyncedActiveAccountID`,
+   delete) moved to a serial utility `DispatchQueue`; mirror reads go through
+   the same queue synchronously to preserve ordering.
+   (`AppConfigurationStore.swift`)
+4. `configureIfNeeded` uses the UserDefaults-cached account snapshot for
+   accounts/baseURL/profile checks and loads the token in a detached task —
+   the launch path no longer blocks the main thread on the keychain.
+5. `objectWillChange` forwarding is coalesced to once per runloop turn.
+
+### Notes
+
+- Board/issue-list data-source event recording was already gated on the
+  diagnostics flags by a prior commit (`181b5d9`) — verified, no change needed.
+
+### Verification
+
+- `swift build` clean, `swift test`: 69/69 passed.
+
+## Backlog
+
+(empty — all earlier backlog items were resolved or explicitly dropped with
+rationale in iterations 3 and 7)

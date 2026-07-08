@@ -230,21 +230,32 @@ final class AppState: ObservableObject {
         preferredSelectionID: SidebarItem.ID?,
         fallbackToFirstItem: Bool = true
     ) {
-        sidebarSections = sections
+        // Sidebar data refreshes on every sync cycle; republishing unchanged
+        // sections or selection cascades into selection handlers and pane
+        // re-renders, so only publish real changes.
+        if sidebarSections != sections {
+            sidebarSections = sections
+        }
         let items = sections.flatMap(\.items)
 
         if let current = selectedSidebarItem,
            let updated = items.first(where: { $0.id == current.id }) {
-            selectedSidebarItem = updated
+            if current != updated {
+                selectedSidebarItem = updated
+            }
             return
         }
 
         if let preferredSelectionID,
            let preferred = items.first(where: { $0.id == preferredSelectionID }) {
-            selectedSidebarItem = preferred
+            if selectedSidebarItem != preferred {
+                selectedSidebarItem = preferred
+            }
         } else if fallbackToFirstItem {
-            selectedSidebarItem = items.first
-        } else {
+            if selectedSidebarItem != items.first {
+                selectedSidebarItem = items.first
+            }
+        } else if selectedSidebarItem != nil {
             selectedSidebarItem = nil
         }
     }
@@ -352,13 +363,21 @@ final class AppState: ObservableObject {
 
     func updateSyncActivity(isSyncing: Bool, label: String?) {
         let wasSyncing = self.isSyncing
-        self.isSyncing = isSyncing
-        self.syncStatusMessage = label
+        // The sync queue reports per-operation; avoid republishing when the
+        // values are unchanged so observers aren't invalidated per operation.
+        if self.isSyncing != isSyncing {
+            self.isSyncing = isSyncing
+        }
+        if self.syncStatusMessage != label {
+            self.syncStatusMessage = label
+        }
 
         if wasSyncing && !isSyncing {
             syncCompleteRevealTask?.cancel()
             syncCompleteHideTask?.cancel()
-            showSyncComplete = false
+            if showSyncComplete {
+                showSyncComplete = false
+            }
             syncCompleteRevealTask = Task { @MainActor [weak self] in
                 guard let self else { return }
                 try? await Task.sleep(for: self.syncCompleteRevealDelay)
@@ -369,7 +388,9 @@ final class AppState: ObservableObject {
         } else if isSyncing {
             syncCompleteRevealTask?.cancel()
             syncCompleteHideTask?.cancel()
-            showSyncComplete = false
+            if showSyncComplete {
+                showSyncComplete = false
+            }
         }
     }
 
@@ -509,6 +530,7 @@ final class AppState: ObservableObject {
     }
 
     func setIssuesLoading(_ isLoading: Bool) {
+        guard isLoadingIssues != isLoading else { return }
         isLoadingIssues = isLoading
     }
 
