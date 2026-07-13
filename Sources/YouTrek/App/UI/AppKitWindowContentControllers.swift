@@ -599,6 +599,11 @@ final class WorkspaceViewController: NSViewController {
             appState.selectedIssueIDs.removeAll()
         }
 
+        // Flip the issue pane into its loading state in the same main-actor turn
+        // as the selection change, so no frame renders the previous selection's
+        // rows or a false empty state before the async load below starts.
+        container.beginIssueListTransition(to: selection)
+
         Task { [weak self] in
             guard let self else { return }
             await self.container.loadIssues(for: selection)

@@ -514,8 +514,35 @@ final class AppContainer: ObservableObject {
         configurationStore.clearInitialSyncState()
     }
 
+    /// Synchronously flips the issue pane into its loading state when the sidebar
+    /// moves to a different item. Must run before any suspension so no frame
+    /// renders the previous selection's rows — or a false "No issues" empty
+    /// state — under the new selection while its load is still starting.
+    func beginIssueListTransition(to selection: SidebarItem) {
+        guard !selection.isDraft, !selection.isTodoList else { return }
+        guard lastLoadedIssueSelection?.id != selection.id else { return }
+        appState.setIssuesLoading(true)
+        if !appState.issues.isEmpty {
+            appState.replaceIssues(with: [])
+        }
+        // Draft selection survives; the sidebar handler clears it based on
+        // whether the target selection shows drafts.
+        if appState.selectedIssue?.isDraft != true {
+            if appState.selectedIssue != nil {
+                appState.selectedIssue = nil
+            }
+            if !appState.selectedIssueIDs.isEmpty {
+                appState.selectedIssueIDs = []
+            }
+        }
+    }
+
     func loadIssues(for selection: SidebarItem) async {
         guard !selection.isDraft, !selection.isTodoList else { return }
+        let selectionChanged = lastLoadedIssueSelection?.id != selection.id
+        if selectionChanged {
+            beginIssueListTransition(to: selection)
+        }
         if !appState.hasCompletedInitialSync {
             LoggingService.syncVerbose("Initial sync: loading issues for \(selection.id).")
         }
@@ -554,7 +581,7 @@ final class AppContainer: ObservableObject {
             recordDataEvent("Issue query: \(queryLabel).")
         }
         lastLoadedIssueSelection = selection
-        if query == lastLoadedIssueQuery {
+        if !selectionChanged, query == lastLoadedIssueQuery {
             recordDataEvent("Load issues skipped (same query).")
             return
         }
@@ -563,7 +590,6 @@ final class AppContainer: ObservableObject {
         recordDataEvent("Load issues started.")
         lastLoadedIssueQuery = query
         appState.setIssuesLoading(true)
-        let shouldSeedInitialRead = await syncCoordinator.hasSeenUpdates() == false
 
         let board = selection.isBoard ? (resolvedBoard ?? boardForSelection(selection)) : nil
         let sprintFilter = board.map { appState.sprintFilter(for: $0) }
@@ -587,11 +613,17 @@ final class AppContainer: ObservableObject {
             )
             : nil
 
+        // Resolved lazily after content is published, so the seen-updates read
+        // never delays first rows on screen; cached once so remote apply seeds
+        // with the same verdict as the cache apply.
+        var shouldSeedInitialRead: Bool?
+
         let cachedLoadStart = ProcessInfo.processInfo.systemUptime
         let cachedIssues = await syncCoordinator.loadCachedIssues(for: query)
         let cachedLoadDuration = durationText(since: cachedLoadStart)
         guard isCurrentIssueLoadRequest(loadRequestID, selectionID: selection.id) else {
             recordDataEvent("Load issues ignored (stale request before cache apply).")
+            abandonIssueLoadIfOrphaned(loadRequestID)
             return
         }
         if !cachedIssues.isEmpty {
@@ -613,7 +645,9 @@ final class AppContainer: ObservableObject {
                 appState.updateInboxFieldUsage(from: filtered)
             }
             appState.setIssuesLoading(false)
-            await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: shouldSeedInitialRead)
+            let seedInitialRead = await syncCoordinator.hasSeenUpdates() == false
+            shouldSeedInitialRead = seedInitialRead
+            await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: seedInitialRead)
         } else {
             LoggingService.syncVerbose(
                 "Local DB: cached issues empty in \(cachedLoadDuration) for \(selection.id)."
@@ -622,6 +656,7 @@ final class AppContainer: ObservableObject {
         }
         guard isCurrentIssueLoadRequest(loadRequestID, selectionID: selection.id) else {
             recordDataEvent("Load issues ignored (stale request before refresh).")
+            abandonIssueLoadIfOrphaned(loadRequestID)
             return
         }
 
@@ -638,6 +673,7 @@ final class AppContainer: ObservableObject {
         }
         guard isCurrentIssueLoadRequest(loadRequestID, selectionID: selection.id) else {
             recordDataEvent("Load issues ignored (stale request after refresh).")
+            abandonIssueLoadIfOrphaned(loadRequestID)
             return
         }
         let syncDuration = durationText(since: syncStart)
@@ -694,7 +730,13 @@ final class AppContainer: ObservableObject {
             appState.updateInboxFieldUsage(from: filtered)
         }
         appState.setIssuesLoading(false)
-        await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: shouldSeedInitialRead)
+        let seedInitialRead: Bool
+        if let resolved = shouldSeedInitialRead {
+            seedInitialRead = resolved
+        } else {
+            seedInitialRead = await syncCoordinator.hasSeenUpdates() == false
+        }
+        await refreshIssueSeenUpdates(for: filtered, shouldSeedInitialRead: seedInitialRead)
         if selection.isBoard, let boardID = selection.boardID {
             appState.recordBoardSync(boardID: boardID)
         }
@@ -1427,6 +1469,18 @@ final class AppContainer: ObservableObject {
 
     private func isCurrentIssueLoadRequest(_ requestID: UUID, selectionID: String) -> Bool {
         activeIssueLoadRequestID == requestID && appState.selectedSidebarItem?.id == selectionID
+    }
+
+    /// A stale load that still owns the active request ID was abandoned because
+    /// the selection moved somewhere that starts no issue load (a draft or todo
+    /// list). Drop the optimistic query markers and the loading flag so
+    /// revisiting the selection reloads instead of skipping with stale content.
+    private func abandonIssueLoadIfOrphaned(_ requestID: UUID) {
+        guard activeIssueLoadRequestID == requestID else { return }
+        activeIssueLoadRequestID = nil
+        lastLoadedIssueQuery = nil
+        lastLoadedIssueSelection = nil
+        appState.setIssuesLoading(false)
     }
 
     private func presentIssueInInspector(_ issue: IssueSummary) {

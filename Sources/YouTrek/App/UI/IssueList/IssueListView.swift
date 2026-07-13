@@ -194,9 +194,11 @@ struct IssueListView: NSViewRepresentable {
             let state: IssueListContainerView.ContentState
             if !parent.issues.isEmpty {
                 state = .table
-            } else if showsLoadingView && parent.issues.isEmpty {
+            } else if showsLoadingView {
                 state = .loading
-            } else if parent.issues.isEmpty && parent.hasCompletedSync {
+            } else if parent.hasCompletedSync && !parent.isLoading {
+                // While a load is in flight (including the debounce window before
+                // the spinner appears) an empty list is not a real empty result.
                 state = .empty
             } else {
                 state = .placeholder

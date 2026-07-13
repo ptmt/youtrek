@@ -1285,6 +1285,7 @@ struct BoardContentView: View {
             issues: appState.filteredIssues(searchQuery: searchQuery),
             selection: $appState.selectedIssue,
             isLoading: appState.isLoadingIssues,
+            hasCompletedSync: appState.hasCompletedIssueSync,
             sprintFilter: sprintFilter,
             showDiagnostics: showDiagnostics,
             diagnosticEvents: diagnosticEvents,

@@ -6,6 +6,7 @@ struct IssueBoardView: View {
     let issues: [IssueSummary]
     @Binding var selection: IssueSummary?
     let isLoading: Bool
+    let hasCompletedSync: Bool
     let sprintFilter: BoardSprintFilter
     let showDiagnostics: Bool
     let diagnosticEvents: [BoardDataSourceEvent]
@@ -36,6 +37,11 @@ struct IssueBoardView: View {
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if issues.isEmpty && (isLoading || !hasCompletedSync) {
+                    // A load is in flight (or the first sync hasn't finished);
+                    // an empty board here is not a real empty result yet.
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if issues.isEmpty {
                     EmptyStateView(
                         title: "No cards on this board",
